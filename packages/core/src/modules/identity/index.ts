@@ -29,3 +29,4 @@ export {
 } from './application/invitations';
 export { changeUserRole, getCurrentUser, listUsers, setUserStatus } from './application/users';
 export { recordSignIn, resolveActor } from './application/session';
+export { invitationEmail, passwordResetEmail } from './application/emails';

@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./password-policy": "./src/modules/identity/domain/password-policy.ts",
+    "./roles": "./src/modules/identity/domain/roles.ts",
+    "./permissions": "./src/modules/identity/domain/permissions.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

@@ -7,6 +7,7 @@ export { maskEmail } from './shared/mask';
 export { escapeHtml } from './shared/html';
 export { generateToken, hashToken } from './shared/tokens';
 export {
+  assertAccess,
   checkAccess,
   defineUseCase,
   type Access,

@@ -1,5 +1,7 @@
 // @ts-check
 import js from '@eslint/js';
+import nextPlugin from '@next/eslint-plugin-next';
+import reactHooks from 'eslint-plugin-react-hooks';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -95,7 +97,17 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/scripts/**/*.ts', '**/seed/**/*.ts'],
+    files: ['apps/web/**/*.{ts,tsx}'],
+    ...reactHooks.configs.flat.recommended,
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+  {
+    files: ['apps/web/**/*.{ts,tsx}'],
+    ...nextPlugin.configs['core-web-vitals'],
+    settings: { next: { rootDir: 'apps/web' } },
+  },
+  {
+    files: ['**/scripts/**/*.ts', '**/seed/**/*.ts', 'apps/web/e2e/**/*.{ts,mjs}'],
     rules: { 'no-console': 'off' },
   },
   prettier,

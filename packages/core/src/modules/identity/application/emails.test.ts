@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { invitationEmail } from './emails';
+import { invitationEmail, passwordResetEmail } from './emails';
 
 describe('invitationEmail', () => {
   const email = invitationEmail({
@@ -21,5 +21,18 @@ describe('invitationEmail', () => {
     expect(email.html).toContain('Olá, Ana&lt;img/src=x&gt;!');
     expect(email.html).toContain('por Carlos &lt;script&gt;');
     expect(email.html).not.toMatch(/<img|<script/);
+  });
+});
+
+describe('passwordResetEmail', () => {
+  it('traz o link e avisa sobre a validade', () => {
+    const email = passwordResetEmail({
+      to: 'a@b.com',
+      name: 'Ana Souza',
+      resetUrl: 'https://x/reset?t=1',
+    });
+    expect(email.category).toBe('password_reset');
+    expect(email.text).toContain('https://x/reset?t=1');
+    expect(email.text).toContain('30 minutos');
   });
 });

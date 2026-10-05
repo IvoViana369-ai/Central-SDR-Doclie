@@ -183,3 +183,31 @@ export function defineUseCase<S extends z.ZodType, O>(definition: {
 
   return Object.assign(execute, { useCaseName: definition.name, access: definition.access });
 }
+
+/**
+ * Verificação de acesso fora de um caso de uso (ex.: leituras simples na API),
+ * com a mesma regra de auditoria de negações.
+ */
+export async function assertAccess(
+  deps: Pick<CoreDeps, 'db'>,
+  actor: Actor,
+  access: Access,
+  resource: string,
+  meta: RequestMeta = {},
+): Promise<void> {
+  try {
+    checkAccess(actor, access);
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      await deps.db.auditLog.create({
+        data: auditData(actor, meta, {
+          action: 'access.denied',
+          entityType: 'resource',
+          entityId: resource,
+          metadata: { required: access },
+        }),
+      });
+    }
+    throw error;
+  }
+}

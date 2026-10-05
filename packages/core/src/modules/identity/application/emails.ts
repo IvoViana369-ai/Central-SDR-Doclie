@@ -38,3 +38,31 @@ export function invitationEmail(params: {
     category: 'invitation',
   };
 }
+
+export function passwordResetEmail(params: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}): TransactionalEmail {
+  const firstName = params.name.split(' ')[0] ?? params.name;
+  const text = [
+    `Olá, ${firstName}!`,
+    '',
+    'Recebemos um pedido para redefinir a sua senha do Docline SDR.',
+    '',
+    `Para criar uma nova senha, acesse: ${params.resetUrl}`,
+    '',
+    'O link vale por 30 minutos e só pode ser usado uma vez. Se você não pediu a redefinição, ignore este e-mail: sua senha continua a mesma.',
+  ].join('\n');
+  const html = `<p>Olá, ${escapeHtml(firstName)}!</p>
+<p>Recebemos um pedido para redefinir a sua senha do <strong>Docline SDR</strong>.</p>
+<p><a href="${escapeHtml(params.resetUrl)}">Criar uma nova senha</a></p>
+<p>O link vale por 30 minutos e só pode ser usado uma vez. Se você não pediu a redefinição, ignore este e-mail: sua senha continua a mesma.</p>`;
+  return {
+    to: params.to,
+    subject: 'Redefinição de senha — Docline SDR',
+    text,
+    html,
+    category: 'password_reset',
+  };
+}
