@@ -1,0 +1,16 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Segurança da cadeia de suprimentos (docs/SECURITY.md §15):
+# - scripts de instalação de dependências bloqueados por padrão (pnpm 10),
+#   liberados apenas para os pacotes abaixo;
+# - versões publicadas há menos de 24h não são adotadas automaticamente.
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - esbuild
+  - prisma
+  - sharp
+  - unrs-resolver
+
+minimumReleaseAge: 1440

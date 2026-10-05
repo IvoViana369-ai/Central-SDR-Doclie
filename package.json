@@ -1,0 +1,40 @@
+{
+  "name": "docline-sdr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docline SDR — Central Inteligente de Prospecção",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @docline/web --filter @docline/worker dev",
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run --project unit",
+    "test:int": "vitest run --project integration",
+    "test:e2e": "pnpm --filter @docline/web test:e2e",
+    "test:all": "vitest run",
+    "db:generate": "pnpm --filter @docline/db generate",
+    "db:migrate": "pnpm --filter @docline/db migrate:dev",
+    "db:deploy": "pnpm --filter @docline/db migrate:deploy",
+    "db:seed": "pnpm --filter @docline/db seed",
+    "admin:create": "pnpm --filter @docline/web admin:create",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.0",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}
