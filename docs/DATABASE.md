@@ -1,0 +1,585 @@
+# Modelo de Dados — Docline SDR
+
+> **Status:** Fase 0 (modelo conceitual para aprovação) · **Banco:** PostgreSQL · **ORM:** Prisma
+> Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
+
+## Sumário
+
+1. [Convenções](#1-convenções)
+2. [Mapa de domínios](#2-mapa-de-domínios)
+3. [Diagramas entidade-relacionamento](#3-diagramas-entidade-relacionamento)
+4. [Entidades](#4-entidades)
+5. [Relacionamentos e cardinalidades](#5-relacionamentos-e-cardinalidades)
+6. [Enumerações](#6-enumerações)
+7. [Índices e restrições críticas](#7-índices-e-restrições-críticas)
+8. [Dados de configuração iniciais (seed)](#8-dados-de-configuração-iniciais-seed)
+9. [Preparação para inteligência comercial](#9-preparação-para-inteligência-comercial)
+10. [Crescimento, retenção e manutenção](#10-crescimento-retenção-e-manutenção)
+
+---
+
+## 1. Convenções
+
+| Tema | Convenção |
+|---|---|
+| Nomes | Tabelas e colunas em `snake_case`, inglês, plural nas tabelas (`leads`, `contact_points`). No Prisma: modelos em `PascalCase` com `@@map`/`@map`. |
+| Chave primária | `id uuid`, **UUIDv7** (ordenado no tempo, bom para índices). Leads também têm `code` sequencial legível (`L-000123`). |
+| Datas | `timestamptz` em UTC. `created_at` e `updated_at` em todas as tabelas mutáveis. `created_by_id` quando houver ator. |
+| Exclusão | **Sem exclusão física** em dados de negócio. Usa-se `status` (`ARCHIVED`, `MERGED`, `ANONYMIZED`). Exclusão física só pela rotina de retenção/LGPD, auditada. |
+| Enums | Valores fixos do sistema em enum (Postgres/Prisma). O que o admin edita (etapas, tags, origens, motivos) vira **tabela**. |
+| JSONB | Só para dados flexíveis por natureza: *breakdown* de score, *snapshots*, *payloads* de webhook, `custom_fields`, parâmetros de regras. Nunca para dados que precisam de filtro frequente e integridade. |
+| Extensões | `pg_trgm` (similaridade), `unaccent` (apoio à normalização em consultas *ad hoc*). |
+| Normalização | Valores normalizados são **calculados na aplicação** e gravados em colunas próprias (`value_normalized`, `name_search`, `name_core`), porque `unaccent` não pode ser usado em índice de expressão. |
+| Dados de teste | Coluna `is_test_data` em `leads`; adaptadores reais recusam enviar para esses registros. |
+| Fase | Cada tabela indica a fase em que nasce. **MVP = Fases 1–6.** |
+
+---
+
+## 2. Mapa de domínios
+
+| Domínio | Tabelas |
+|---|---|
+| Identidade e equipe | `users`, `teams`, `user_territories`, `user_availability` (+ tabelas do Better Auth: `sessions`, `accounts`, `verifications`) |
+| Referência | `states`, `municipalities`, `holidays`, `priority_cities`, `lead_sources`, `segments`, `loss_reasons` |
+| Núcleo de leads | `leads`, `lead_people`, `contact_points`, `lead_origins`, `tags`, `lead_tags`, `lead_notes`, `lead_assignments` |
+| Timeline e auditoria | `lead_events`, `audit_logs` |
+| Pipeline e score | `pipelines`, `pipeline_stages`, `lead_stage_history`, `scoring_models`, `scoring_rules`, `lead_score_history` |
+| Operação SDR | `cadences`, `cadence_steps`, `cadence_enrollments`, `tasks`, `activities`, `opportunities` |
+| Mensagens e IA | `approaches`, `message_templates`, `whatsapp_templates`, `conversations`, `messages`, `message_status_events`, `ai_generations`, `ai_knowledge_items` |
+| Entrada de dados | `import_batches`, `import_rows`, `import_mapping_templates`, `duplicate_candidates`, `lead_merges`, `prospecting_searches`, `prospecting_results`, `registry_companies` |
+| Conformidade | `contact_permissions`, `legal_basis_assessments`, `suppression_entries`, `data_subject_requests`, `retention_policies` |
+| Campanhas e analytics | `campaigns`, `campaign_leads`, `daily_metrics`, `insights` |
+| Plataforma | `app_settings`, `saved_views`, `webhook_events`, `integration_connections`, `api_keys`, `external_references`, `distribution_rules` |
+
+---
+
+## 3. Diagramas entidade-relacionamento
+
+Os diagramas mostram entidades e cardinalidades; colunas estão na [§4](#4-entidades).
+
+### 3.1 Núcleo de leads
+
+```mermaid
+erDiagram
+  LEADS ||--o{ LEAD_PEOPLE : "possui"
+  LEADS ||--o{ CONTACT_POINTS : "possui"
+  LEAD_PEOPLE |o--o{ CONTACT_POINTS : "usa"
+  LEADS ||--o{ LEAD_ORIGINS : "veio de"
+  LEAD_SOURCES ||--o{ LEAD_ORIGINS : "classifica"
+  LEADS }o--o| MUNICIPALITIES : "localizado em"
+  STATES ||--o{ MUNICIPALITIES : "contém"
+  LEADS }o--o| SEGMENTS : "pertence a"
+  LEADS ||--o{ LEAD_TAGS : "recebe"
+  TAGS ||--o{ LEAD_TAGS : "aplicada em"
+  LEADS ||--o{ LEAD_NOTES : "tem"
+  LEADS ||--o{ LEAD_EVENTS : "timeline"
+  LEADS ||--o{ LEAD_ASSIGNMENTS : "histórico de responsáveis"
+  USERS |o--o{ LEADS : "responsável atual"
+  LEADS |o--o{ LEADS : "mesclado em"
+```
+
+### 3.2 Operação SDR
+
+```mermaid
+erDiagram
+  PIPELINES ||--|{ PIPELINE_STAGES : "tem"
+  PIPELINE_STAGES ||--o{ LEADS : "posiciona"
+  LEADS ||--o{ LEAD_STAGE_HISTORY : "percorre"
+  SCORING_MODELS ||--|{ SCORING_RULES : "define"
+  LEADS ||--o{ LEAD_SCORE_HISTORY : "pontuado"
+  SCORING_MODELS ||--o{ LEAD_SCORE_HISTORY : "versão usada"
+  CADENCES ||--|{ CADENCE_STEPS : "tem"
+  LEADS ||--o{ CADENCE_ENROLLMENTS : "inscrito"
+  CADENCES ||--o{ CADENCE_ENROLLMENTS : "usada em"
+  LEADS ||--o{ TASKS : "gera"
+  CADENCE_ENROLLMENTS |o--o{ TASKS : "origina"
+  USERS ||--o{ TASKS : "executa"
+  LEADS ||--o{ ACTIVITIES : "registra"
+  LEADS ||--o{ MESSAGES : "troca"
+  CONTACT_POINTS |o--o{ MESSAGES : "via"
+  MESSAGES ||--o{ MESSAGE_STATUS_EVENTS : "status"
+  LEADS ||--o{ AI_GENERATIONS : "rascunhos"
+  AI_GENERATIONS |o--o| MESSAGES : "vira"
+  APPROACHES ||--o{ MESSAGES : "atribui"
+  APPROACHES ||--o{ AI_GENERATIONS : "orienta"
+  LEADS ||--o{ OPPORTUNITIES : "transferido"
+  CAMPAIGNS ||--o{ CAMPAIGN_LEADS : "seleciona"
+  LEADS ||--o{ CAMPAIGN_LEADS : "participa"
+```
+
+### 3.3 Entrada de dados
+
+```mermaid
+erDiagram
+  IMPORT_BATCHES ||--|{ IMPORT_ROWS : "contém"
+  IMPORT_ROWS |o--o| LEADS : "criou ou casou"
+  IMPORT_BATCHES |o--o{ LEADS : "originou"
+  LEADS ||--o{ DUPLICATE_CANDIDATES : "lado A ou B"
+  DUPLICATE_CANDIDATES |o--o| LEAD_MERGES : "resolvido por"
+  LEAD_MERGES }o--|| LEADS : "sobrevivente"
+  PROSPECTING_SEARCHES ||--o{ PROSPECTING_RESULTS : "retorna"
+  PROSPECTING_RESULTS |o--o| LEADS : "virou"
+  REGISTRY_COMPANIES |o--o{ PROSPECTING_RESULTS : "fonte"
+```
+
+### 3.4 Governança e plataforma
+
+```mermaid
+erDiagram
+  TEAMS ||--o{ USERS : "agrupa"
+  USERS ||--o{ USER_TERRITORIES : "atende"
+  USERS ||--o{ AUDIT_LOGS : "autor"
+  LEADS ||--o{ CONTACT_PERMISSIONS : "base legal por canal"
+  LEGAL_BASIS_ASSESSMENTS ||--o{ CONTACT_PERMISSIONS : "fundamenta"
+  LEADS |o--o{ SUPPRESSION_ENTRIES : "originou"
+  LEADS |o--o{ DATA_SUBJECT_REQUESTS : "refere-se"
+  USERS ||--o{ SAVED_VIEWS : "possui"
+  WEBHOOK_EVENTS }o--o| MESSAGES : "atualiza"
+```
+
+---
+
+## 4. Entidades
+
+> Colunas de controle (`id`, `created_at`, `updated_at`, `created_by_id`) omitidas quando óbvias.
+
+### 4.1 Identidade e equipe
+
+**`users`** (Fase 1)
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| name, email | text | `email` único, minúsculo |
+| role | enum `UserRole` | `ADMIN`, `MANAGER`, `SDR`, `SALES` |
+| team_id | fk → teams | opcional |
+| status | enum | `INVITED`, `ACTIVE`, `INACTIVE` |
+| timezone | text | padrão `America/Fortaleza` |
+| last_login_at | timestamptz | |
+
+**`teams`** (Fase 1): `name`, `manager_id`.
+**`user_territories`** (Fase 2, estrutura): `user_id`, `state_uf`, `municipality_code` (nulo = UF inteira), `priority`.
+**`user_availability`** (futura): `user_id`, `available`, `max_active_leads`, `max_daily_contacts`, `out_of_office_until`.
+
+### 4.2 Referência
+
+| Tabela | Colunas principais | Fase |
+|---|---|---|
+| `states` | `uf` (PK, 2 letras), `name`, `ibge_code`, `timezone` | 1 |
+| `municipalities` | `ibge_code` (PK, 7 dígitos), `name`, `name_search`, `uf`, `population` (estimativa IBGE, para análise de potencial), `ddd` | 1 |
+| `holidays` | `date`, `scope` (`NATIONAL`/`STATE`/`MUNICIPAL`), `uf`, `municipality_code`, `name` | 5 |
+| `priority_cities` | `municipality_code`, `weight`, `active`, `notes` | 4 |
+| `lead_sources` | `key` (único), `name`, `active` | 2 |
+| `segments` | `key`, `name`, `active` | 2 |
+| `loss_reasons` | `key`, `name`, `applies_to_stage_keys[]`, `active` | 4 |
+
+### 4.3 Núcleo de leads
+
+**`leads`** (Fase 2): representa a **organização prospectada** (escritório, empresa, parceiro).
+
+| Grupo | Colunas | Notas |
+|---|---|---|
+| Identificação | `code` (serial único), `company_name` (razão social), `trade_name` (nome fantasia), `display_name` (gerado: fantasia → razão), `name_search` (minúsculo, sem acento), `name_core` (sem termos genéricos, ex.: "contabilidade", "assessoria", "ltda") | `name_core` alimenta a similaridade |
+| Tipo | `lead_type` enum (`ACCOUNTING_FIRM`, `ACCOUNTANT`, `REFERRAL_PARTNER`, `COMPANY`, `OTHER`), `segment_id`, `category` (texto livre/categoria da fonte), `cnae_main` | |
+| Documento | `cnpj` varchar(14) (maiúsculo, aceita **alfanumérico**), `cnpj_root` varchar(8) | Único parcial: `cnpj` quando não nulo e `status <> 'MERGED'` |
+| Endereço | `address_line`, `address_number`, `address_complement`, `neighborhood`, `city_raw`, `municipality_code` (fk), `state_uf`, `postal_code` (8 dígitos) | |
+| Web | `website_url`, `website_domain` | Instagram fica em `contact_points` |
+| Google | `google_place_id` | ⚠️ Somente o `place_id` é persistido. Nota/avaliações são exibidas ao vivo ([INTEGRATIONS §8](./INTEGRATIONS.md#8-google)). Colunas `google_rating`/`google_reviews_count` **só** serão criadas se a validação jurídica permitir. |
+| Origem | `origin_source_id` (primeira origem, fk), `origin_detail`, `origin_url`, `collected_at` (data da coleta), `created_via` enum (`IMPORT`, `MANUAL`, `PROSPECTING`, `API`, `MERGE`), `import_batch_id` | Atribuição *first-touch*; histórico completo em `lead_origins` |
+| Pipeline | `pipeline_id`, `stage_id`, `stage_entered_at` | |
+| Responsáveis | `owner_id` (atual), `previous_owner_id` (último), `assigned_at`, `created_by_id` (criador) | Histórico em `lead_assignments` |
+| Score | `score` (0–100), `score_band` enum, `score_model_id`, `score_computed_at` | Cache do último cálculo; histórico em `lead_score_history` |
+| Caches de canal | `has_phone`, `has_whatsapp`, `has_email`, `has_instagram`, `has_website` | Mantidos pelo caso de uso na mesma transação |
+| Contactabilidade | `contact_status` enum (`CONTACTABLE`, `RESTRICTED`, `NO_LEGAL_BASIS`, `OPTED_OUT`, `BLOCKED`) | Cache do gate, para filtros e contagens |
+| Atividade | `first_contact_at`, `last_contact_at` (último outbound), `first_reply_at`, `last_inbound_at`, `last_activity_at`, `next_action_at` | Alimentam fila, "esquecidos" e métricas |
+| Desfecho | `converted_at`, `conversion_type` (`PARTNER`, `CUSTOMER`), `lost_at`, `loss_reason_id` | |
+| Ciclo de vida | `status` enum (`ACTIVE`, `ARCHIVED`, `MERGED`, `ANONYMIZED`), `merged_into_id` (fk → leads) | |
+| Outros | `description` (observações gerais), `custom_fields` jsonb (colunas extras de importação), `is_test_data`, `version` (lock otimista), `search_vector` tsvector (Fase 2+) | |
+
+**`lead_people`** (Fase 2): pessoas do lead (contador, sócio, recepção).
+`lead_id`, `full_name`, `first_name`, `role_title`, `is_primary`, `is_decision_maker`, `notes`, `status` (`ACTIVE`/`LEFT`/`ANONYMIZED`).
+
+**`contact_points`** (Fase 2): **fonte da verdade dos canais**. Um registro por valor.
+
+| Coluna | Notas |
+|---|---|
+| `lead_id`, `person_id` (opcional) | |
+| `type` enum | `PHONE`, `EMAIL`, `INSTAGRAM` (futuro: `LINKEDIN`, `FACEBOOK`) |
+| `value_raw`, `value_normalized` | Telefone em E.164 (`+5588999999999`); e-mail minúsculo; Instagram como `handle` sem `@` |
+| `value_hash` | HMAC-SHA256 do normalizado (cruzamento com a Lista Não Contatar) |
+| `label` | `comercial`, `celular`, `whatsapp`, `pessoal`… |
+| `phone_kind` | `MOBILE`, `LANDLINE`, `SERVICE`, `UNKNOWN` |
+| `whatsapp_status` | `UNKNOWN`, `PROBABLE` (declarado pela fonte), `CONFIRMED` (houve conversa), `NOT_ON_WHATSAPP` |
+| `is_primary` | um por tipo por lead |
+| `status` | `ACTIVE`, `INVALID`, `BOUNCED`, `WRONG_PERSON`, `REMOVED` |
+| `source_id`, `source_detail`, `collected_at` | Origem **deste dado** (LGPD) |
+| `verified_at`, `verification_method` | |
+| `normalization_flags` text[] | ex.: `ADDED_NINTH_DIGIT`, `INFERRED_DDD` |
+
+Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_status`. Isso evita duplicar o mesmo número.
+
+**`lead_origins`** (Fase 2): `lead_id`, `source_id`, `detail`, `url`, `collected_at`, `import_batch_id`, `prospecting_search_id`, `campaign_id`, `referrer_lead_id`, `referrer_name` (indicação), `is_first_touch`. Após mesclagens, um lead pode ter várias origens.
+
+**`tags`** (Fase 2): `name` (único), `color`, `category`, `active`. **`lead_tags`**: `lead_id`, `tag_id`, `added_by_id`, `added_at` (PK composta).
+
+**`lead_notes`** (Fase 2): `lead_id`, `author_id`, `body` (texto simples), `pinned`. Ver diretriz de dados sensíveis em [LGPD §11](./LGPD.md#11-minimização-e-qualidade).
+
+**`lead_assignments`** (Fase 2): `lead_id`, `from_user_id`, `to_user_id`, `strategy` (`MANUAL`, `IMPORT`, `ROUND_ROBIN`, `TERRITORY`, `PRIORITY`, `AVAILABILITY`), `assigned_by_id`, `reason`, `assigned_at`.
+
+### 4.4 Timeline e auditoria
+
+**`lead_events`** (Fase 2), append-only:
+
+| Coluna | Notas |
+|---|---|
+| `lead_id`, `occurred_at` | índice `(lead_id, occurred_at desc)` |
+| `type` | `lead.created`, `lead.imported`, `lead.updated`, `lead.merged`, `owner.assigned`, `stage.changed`, `score.changed`, `note.added`, `tag.added`, `task.created`, `task.completed`, `activity.logged`, `cadence.enrolled`, `cadence.step_due`, `cadence.stopped`, `ai.generated`, `ai.approved`, `message.sent`, `message.delivered`, `message.read`, `message.received`, `reply.classified`, `optout.registered`, `permission.changed`, `handoff.created`, `opportunity.won`, `opportunity.lost`… |
+| `actor_type`, `actor_id` | `USER`, `SYSTEM`, `AUTOMATION`, `INTEGRATION`, `AI` |
+| `payload` jsonb | Dados do evento (versionados por `type`) |
+| `subject_type`, `subject_id` | Entidade relacionada (mensagem, tarefa…) |
+| `campaign_id`, `approach_id`, `channel` | Desnormalizados para analytics |
+
+**`audit_logs`** (Fase 1), append-only (trigger bloqueia `UPDATE`/`DELETE`):
+`occurred_at`, `actor_type`, `actor_id`, `action` (`CREATE`, `UPDATE`, `DELETE`, `MERGE`, `EXPORT`, `LOGIN`, `LOGIN_FAILED`, `PERMISSION_CHANGE`, `SUPPRESSION_REVOKE`, `ANONYMIZE`, `ACCESS_DENIED`…), `entity_type`, `entity_id`, `changes` jsonb (`{campo: [antes, depois]}`, com dados sensíveis mascarados), `ip`, `user_agent`, `request_id`.
+
+### 4.5 Pipeline e score
+
+**`pipelines`** (Fase 4): `name`, `is_default`, `active`.
+
+**`pipeline_stages`** (Fase 4):
+`pipeline_id`, `key` (estável, usado por automações: `FIRST_CONTACT`, `FOLLOW_UP_1`…), `name` (editável), `position`, `category` (`OPEN`, `WON`, `LOST`, `PARKED`), `owner_role` (`SDR`/`SALES`), `color`, `requires_loss_reason`, `sla_hours`, `is_system` (não pode ser excluída), `active`.
+
+**`lead_stage_history`** (Fase 4): `lead_id`, `from_stage_id`, `to_stage_id`, `changed_by_id` (nulo se automação), `automation_source` (`CADENCE`, `INBOUND`, `IMPORT`, `HANDOFF`, `RULE`), `loss_reason_id`, `note`, `entered_at`, `left_at`, `duration_seconds` (preenchido na saída).
+
+**`scoring_models`** (Fase 4): `name`, `version`, `status` (`DRAFT`, `ACTIVE`, `ARCHIVED`), `normalization` (`CLAMP`, `SCALE`), `bands` jsonb (`[{band:"COLD",min:0,max:30},…]`), `activated_at`, `activated_by_id`. Um único `ACTIVE`.
+
+**`scoring_rules`** (Fase 4): `model_id`, `criterion_key` (registrado em código, ex.: `has_whatsapp`), `params` jsonb, `points` (aceita negativos), `active`, `position`, `description`.
+
+**`lead_score_history`** (Fase 4): `lead_id`, `model_id`, `score`, `band`, `breakdown` jsonb (`[{criterion, matched, points, detail}]`), `trigger` (evento que causou), `computed_at`. Só grava quando o score ou a faixa muda.
+
+### 4.6 Operação SDR
+
+**`cadences`** (Fase 5): `name`, `description`, `version`, `active`, `stop_on_reply` (padrão `true`), `use_business_days`, `send_window_start`/`send_window_end` (hora local), `no_response_after_days` (dias após o último passo para ir a `NO_RESPONSE`).
+
+**`cadence_steps`** (Fase 5): `cadence_id`, `position`, `day_offset`, `channel` (`WHATSAPP`, `INSTAGRAM`, `EMAIL`, `PHONE`, `ANY`), `action` (`ASSISTED_MESSAGE`, `API_MESSAGE`, `CALL`, `TASK`), `message_type`, `target_stage_key`, `template_id`, `instructions`.
+
+**`cadence_enrollments`** (Fase 5): `lead_id`, `cadence_id`, `cadence_version`, `campaign_id`, `status` (`ACTIVE`, `PAUSED`, `COMPLETED`, `STOPPED`), `stop_reason` (`REPLIED`, `OPTED_OUT`, `MANUAL`, `STAGE_CHANGED`, `LEAD_ARCHIVED`, `CONTACT_INVALID`), `current_step_position`, `next_step_due_at`, `enrolled_by_id`, `enrolled_at`, `ended_at`. **Único parcial:** uma inscrição `ACTIVE` por lead.
+
+**`tasks`** (Fase 5): `lead_id`, `assignee_id`, `type` (`FIRST_CONTACT`, `FOLLOW_UP`, `REPLY_NEEDED`, `CALL`, `MEETING`, `HANDOFF_REVIEW`, `CUSTOM`), `title`, `description`, `due_at`, `priority_score` (calculado), `status` (`OPEN`, `DONE`, `CANCELED`, `SKIPPED`), `outcome`, `completed_at`, `completed_by_id`, `enrollment_id`, `cadence_step_id`.
+
+**`activities`** (Fase 5): interações que não são mensagens. `lead_id`, `user_id`, `type` (`CALL`, `MEETING`, `VISIT`, `EMAIL_EXTERNAL`, `OTHER`), `direction`, `outcome` (`CONNECTED`, `NO_ANSWER`, `BUSY`, `WRONG_NUMBER`, `VOICEMAIL`, `HELD`, `NO_SHOW`), `notes`, `occurred_at`, `duration_seconds`.
+
+**`opportunities`** (Fase 5–6): `lead_id`, `sdr_id`, `sales_owner_id`, `status` (`OPEN`, `WON`, `LOST`), `handoff_at`, `accepted_at`, `qualification` jsonb (checklist de qualificação, ver [SDR-FLOW §8](./SDR-FLOW.md#8-qualificação-e-transferência-ao-comercial)), `product_interest`, `expected_value`, `won_at`, `lost_at`, `loss_reason_id`, `external_crm_id`.
+
+### 4.7 Mensagens e IA
+
+**`approaches`** (Fase 5): a "abordagem" comparável em analytics. `key`, `name`, `description`, `hypothesis`, `active`.
+
+**`message_templates`** (Fase 5): templates internos. `name`, `channel`, `message_type`, `body` (com `{{variáveis}}`), `approach_id`, `version`, `status` (`DRAFT`, `ACTIVE`, `ARCHIVED`).
+
+**`whatsapp_templates`** (Fase 7): espelho dos templates aprovados na Meta. `meta_name`, `language`, `category` (`MARKETING`, `UTILITY`, `AUTHENTICATION`), `status`, `components` jsonb, `approach_id`, `last_synced_at`.
+
+**`conversations`** (Fase 7): `lead_id`, `channel`, `contact_point_id`, `external_thread_id`, `last_inbound_at`, `last_outbound_at`, `service_window_expires_at` (janela de atendimento), `status`.
+
+**`messages`** (Fase 5):
+
+| Coluna | Notas |
+|---|---|
+| `lead_id`, `contact_point_id`, `conversation_id` | |
+| `channel` | `WHATSAPP`, `INSTAGRAM`, `EMAIL`, `SMS`, `OTHER` |
+| `direction` | `OUTBOUND`, `INBOUND` |
+| `mode` | `ASSISTED` (humano enviou fora do sistema), `API` (enviado pelo sistema), `LOGGED` (registro manual retroativo) |
+| `message_type` | `FIRST_CONTACT`, `FOLLOW_UP_1..3`, `INTERESTED_REPLY`, `OBJECTION_REPLY`, `SCHEDULING`, `REACTIVATION`, `OTHER` |
+| `body` | Texto **efetivamente enviado** (versão final para análise) |
+| `template_id`, `whatsapp_template_id`, `ai_generation_id`, `approach_id`, `campaign_id`, `enrollment_id`, `cadence_step_id` | **Atribuição** |
+| `status` | `PENDING_CONFIRMATION`, `QUEUED`, `SENT`, `DELIVERED`, `READ`, `FAILED`, `RECEIVED`, `CANCELED` |
+| `provider`, `provider_message_id` | Único por provedor |
+| `sent_by_id`, `approved_by_id`, `approved_at`, `sent_at`, `delivered_at`, `read_at`, `failed_at`, `received_at` | |
+| `error_code`, `error_detail` | |
+| `classification`, `classification_source`, `classification_confidence`, `classified_by_id` | Para `INBOUND`: `INTERESTED`, `QUESTION`, `OBJECTION`, `NOT_INTERESTED`, `OPT_OUT`, `OUT_OF_OFFICE`, `WRONG_CONTACT`, `OTHER`; fonte `RULE`/`AI`/`HUMAN` |
+| `idempotency_key` | Único |
+
+**`message_status_events`** (Fase 7): `message_id`, `status`, `occurred_at`, `webhook_event_id`.
+
+**`ai_generations`** (Fase 6):
+
+| Coluna | Notas |
+|---|---|
+| `lead_id`, `requested_by_id` | |
+| `kind` | Tipos de mensagem + `REPLY_CLASSIFICATION`, `INSIGHT` |
+| `channel`, `approach_id` | |
+| `prompt_id`, `prompt_version` | Prompts versionados no código (Git) |
+| `provider`, `model`, `params` jsonb | Ex.: esforço, limite de tokens |
+| `input_snapshot` jsonb | **Contexto minimizado** efetivamente enviado |
+| `output` jsonb | Saída estruturada completa |
+| `text_generated`, `text_final` | Rascunho e versão aprovada |
+| `edit_distance_ratio` | Quanto o humano alterou (0–1) |
+| `guardrail_flags` jsonb | Avisos dos guardrails |
+| `status` | `GENERATED`, `EDITED`, `APPROVED`, `DISCARDED`, `SENT`, `FAILED`, `BLOCKED` |
+| `discard_reason`, `rating` (1–5), `feedback` | Aprendizado |
+| `input_tokens`, `output_tokens`, `cost_estimate_usd`, `latency_ms` | Custos |
+| `approved_by_id`, `approved_at`, `message_id` | |
+
+**`ai_knowledge_items`** (Fase 6): fatos aprovados sobre a Docline que a IA pode usar. `key`, `title`, `content`, `active`, `approved_by_id`, `version`.
+
+### 4.8 Entrada de dados
+
+**`import_batches`** (Fase 3): `file_name`, `file_size`, `file_sha256` (detecta reimportação do mesmo arquivo), `file_type`, `encoding`, `delimiter`, `sheet_name`, `header_row`, `row_count`, `status` (`UPLOADED`, `MAPPING`, `PREVIEWING`, `PREVIEW_READY`, `COMMITTING`, `COMPLETED`, `FAILED`, `CANCELED`), `mapping` jsonb, `duplicate_policy` (`CREATE_AND_FLAG`, `SKIP`, `UPDATE_EMPTY_FIELDS`), `source_id`, `source_detail`, `collected_at`, `default_legal_basis`, `legal_basis_assessment_id`, `default_owner_id`, `default_tag_ids`, `stats` jsonb, `completed_at`, `purge_after`.
+
+**`import_rows`** (Fase 3, temporária, purgada após 30 dias): `batch_id`, `row_number`, `raw` jsonb, `normalized` jsonb, `errors` jsonb, `warnings` jsonb, `match_status` (`NEW`, `EXISTING`, `POSSIBLE_DUPLICATE`, `DUPLICATE_IN_FILE`, `SUPPRESSED`, `INVALID`), `matched_lead_id`, `match_reasons` jsonb, `decision` (`IMPORT`, `SKIP`, `LINK_EXISTING`, `UPDATE_EXISTING`), `result_lead_id`, `status`.
+
+**`import_mapping_templates`** (Fase 3): `name`, `header_signature` (para sugerir automaticamente), `mapping` jsonb.
+
+**`duplicate_candidates`** (Fase 3): `lead_a_id`, `lead_b_id` (sempre `a < b`), `score` (0–1), `confidence` (`HIGH`, `MEDIUM`, `LOW`), `reasons` jsonb (`[{rule, detail, weight}]`), `status` (`PENDING`, `MERGED`, `KEPT_SEPARATE`, `IGNORED`), `detected_by` (`IMPORT`, `SCAN`, `MANUAL`, `PROSPECTING`), `detected_at`, `decided_by_id`, `decided_at`, `decision_note`. **Único:** `(lead_a_id, lead_b_id)`.
+
+**`lead_merges`** (Fase 3): `survivor_lead_id`, `merged_lead_id`, `candidate_id`, `field_choices` jsonb, `merged_snapshot` jsonb (cópia integral do lead mesclado e ids dos filhos movidos), `performed_by_id`, `performed_at`.
+
+**`prospecting_searches`** (Fase 9): `provider` (`RECEITA_OPEN_DATA`, `GOOGLE_PLACES`), `params` jsonb (UF, cidade, categoria/CNAE, raio, quantidade), `requested_by_id`, `status`, `result_count`.
+
+**`prospecting_results`** (Fase 9, temporária): `search_id`, `provider_ref` (`place_id` ou CNPJ), `match_status`, `matched_lead_id`, `decision` (`PENDING`, `APPROVED`, `REJECTED`), `created_lead_id`. **Não guarda conteúdo do Google** além do `place_id`.
+
+**`registry_companies`** (Fase 9): recorte dos dados abertos do CNPJ (somente CNAEs de interesse e situação ativa). `cnpj`, `cnpj_root`, `company_name`, `trade_name`, `cnae_main`, `cnaes_secondary`, `registration_status`, `opened_at`, `municipality_code`, `uf`, endereço, `phone_1`, `phone_2`, `email`, `is_individual_entrepreneur`, `dataset_reference` (mês da base), `ingested_at`. Base de descoberta separada de `leads`: só vira lead quando o SDR aprova.
+
+### 4.9 Conformidade
+
+**`legal_basis_assessments`** (Fase 2): registro das avaliações de base legal (ex.: LIA de legítimo interesse). `name`, `legal_basis`, `purpose`, `document_url`, `version`, `approved_by`, `approved_at`, `valid_until`.
+
+**`contact_permissions`** (Fase 2):
+
+| Coluna | Notas |
+|---|---|
+| `lead_id`, `person_id`, `contact_point_id` | Granularidade flexível (lead inteiro ou ponto de contato) |
+| `channel` | `ALL`, `WHATSAPP`, `INSTAGRAM`, `EMAIL`, `PHONE` |
+| `legal_basis` | `CONSENT`, `LEGITIMATE_INTEREST`, `CONTRACT` (execução de contrato ou procedimentos preliminares), `NOT_ASSESSED` |
+| `legal_basis_assessment_id` | LIA aplicável |
+| `opt_in_status` | `NONE`, `GRANTED`, `REVOKED`: **opt-in de plataforma** (ex.: exigido pela Meta), separado da base legal |
+| `opt_in_at`, `opt_in_method` | `INBOUND_MESSAGE`, `FORM`, `EVENT`, `EXISTING_RELATIONSHIP`, `VERBAL_RECORDED`, `CLICK_TO_WHATSAPP` |
+| `evidence` | Texto/URL da evidência |
+| `recorded_by_id`, `recorded_at`, `valid_until` | |
+
+**`suppression_entries`** (Fase 2), a **Lista Não Contatar**:
+
+| Coluna | Notas |
+|---|---|
+| `type` | `PHONE`, `EMAIL`, `INSTAGRAM`, `CNPJ`, `LEAD` |
+| `value_hash` | HMAC-SHA256 do valor normalizado (com *pepper* secreto) |
+| `value_masked` | Ex.: `+55 88 9****-9999`, para exibição |
+| `scope` | `ALL_CHANNELS`, `WHATSAPP`, `INSTAGRAM`, `EMAIL`, `PHONE` |
+| `reason` | `OPT_OUT`, `DATA_SUBJECT_REQUEST`, `COMPLAINT`, `LEGAL`, `INVALID_CONTACT`, `INTERNAL_DECISION` |
+| `source` | `INBOUND_KEYWORD`, `SDR`, `ADMIN`, `IMPORT`, `WEBHOOK`, `DSR` |
+| `lead_id` | Opcional (o registro sobrevive à anonimização do lead) |
+| `notes`, `created_by_id`, `revoked_at`, `revoked_by_id`, `revoke_reason` | Revogação só por ADMIN |
+
+**Único parcial:** `(type, value_hash, scope)` onde `revoked_at is null`.
+
+**`data_subject_requests`** (Fase 2/5): `requester_name`, `requester_contact`, `type` (`CONFIRMATION`, `ACCESS`, `CORRECTION`, `ANONYMIZATION`, `DELETION`, `PORTABILITY`, `SHARING_INFO`, `CONSENT_REVOCATION`, `OPPOSITION`), `lead_id`, `status`, `received_at`, `due_at`, `resolved_at`, `handled_by_id`, `response_summary`.
+
+**`retention_policies`** (Fase 3+): `entity`, `condition` jsonb, `action` (`ANONYMIZE`, `DELETE`, `ARCHIVE`), `after_days`, `active`.
+
+### 4.10 Campanhas, analytics e plataforma
+
+**`campaigns`** (Fase 10): `name`, `objective`, `status` (`DRAFT`, `READY`, `ACTIVE`, `PAUSED`, `COMPLETED`, `ARCHIVED`), `filter_definition` jsonb, `snapshot_at`, `channel`, `cadence_id`, `approach_id`, `owner_id`, `daily_contact_limit`, `starts_at`, `ends_at`.
+
+**`campaign_leads`** (Fase 10): PK `(campaign_id, lead_id)`, `eligibility` (`ELIGIBLE`, `INELIGIBLE`), `ineligibility_reasons` text[], `assigned_to_id`, marcos `added_at`, `contacted_at`, `delivered_at`, `replied_at`, `interested_at`, `opportunity_at`, `converted_at`, `opted_out_at`.
+
+**`daily_metrics`** (Fase 11): `date`, `dimension` (`GLOBAL`, `SDR`, `CITY`, `SOURCE`, `CAMPAIGN`, `APPROACH`, `CHANNEL`, `SEGMENT`), `dimension_id`, `new_leads`, `contacted`, `replied`, `interested`, `opportunities`, `converted`, `opt_outs`, `messages_out`, `messages_in`. Único `(date, dimension, dimension_id)`.
+
+**`insights`** (Fase 11+): `generated_at`, `scope`, `audience_user_id`, `type`, `text`, `data` jsonb (números que sustentam o texto), `valid_until`, `feedback`.
+
+| Tabela | Uso | Fase |
+|---|---|---|
+| `app_settings` | `key`, `value` jsonb, `updated_by_id`: horários, limites, palavras de opt-out, dias para "esquecido" | 1 |
+| `saved_views` | `owner_id`, `name`, `entity`, `filter`, `columns`, `sort`, `shared` | 2 |
+| `webhook_events` | *Inbox*: `provider`, `external_event_id` (único por provedor), `signature_valid`, `payload`, `received_at`, `processed_at`, `status`, `attempts`, `error` | 7 |
+| `integration_connections` | `provider`, `status`, `config` (não secreta), `credentials_encrypted`, `last_check_at`, `last_error` | 7 |
+| `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` | 12 |
+| `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
+| `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
+
+---
+
+## 5. Relacionamentos e cardinalidades
+
+| Relação | Cardinalidade | Regra |
+|---|---|---|
+| lead → pessoas | 1:N | Pessoa pertence a um lead; mesclagem move pessoas |
+| lead → pontos de contato | 1:N | Único `(lead_id, type, value_normalized)` |
+| pessoa → pontos de contato | 1:N (opcional) | Ponto de contato pode ser só do lead |
+| lead → origens | 1:N | Exatamente uma `is_first_touch = true` |
+| lead → etapa | N:1 | Sempre em uma etapa do pipeline do lead |
+| lead → responsável | N:1 (opcional) | Sem responsável = pool não atribuído |
+| lead → lead (mesclagem) | N:1 | `merged_into_id` aponta o sobrevivente; cadeia resolvida para o último |
+| lead → inscrições em cadência | 1:N | No máximo 1 `ACTIVE` |
+| lead → mensagens/tarefas/atividades/eventos | 1:N | Movidos ao sobrevivente na mesclagem |
+| geração IA → mensagem | 1:0..1 | Mensagem guarda `ai_generation_id` |
+| lead → oportunidades | 1:N | Normalmente uma aberta por vez |
+| campanha ↔ lead | N:M | Via `campaign_leads` |
+| lead → permissões | 1:N | Por canal/ponto de contato |
+| supressão → lead | N:0..1 | Independente do lead (por identificador) |
+| lote de importação → linhas | 1:N | Linhas purgadas após o prazo |
+| candidato a duplicado → leads | N:2 | Par ordenado, único |
+
+---
+
+## 6. Enumerações
+
+| Enum | Valores |
+|---|---|
+| `UserRole` | `ADMIN`, `MANAGER`, `SDR`, `SALES` (UI: Administrador, Gestor, SDR, Comercial) |
+| `LeadType` | `ACCOUNTING_FIRM`, `ACCOUNTANT`, `REFERRAL_PARTNER`, `COMPANY`, `OTHER` |
+| `LeadStatus` | `ACTIVE`, `ARCHIVED`, `MERGED`, `ANONYMIZED` |
+| `ScoreBand` | `COLD` (Frio), `WARM` (Morno), `HOT` (Quente), `PRIORITY` (Prioridade) |
+| `ContactStatus` | `CONTACTABLE`, `RESTRICTED`, `NO_LEGAL_BASIS`, `OPTED_OUT`, `BLOCKED` |
+| `ContactPointType` | `PHONE`, `EMAIL`, `INSTAGRAM` |
+| `WhatsappStatus` | `UNKNOWN`, `PROBABLE`, `CONFIRMED`, `NOT_ON_WHATSAPP` |
+| `Channel` | `WHATSAPP`, `INSTAGRAM`, `EMAIL`, `PHONE`, `SMS`, `OTHER` |
+| `MessageMode` | `ASSISTED`, `API`, `LOGGED` |
+| `MessageType` | `FIRST_CONTACT`, `FOLLOW_UP_1`, `FOLLOW_UP_2`, `FOLLOW_UP_3`, `INTERESTED_REPLY`, `OBJECTION_REPLY`, `SCHEDULING`, `REACTIVATION`, `OTHER` |
+| `ReplyClassification` | `INTERESTED`, `QUESTION`, `OBJECTION`, `NOT_INTERESTED`, `OPT_OUT`, `OUT_OF_OFFICE`, `WRONG_CONTACT`, `OTHER` |
+| `StageCategory` | `OPEN`, `WON`, `LOST`, `PARKED` |
+| `LegalBasis` | `CONSENT`, `LEGITIMATE_INTEREST`, `CONTRACT`, `NOT_ASSESSED` |
+| `SuppressionReason` | `OPT_OUT`, `DATA_SUBJECT_REQUEST`, `COMPLAINT`, `LEGAL`, `INVALID_CONTACT`, `INTERNAL_DECISION` |
+
+---
+
+## 7. Índices e restrições críticas
+
+| Tabela | Índice / restrição | Finalidade |
+|---|---|---|
+| `leads` | único parcial `(cnpj)` `where cnpj is not null and status <> 'MERGED'` | Garante um lead ativo por CNPJ (estabelecimento) |
+| `leads` | `(cnpj_root)` | Sinalizar filiais |
+| `leads` | GIN `name_core gin_trgm_ops` | Similaridade de nomes |
+| `leads` | `(municipality_code, stage_id)`, `(owner_id, stage_id)`, `(state_uf)`, `(score desc)`, `(contact_status)`, `(next_action_at)`, `(last_activity_at)` | Filtros, fila e Kanban |
+| `leads` | GIN `search_vector` | Busca textual |
+| `contact_points` | `(type, value_normalized)` | Dedup exato |
+| `contact_points` | `(type, value_hash)` | Cruzamento com a Lista Não Contatar |
+| `contact_points` | único `(lead_id, type, value_normalized)` | Sem repetição no mesmo lead |
+| `suppression_entries` | único parcial `(type, value_hash, scope) where revoked_at is null` | Uma supressão vigente por identificador/escopo |
+| `duplicate_candidates` | único `(lead_a_id, lead_b_id)` + `check (lead_a_id < lead_b_id)` | Par não se repete |
+| `cadence_enrollments` | único parcial `(lead_id) where status = 'ACTIVE'` | Uma cadência ativa por lead |
+| `tasks` | `(assignee_id, status, due_at)` | Minha Fila |
+| `messages` | único `(provider, provider_message_id)`; `(lead_id, created_at desc)`; `(approach_id, message_type)` | Idempotência, histórico, analytics |
+| `lead_events` | `(lead_id, occurred_at desc)`; `(type, occurred_at)` | Timeline e analytics |
+| `audit_logs` | `(entity_type, entity_id, occurred_at desc)` | Histórico de alterações |
+| `webhook_events` | único `(provider, external_event_id)` | Idempotência |
+
+---
+
+## 8. Dados de configuração iniciais (seed)
+
+### 8.1 Etapas do pipeline (§11 dos requisitos)
+
+| # | `key` | Nome | Categoria | Dono | Movida por |
+|---|---|---|---|---|---|
+| 1 | `NEW` | Novo | OPEN | SDR | Importação/cadastro |
+| 2 | `TO_QUALIFY` | A qualificar | OPEN | SDR | SDR |
+| 3 | `QUALIFIED` | Qualificado | OPEN | SDR | SDR |
+| 4 | `AWAITING_OUTREACH` | Aguardando prospecção | OPEN | SDR | SDR / distribuição |
+| 5 | `FIRST_CONTACT` | Primeiro contato | OPEN | SDR | Cadência (D0) |
+| 6 | `FOLLOW_UP_1` | Follow-up 1 | OPEN | SDR | Cadência |
+| 7 | `FOLLOW_UP_2` | Follow-up 2 | OPEN | SDR | Cadência |
+| 8 | `FOLLOW_UP_3` | Follow-up 3 | OPEN | SDR | Cadência |
+| 9 | `REPLIED` | Respondeu | OPEN | SDR | Resposta recebida |
+| 10 | `INTERESTED` | Interessado | OPEN | SDR | Classificação |
+| 11 | `MEETING` | Reunião | OPEN | SDR/Comercial | SDR |
+| 12 | `OPPORTUNITY` | Oportunidade | OPEN | Comercial | Transferência |
+| 13 | `NEGOTIATION` | Negociação | OPEN | Comercial | Comercial |
+| 14 | `CONVERTED` | Convertido | WON | Comercial | Comercial |
+| 15 | `NOT_INTERESTED` | Sem interesse | LOST | — | SDR (motivo obrigatório) |
+| 16 | `NO_RESPONSE` | Sem resposta | PARKED | — | Fim da cadência |
+| 17 | `DISCARDED` | Descartado | LOST | — | SDR/Gestor (motivo obrigatório) |
+
+### 8.2 Modelo de score inicial (§10)
+
+| `criterion_key` | Parâmetros | Pontos | Observação |
+|---|---|---|---|
+| `has_whatsapp` | — | +20 | `whatsapp_status ∈ {PROBABLE, CONFIRMED}` |
+| `has_instagram` | — | +15 | |
+| `has_website` | — | +10 | |
+| `google_reviews_gte` | `{min: 1}` | +10 | ⚠️ **inativo** até validação jurídica (Google) |
+| `google_reviews_gte` | `{min: 21}` ("mais de 20") | +10 | ⚠️ **inativo** até validação jurídica (Google) |
+| `instagram_active` | `{max_days_since_post: 30}` | +10 | Depende da Fase 8 (Business Discovery) ou de marcação manual |
+| `in_priority_city` | — | +15 | Tabela `priority_cities` |
+| `replied_before` | — | +20 | Já houve mensagem `INBOUND` |
+| `showed_interest` | — | +30 | Classificação `INTERESTED` alguma vez |
+
+Normalização `CLAMP` (máximo 100). Faixas: **0–30 Frio · 31–60 Morno · 61–80 Quente · 81–100 Prioridade**.
+
+> **Evolução recomendada:** separar **score de perfil** (fit: canais, cidade, porte) de **score de engajamento** (respondeu, interesse). Misturar os dois faz um lead engajado de baixo potencial parecer igual a um lead ideal não contatado. A estrutura `scoring_models` suporta dois modelos ativos por `kind` quando isso for decidido.
+
+### 8.3 Cadência padrão (§18)
+
+"Padrão — Contabilidade": D0 `FIRST_CONTACT` → D2 `FOLLOW_UP_1` → D5 `FOLLOW_UP_2` → D10 `FOLLOW_UP_3` → +3 dias sem resposta → `NO_RESPONSE`. Dias úteis, janela 08h–18h no fuso do lead, `stop_on_reply = true`.
+
+### 8.4 Demais seeds
+
+- **Origens** (`lead_sources`): `BASE_DOCLINE` (Base Docline), `GOOGLE`, `INSTAGRAM`, `REFERRAL` (Indicação), `SPREADSHEET` (Planilha), `MANUAL` (Cadastro manual), `EVENT` (Evento), `CAMPAIGN` (Campanha), `RECEITA_OPEN_DATA` (Dados abertos CNPJ), `OTHER` (Outro).
+- **Tags** (§19): tags editáveis para o que **não** tem campo próprio, como `Cliente`, `Parceiro`, `Indicação`. Itens como cidade, UF, origem, "Lead quente" e "Sem WhatsApp" aparecem como **rótulos automáticos** calculados a partir dos campos (cidade, `score_band`, `has_whatsapp`, origem), para não ficarem desatualizados. "Não contatar" é selo de conformidade, nunca tag ([ARCHITECTURE §2 A6](./ARCHITECTURE.md#2-conflitos-e-pontos-de-atenção-encontrados)).
+- **Motivos de perda:** Sem interesse; Já tem fornecedor; Não atua com certificado digital; Contato inválido; Empresa encerrada; Pediu para não ser contatado; Fora do perfil; Outro.
+- **Segmentos:** Contabilidade; Parceiro indicador; Empresa (outros).
+- **Referência:** UFs e municípios via API de Localidades do IBGE; feriados nacionais.
+- **Desenvolvimento:** ~2.000 leads fictícios distribuídos por cidades do Ceará e de outros estados, com duplicados propositais, telefones em formatos variados, CNPJs numéricos e alfanuméricos válidos, todos `is_test_data = true`.
+
+---
+
+## 9. Preparação para inteligência comercial
+
+O requisito §39 ("Hoje existem 37 escritórios prioritários…") exige que os **fatos** existam no banco desde o primeiro dia. O modelo garante:
+
+| Necessidade | Onde está |
+|---|---|
+| Sequência de ações por lead | `lead_events` (tipado, com ator, canal, abordagem, campanha) |
+| Velocidade e gargalos do funil | `lead_stage_history` com `duration_seconds` |
+| O que foi dito, por qual abordagem e com qual resultado | `messages` com `approach_id`, `ai_generation_id`, `template_id`, `campaign_id` + resposta seguinte |
+| Qualidade da IA | `ai_generations` (edição humana, descarte, nota, custo) |
+| Calibração do score | `lead_score_history` × desfecho do lead |
+| Potencial por cidade | `municipalities.population` + `registry_companies` (universo de escritórios) − leads já trabalhados |
+| Tendências | `daily_metrics` |
+| Narrativas | `insights` (texto + números que o sustentam) |
+
+Esboços de consultas (indicativos):
+
+```sql
+-- "Hoje existem N escritórios prioritários para contato"
+SELECT count(*)
+FROM leads l JOIN pipeline_stages s ON s.id = l.stage_id
+WHERE l.status = 'ACTIVE' AND l.score_band = 'PRIORITY'
+  AND l.contact_status = 'CONTACTABLE'
+  AND s.key IN ('QUALIFIED', 'AWAITING_OUTREACH');
+
+-- "N leads de <cidade> estão sem follow-up" (etapa aberta, sem tarefa aberta, parados há X dias)
+SELECT count(*)
+FROM leads l JOIN pipeline_stages s ON s.id = l.stage_id
+WHERE l.status = 'ACTIVE' AND s.category = 'OPEN'
+  AND l.municipality_code = $1
+  AND l.last_activity_at < now() - make_interval(days => $2)
+  AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.lead_id = l.id AND t.status = 'OPEN');
+
+-- "N leads responderam e precisam de ação humana"
+SELECT count(*) FROM leads l
+WHERE l.status = 'ACTIVE'
+  AND l.last_inbound_at IS NOT NULL
+  AND (l.last_contact_at IS NULL OR l.last_inbound_at > l.last_contact_at);
+
+-- "Abordagem X tem taxa de resposta Y% maior" (resposta em até 7 dias após o 1º contato)
+SELECT m.approach_id,
+       count(*) AS enviados,
+       count(*) FILTER (WHERE EXISTS (
+         SELECT 1 FROM messages r
+         WHERE r.lead_id = m.lead_id AND r.direction = 'INBOUND'
+           AND r.received_at BETWEEN m.sent_at AND m.sent_at + interval '7 days')) AS responderam
+FROM messages m
+WHERE m.direction = 'OUTBOUND' AND m.message_type = 'FIRST_CONTACT' AND m.sent_at >= $1
+GROUP BY m.approach_id;
+```
+
+Regra para a IA: **números vêm do banco; o modelo só redige** ([AI-SDR §13](./AI-SDR.md#13-insights-da-carteira-futuro)).
+
+---
+
+## 10. Crescimento, retenção e manutenção
+
+- **Particionamento** (quando passar de ~10–20 milhões de linhas): `lead_events`, `messages` e `audit_logs` por mês (particionamento declarativo via SQL nas migrações; o Prisma convive com tabelas particionadas).
+- **Purga e anonimização**: job `retention.enforce` aplica `retention_policies` (proposta em [LGPD §12](./LGPD.md#12-retenção-proposta)).
+- **Migrações**: `prisma migrate` com revisão em PR; SQL manual para extensões, índices trigram, índices parciais, triggers de *append-only* e partições. Nunca editar migração já aplicada.
+- **Backups**: diários com recuperação a um ponto no tempo; teste de restauração trimestral.
+- **Seeds**: `seed:reference` (produção e dev) separado de `seed:dev` (somente fictício, bloqueado em produção).

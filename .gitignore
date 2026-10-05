@@ -1,0 +1,48 @@
+# --- Segredos ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Dependências e builds --------------------------------------------------
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# --- Testes e relatórios -----------------------------------------------------
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# --- Dados (LGPD): nunca versionar planilhas ou exportações reais -----------
+# Apenas fixtures fictícias de teste são permitidas.
+*.csv
+*.xlsx
+*.xls
+*.xlsm
+!**/fixtures/**/*.csv
+!**/fixtures/**/*.xlsx
+/data/
+/exports/
+*.sql.gz
+*.dump
+
+# --- Logs e temporários ------------------------------------------------------
+*.log
+npm-debug.log*
+pnpm-debug.log*
+tmp/
+.cache/
+
+# --- Sistema e editores ------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
