@@ -105,6 +105,20 @@ describe('parseServerEnv', () => {
     );
   });
 
+  it('proíbe o provedor de e-mail em arquivo fora de dev/testes', () => {
+    expect(problemsOf({ ...minimal, EMAIL_PROVIDER: 'file' })).toEqual([]);
+    expect(
+      problemsOf({
+        ...minimal,
+        APP_ENV: 'staging',
+        APP_URL: 'https://staging.example.com',
+        ENCRYPTION_KEY: KEY32,
+        SUPPRESSION_HASH_PEPPER: SECRET,
+        EMAIL_PROVIDER: 'file',
+      }),
+    ).toEqual(['EMAIL_PROVIDER: file é apenas para desenvolvimento e testes']);
+  });
+
   it('aceita uma configuração de produção completa', () => {
     const env = parseServerEnv({
       ...minimal,

@@ -30,6 +30,7 @@ blob-report/
 !**/fixtures/**/*.csv
 !**/fixtures/**/*.xlsx
 /data/
+.data/
 /exports/
 *.sql.gz
 *.dump

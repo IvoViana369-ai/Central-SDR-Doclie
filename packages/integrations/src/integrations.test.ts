@@ -1,0 +1,129 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Writable } from 'node:stream';
+import { parseServerEnv } from '@docline/config';
+import { describe, expect, it, vi } from 'vitest';
+import { FileEmailProvider } from './email/file';
+import { ResendEmailProvider } from './email/resend';
+import { createLogger } from './observability/logger';
+import { assertProvidersImplemented, createEmailProvider, integrationStatuses } from './registry';
+
+const baseEnv = {
+  DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+  BETTER_AUTH_SECRET: 'x'.repeat(40),
+};
+const email = {
+  to: 'ana@example.com',
+  subject: 'Assunto',
+  text: 'Texto',
+  html: '<p>Texto</p>',
+  category: 'invitation' as const,
+};
+
+describe('logger', () => {
+  it('mascara credenciais e dados de contato', () => {
+    const lines: string[] = [];
+    const destination = new Writable({
+      write(chunk, _enc, done) {
+        lines.push(String(chunk));
+        done();
+      },
+    });
+    const logger = createLogger({ service: 'web', destination });
+    logger.info(
+      {
+        user: { email: 'ana@example.com', password: 'segredo' },
+        token: 'abc',
+        headers: { cookie: 'sid=1' },
+      },
+      'teste',
+    );
+    const entry = JSON.parse(lines[0]!);
+    expect(entry.user).toEqual({ email: '[REDACTED]', password: '[REDACTED]' });
+    expect(entry.token).toBe('[REDACTED]');
+    expect(entry.headers.cookie).toBe('[REDACTED]');
+    expect(entry).toMatchObject({ service: 'web', level: 'info', msg: 'teste' });
+    expect(lines[0]).not.toContain('ana@example.com');
+  });
+});
+
+describe('provedores de e-mail', () => {
+  it('file grava um JSON por linha', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'outbox-')), 'sub', 'outbox.jsonl');
+    const provider = new FileEmailProvider(path);
+    await provider.send(email);
+    await provider.send({ ...email, subject: 'Segundo' });
+    const rows = readFileSync(path, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(rows.map((r) => r.subject)).toEqual(['Assunto', 'Segundo']);
+  });
+
+  it('resend chama a API com autenticação e falha em erro HTTP', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    await new ResendEmailProvider('re_key', 'Docline <a@b.com>', fetchMock as typeof fetch).send(
+      email,
+    );
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.resend.com/emails');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer re_key');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      to: ['ana@example.com'],
+      subject: 'Assunto',
+    });
+
+    const failing = vi.fn(async () => new Response('erro', { status: 500 }));
+    await expect(
+      new ResendEmailProvider('k', 'f', failing as typeof fetch).send(email),
+    ).rejects.toThrow(/500/);
+  });
+
+  it('o registro escolhe o provedor configurado', () => {
+    const logger = createLogger({ service: 'web', level: 'silent' });
+    expect(createEmailProvider(parseServerEnv(baseEnv), logger).name).toBe('console');
+    expect(
+      createEmailProvider(parseServerEnv({ ...baseEnv, EMAIL_PROVIDER: 'file' }), logger).name,
+    ).toBe('file');
+    expect(
+      createEmailProvider(
+        parseServerEnv({ ...baseEnv, EMAIL_PROVIDER: 'smtp', SMTP_URL: 'smtp://localhost:1025' }),
+        logger,
+      ).name,
+    ).toBe('smtp');
+  });
+});
+
+describe('status das integrações', () => {
+  it('no padrão, canais ficam em modo assistido e o resto simulado ou desligado', () => {
+    const statuses = Object.fromEntries(
+      integrationStatuses(parseServerEnv(baseEnv)).map((s) => [s.key, s.state]),
+    );
+    expect(statuses).toEqual({
+      whatsapp: 'assisted',
+      instagram: 'assisted',
+      places: 'disabled',
+      companyRegistry: 'disabled',
+      ai: 'simulated',
+      email: 'simulated',
+      crm: 'disabled',
+    });
+    expect(() => assertProvidersImplemented(parseServerEnv(baseEnv))).not.toThrow();
+  });
+
+  it('falha na inicialização se um provedor de fase futura for configurado', () => {
+    const env = parseServerEnv({
+      ...baseEnv,
+      WHATSAPP_PROVIDER: 'meta_cloud',
+      META_APP_SECRET: 's',
+      META_ACCESS_TOKEN: 't',
+      META_GRAPH_API_VERSION: 'v23.0',
+      META_WEBHOOK_VERIFY_TOKEN: 'v',
+      WHATSAPP_PHONE_NUMBER_ID: '1',
+    });
+    expect(() => assertProvidersImplemented(env)).toThrow(
+      /WhatsApp="meta_cloud" \(previsto para a Fase 7\)/,
+    );
+  });
+});

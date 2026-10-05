@@ -19,3 +19,4 @@ export {
 export type * from './ports';
 export * from './modules/identity';
 export * from './modules/audit';
+export * from './jobs/catalog';

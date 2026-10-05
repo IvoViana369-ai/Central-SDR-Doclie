@@ -65,7 +65,7 @@ export const serverEnvShape = {
     'disabled',
   ),
   AI_PROVIDER: withDefault(z.enum(['fake', 'anthropic']), 'fake'),
-  EMAIL_PROVIDER: withDefault(z.enum(['console', 'smtp', 'resend']), 'console'),
+  EMAIL_PROVIDER: withDefault(z.enum(['console', 'file', 'smtp', 'resend']), 'console'),
   CRM_PROVIDER: withDefault(z.enum(['disabled', 'fake', 'webhook', 'docline']), 'disabled'),
   ALLOW_REAL_SENDS: withDefault(z.stringbool(), false),
 
@@ -96,6 +96,7 @@ export const serverEnvShape = {
   EMAIL_FROM: withDefault(z.string().min(3), 'Docline SDR <nao-responda@example.com>'),
   SMTP_URL: optional(z.url()),
   RESEND_API_KEY: optional(z.string()),
+  EMAIL_OUTBOX_FILE: withDefault(z.string().min(1), '.data/outbox.jsonl'),
 
   // Observabilidade
   SENTRY_DSN: optional(z.url()),
@@ -177,6 +178,13 @@ export const serverEnvSchema = z.object(serverEnvShape).superRefine((env, ctx) =
         message: 'deve usar https fora do ambiente local',
       });
     }
+  }
+  if (deployed && env.EMAIL_PROVIDER === 'file') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EMAIL_PROVIDER'],
+      message: 'file é apenas para desenvolvimento e testes',
+    });
   }
   if (env.APP_ENV === 'production' && env.EMAIL_PROVIDER === 'console') {
     ctx.addIssue({

@@ -1,23 +1,19 @@
 {
-  "name": "@docline/integrations",
+  "name": "@docline/worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "devDependencies": {
-    "@types/nodemailer": "^8.0.2"
   },
   "dependencies": {
     "@docline/config": "workspace:*",
     "@docline/core": "workspace:*",
     "@docline/db": "workspace:*",
-    "nodemailer": "^10.0.14",
+    "@docline/integrations": "workspace:*",
     "pg-boss": "^12.36.0",
-    "pino": "^10.4.0"
+    "tsx": "^4.23.15"
   }
 }
