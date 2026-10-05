@@ -1,9 +1,16 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+// Carrega o .env local (se existir) para obter DATABASE_URL_TEST.
+if (existsSync('.env')) process.loadEnvFile('.env');
+
+const testDatabaseUrl =
+  process.env.DATABASE_URL_TEST ?? 'postgresql://docline:docline@localhost:5432/docline_sdr_test';
 
 /**
  * Projetos de teste (docs/ARCHITECTURE.md §12):
  * - unit: rápidos, sem I/O (*.test.ts).
- * - integration: usam PostgreSQL real (*.int.test.ts), executados em série.
+ * - integration: PostgreSQL real (*.int.test.ts), em série, banco *_test recriado.
  */
 export default defineConfig({
   test: {
@@ -25,8 +32,13 @@ export default defineConfig({
           environment: 'node',
           fileParallelism: false,
           testTimeout: 30_000,
-          hookTimeout: 60_000,
+          hookTimeout: 120_000,
           globalSetup: ['./packages/db/test/global-setup.ts'],
+          env: {
+            APP_ENV: 'test',
+            DATABASE_URL_TEST: testDatabaseUrl,
+            DATABASE_URL: testDatabaseUrl,
+          },
         },
       },
     ],

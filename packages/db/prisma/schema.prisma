@@ -1,0 +1,266 @@
+// Docline SDR — schema do banco (PostgreSQL)
+//
+// Fonte conceitual: docs/DATABASE.md. Convenções:
+// - tabelas e colunas em snake_case (via @@map/@map), modelos em PascalCase;
+// - ids UUIDv7; datas em timestamptz (UTC);
+// - sem exclusão física de dados de negócio (status), exceto rotinas de retenção.
+//
+// Fase 1: identidade (Better Auth + domínio), equipes, convites, auditoria,
+// configurações e dados de referência (UFs, municípios, feriados).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// Identidade e equipe
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SDR
+  SALES
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+
+  @@map("user_status")
+}
+
+/// Usuário interno. Campos base exigidos pelo Better Auth + campos do domínio.
+model User {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  name          String
+  email         String     @unique
+  emailVerified Boolean    @default(false) @map("email_verified")
+  image         String?
+  role          UserRole   @default(SDR)
+  status        UserStatus @default(INVITED)
+  teamId        String?    @map("team_id") @db.Uuid
+  timezone      String     @default("America/Fortaleza")
+  lastLoginAt   DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  team               Team?        @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams       Team[]       @relation("TeamManager")
+  sessions           Session[]
+  accounts           Account[]
+  invitations        Invitation[] @relation("InvitationUser")
+  createdInvitations Invitation[] @relation("InvitationCreator")
+
+  @@index([role, status])
+  @@index([teamId])
+  @@map("users")
+}
+
+/// Sessão (Better Auth). Token opaco em cookie HttpOnly.
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  token     String   @unique
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Credenciais (Better Auth). `password` guarda apenas o hash.
+model Account {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id") @db.Uuid
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Tokens de verificação (Better Auth): redefinição de senha etc.
+model Verification {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+/// Limites de taxa do Better Auth persistidos no banco (valem entre instâncias).
+model RateLimit {
+  id          String @id @default(uuid(7)) @db.Uuid
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("rate_limits")
+}
+
+model Team {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String   @unique
+  managerId String?  @map("manager_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  manager User?  @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members User[] @relation("TeamMembers")
+
+  @@map("teams")
+}
+
+/// Convite de acesso (sem cadastro público). Guardamos só o hash do token.
+model Invitation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User  @relation("InvitationUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("invitations")
+}
+
+// -----------------------------------------------------------------------------
+// Auditoria e configurações
+// -----------------------------------------------------------------------------
+
+enum ActorType {
+  USER
+  SYSTEM
+  AUTOMATION
+  INTEGRATION
+  AI
+
+  @@map("actor_type")
+}
+
+/// Log imutável de mutações e eventos de segurança. UPDATE/DELETE/TRUNCATE são
+/// bloqueados por trigger (ver migração); purga só pela rotina de retenção.
+model AuditLog {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  occurredAt DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  action     String
+  entityType String    @map("entity_type")
+  entityId   String?   @map("entity_id")
+  changes    Json?
+  metadata   Json?
+  ip         String?
+  userAgent  String?   @map("user_agent")
+  requestId  String?   @map("request_id")
+
+  @@index([entityType, entityId, occurredAt(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+/// Configurações de negócio editáveis (horários, limites, palavras de opt-out…).
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("app_settings")
+}
+
+// -----------------------------------------------------------------------------
+// Dados de referência
+// -----------------------------------------------------------------------------
+
+model State {
+  uf       String @id @db.Char(2)
+  name     String
+  ibgeCode Int    @unique @map("ibge_code")
+  region   String
+  timezone String
+
+  municipalities Municipality[]
+
+  @@map("states")
+}
+
+model Municipality {
+  ibgeCode   Int     @id @map("ibge_code")
+  name       String
+  nameSearch String  @map("name_search")
+  uf         String  @db.Char(2)
+  ddd        Int?
+  timezone   String
+  isCapital  Boolean @default(false) @map("is_capital")
+  latitude   Decimal? @db.Decimal(9, 6)
+  longitude  Decimal? @db.Decimal(9, 6)
+  population Int?
+
+  state State @relation(fields: [uf], references: [uf])
+
+  @@index([uf, nameSearch])
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "municipalities_name_search_trgm_idx")
+  @@map("municipalities")
+}
+
+enum HolidayScope {
+  NATIONAL
+  STATE
+  MUNICIPAL
+
+  @@map("holiday_scope")
+}
+
+/// Feriados e pontos facultativos usados no calendário de cadências.
+/// `key` determinística evita duplicidade (ex.: NATIONAL:2026-12-25).
+model Holiday {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  key              String       @unique
+  date             DateTime     @db.Date
+  scope            HolidayScope
+  uf               String?      @db.Char(2)
+  municipalityCode Int?         @map("municipality_code")
+  name             String
+  isOptional       Boolean      @default(false) @map("is_optional")
+
+  @@index([date])
+  @@map("holidays")
+}

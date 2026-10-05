@@ -12,6 +12,8 @@ dist/
 build/
 .turbo/
 *.tsbuildinfo
+# Cliente Prisma gerado (pnpm db:generate / postinstall)
+packages/db/src/generated/
 
 # --- Testes e relatórios -----------------------------------------------------
 coverage/

@@ -1,0 +1,10 @@
+{
+  "name": "@docline/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "dependencies": {
+    "better-auth": "1.7.7"
+  }
+}
