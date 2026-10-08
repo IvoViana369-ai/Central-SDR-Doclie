@@ -13,7 +13,8 @@ const db = createDbClient(url, { maxConnections: 2 });
 try {
   const result = await seedReference(db);
   console.log(
-    `Referência: ${result.states} UFs, ${result.municipalities} municípios, ${result.holidays} feriados.`,
+    `Referência: ${result.states} UFs, ${result.municipalities} municípios, ${result.holidays} feriados, ` +
+      `${result.leadSources} origens, ${result.segments} segmentos.`,
   );
 } finally {
   await db.$disconnect();

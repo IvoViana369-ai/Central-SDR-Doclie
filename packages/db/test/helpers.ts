@@ -1,7 +1,14 @@
 import { createDbClient, type DbClient } from '../src/client';
 import { assertTestDatabaseUrl } from './safety';
 
-const REFERENCE_TABLES = ['_prisma_migrations', 'states', 'municipalities', 'holidays'];
+const REFERENCE_TABLES = [
+  '_prisma_migrations',
+  'states',
+  'municipalities',
+  'holidays',
+  'lead_sources',
+  'segments',
+];
 
 let client: DbClient | undefined;
 

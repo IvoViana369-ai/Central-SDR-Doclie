@@ -7,20 +7,32 @@ const db = getTestDb();
 describe('seedReference', () => {
   afterAll(() => closeTestDb());
 
-  it('carrega UFs, municípios e feriados', async () => {
+  // A preparação dos testes já carregou a referência; aqui confirmamos o conteúdo e a idempotência.
+  const holidaysIn2026and2027 = () =>
+    db.holiday.count({
+      where: { date: { gte: new Date('2026-01-01'), lt: new Date('2028-01-01') } },
+    });
+
+  it('carrega UFs, municípios, feriados, origens e segmentos', async () => {
     const result = await seedReference(db, { holidayYears: { from: 2026, to: 2027 } });
     expect(result.states).toBe(27);
     expect(await db.state.count()).toBe(27);
     expect(await db.municipality.count()).toBe(result.municipalities);
     expect(result.municipalities).toBeGreaterThan(5500);
-    expect(await db.holiday.count()).toBe(26);
+    expect(await holidaysIn2026and2027()).toBe(26);
+    expect(await db.leadSource.count()).toBe(result.leadSources);
+    expect(await db.segment.count()).toBe(result.segments);
   });
 
-  it('é idempotente', async () => {
+  it('é idempotente e não sobrescreve origens editadas pelo ADMIN', async () => {
     const before = await db.municipality.count();
+    await db.leadSource.update({ where: { key: 'GOOGLE' }, data: { name: 'Google Maps' } });
     await seedReference(db, { holidayYears: { from: 2026, to: 2027 } });
     expect(await db.municipality.count()).toBe(before);
-    expect(await db.holiday.count()).toBe(26);
+    expect(await holidaysIn2026and2027()).toBe(26);
+    const google = await db.leadSource.findUniqueOrThrow({ where: { key: 'GOOGLE' } });
+    expect(google).toMatchObject({ name: 'Google Maps', defaultLegalBasis: 'LEGITIMATE_INTEREST' });
+    await db.leadSource.update({ where: { key: 'GOOGLE' }, data: { name: 'Google' } });
   });
 
   it('grava município com DDD, fuso e chave de busca', async () => {

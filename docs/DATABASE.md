@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas da Fase 1 implementadas em `packages/db/prisma/schema.prisma` · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 e 2 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-2)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -398,6 +398,27 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` | 12 |
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
+
+### 4.11 Implementação até a Fase 2
+
+Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`. Diferenças em relação às seções acima:
+
+| Tabela | Diferença | Motivo |
+|---|---|---|
+| `leads` | Colunas de pipeline, score, atividade (exceto `last_activity_at`) e desfecho entram nas Fases 4–5; `merged_into_id`, `import_batch_id` e `custom_fields` na Fase 3; `google_place_id` na Fase 9. Sem `search_vector`: a busca usa `name_search` (trigram), CNPJ e os valores normalizados de `contact_points`. Acrescentadas `archived_at` e `anonymized_at`. | Cada coluna nasce na fase que a usa |
+| `lead_sources` | `default_legal_basis` (base legal sugerida no cadastro, [LGPD §4](./LGPD.md#4-bases-legais-por-origem)) e `position` | O cadastro exige base legal "com padrão por origem" (MVP M02) |
+| `tags` | `name_search` único | Evita "Parceiro" e "parceiro" ao mesmo tempo |
+| `lead_notes` | Remoção lógica (`removed_at`, `removed_by_id`), auditada | Corrigir observação com dado que não deveria estar ali ([LGPD §11](./LGPD.md#11-minimização-e-qualidade)) |
+| `lead_assignments` | Estratégia `CLAIM` | SDR "puxa do pool" do seu território ([SECURITY §4.2](./SECURITY.md#42-matriz-de-permissões-inicial)) |
+| `lead_origins` | `import_batch_id`, `prospecting_search_id`, `campaign_id` e `referrer_lead_id` entram nas fases dessas entidades | — |
+| `contact_permissions` | Na Fase 2, uma permissão por lead e canal (único parcial sem pessoa/ponto de contato) | Granularidade por ponto de contato quando houver envio por API (Fase 7) |
+| `data_subject_requests` | Status `RECEIVED`, `IN_PROGRESS`, `COMPLETED`, `REJECTED`; campo `notes` | — |
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`):
+
+- `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
+- `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
+- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios.
 
 ---
 

@@ -19,7 +19,52 @@ export interface ReferenceSeedResult {
   states: number;
   municipalities: number;
   holidays: number;
+  leadSources: number;
+  segments: number;
 }
+
+/**
+ * Origens de leads com a base legal sugerida (docs/LGPD.md §4). A sugestão só
+ * preenche o formulário: quem cadastra confirma. Origens cuja base depende da
+ * coleta original ficam "não avaliada", o que bloqueia o contato até a revisão.
+ */
+export const LEAD_SOURCES = [
+  { key: 'DOCLINE_CUSTOMERS', name: 'Base Docline (clientes)', defaultLegalBasis: 'CONTRACT' },
+  {
+    key: 'DOCLINE_LEGACY',
+    name: 'Base Docline (ex-clientes e contatos antigos)',
+    defaultLegalBasis: 'LEGITIMATE_INTEREST',
+  },
+  { key: 'REFERRAL', name: 'Indicação', defaultLegalBasis: 'LEGITIMATE_INTEREST' },
+  { key: 'THIRD_PARTY_LIST', name: 'Planilha de terceiros', defaultLegalBasis: 'NOT_ASSESSED' },
+  { key: 'GOOGLE', name: 'Google', defaultLegalBasis: 'LEGITIMATE_INTEREST' },
+  {
+    key: 'INSTAGRAM',
+    name: 'Instagram (perfil profissional)',
+    defaultLegalBasis: 'LEGITIMATE_INTEREST',
+  },
+  {
+    key: 'CNPJ_OPEN_DATA',
+    name: 'Dados abertos CNPJ (Receita Federal)',
+    defaultLegalBasis: 'LEGITIMATE_INTEREST',
+  },
+  { key: 'EVENT', name: 'Evento', defaultLegalBasis: 'NOT_ASSESSED' },
+  { key: 'INBOUND', name: 'Campanha inbound (formulário, anúncio)', defaultLegalBasis: 'CONSENT' },
+  {
+    key: 'MANUAL_OTHER',
+    name: 'Outra origem (cadastro manual)',
+    defaultLegalBasis: 'NOT_ASSESSED',
+  },
+] as const;
+
+export const SEGMENTS = [
+  { key: 'contabilidade', name: 'Contabilidade' },
+  { key: 'assessoria_empresarial', name: 'Assessoria empresarial' },
+  { key: 'bpo_financeiro', name: 'BPO financeiro' },
+  { key: 'advocacia', name: 'Advocacia' },
+  { key: 'despachante', name: 'Despachante' },
+  { key: 'outro', name: 'Outro' },
+] as const;
 
 /**
  * Dados de referência (idempotente; pode rodar em produção a cada deploy):
@@ -80,5 +125,25 @@ export async function seedReference(
     holidays.map((h) => h.isOptional),
   );
 
-  return { states: states.length, municipalities: rows.length, holidays: holidays.length };
+  // Origens e segmentos: só cria o que falta (o ADMIN pode renomear ou desativar).
+  await db.$transaction([
+    ...LEAD_SOURCES.map((source, position) =>
+      db.leadSource.upsert({
+        where: { key: source.key },
+        create: { ...source, position },
+        update: {},
+      }),
+    ),
+    ...SEGMENTS.map((segment) =>
+      db.segment.upsert({ where: { key: segment.key }, create: segment, update: {} }),
+    ),
+  ]);
+
+  return {
+    states: states.length,
+    municipalities: rows.length,
+    holidays: holidays.length,
+    leadSources: LEAD_SOURCES.length,
+    segments: SEGMENTS.length,
+  };
 }
