@@ -6,13 +6,15 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
 import { getContainer } from './container';
-import { requestMetaFrom } from './request-meta';
+import { ipAddressOptions, requestMetaFrom } from './request-meta';
 
 const SESSION_DAYS = 7;
 
 function createAuth() {
   const { env, deps, logger } = getContainer();
   const secureCookies = env.APP_ENV === 'staging' || env.APP_ENV === 'production';
+  // Mesma resolução de IP para o rate limit do Better Auth e para a auditoria.
+  const ipOptions = ipAddressOptions(env.TRUSTED_PROXIES);
 
   return betterAuth({
     appName: 'Docline SDR',
@@ -64,7 +66,7 @@ function createAuth() {
       cookiePrefix: 'docline',
       useSecureCookies: secureCookies,
       database: { generateId: () => newId() },
-      ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
+      ipAddress: ipOptions,
     },
 
     databaseHooks: {
@@ -98,7 +100,7 @@ function createAuth() {
       // Auditoria de login (sucesso e falha, com e-mail mascarado).
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== '/sign-in/email') return;
-        const meta = requestMetaFrom(ctx.headers ?? new Headers());
+        const meta = requestMetaFrom(ctx.headers ?? new Headers(), ipOptions);
         try {
           const newSession = ctx.context.newSession;
           if (newSession) {

@@ -3,7 +3,7 @@ import { ForbiddenError, type CoreDeps, type RequestMeta } from '@docline/core';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getContainer } from './container';
-import { requestMetaFrom } from './request-meta';
+import { ipAddressOptions, requestMetaFrom } from './request-meta';
 import { getSessionUser, type SessionUser } from './session';
 
 /** Contexto para páginas autenticadas (Server Components). */
@@ -14,7 +14,9 @@ export async function getPageContext(): Promise<{
 }> {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  return { user, deps: getContainer().deps, meta: requestMetaFrom(await headers()) };
+  const { deps, env } = getContainer();
+  const meta = requestMetaFrom(await headers(), ipAddressOptions(env.TRUSTED_PROXIES));
+  return { user, deps, meta };
 }
 
 /**

@@ -45,6 +45,31 @@ export const serverEnvShape = {
     'info',
   ),
 
+  // Proxies confiáveis à frente da aplicação (IPs/CIDRs, separados por vírgula).
+  // Usados para extrair o IP real do cliente do X-Forwarded-For sem aceitar
+  // valores forjados. Vazio = só confia num cabeçalho com um único IP.
+  TRUSTED_PROXIES: withDefault(
+    z
+      .string()
+      .transform((v) =>
+        v
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+      )
+      .pipe(
+        z.array(
+          z
+            .string()
+            .regex(
+              /^[0-9a-fA-F:.]+(\/\d{1,3})?$/,
+              'cada item deve ser um IP ou CIDR (ex.: 10.0.0.0/8)',
+            ),
+        ),
+      ),
+    [],
+  ),
+
   // Banco e fila
   DATABASE_URL: z.url({ message: 'deve ser uma URL postgresql:// válida' }),
   JOB_QUEUE_SCHEMA: withDefault(z.string().regex(/^[a-z_][a-z0-9_]*$/), 'pgboss'),

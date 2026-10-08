@@ -11,7 +11,7 @@ import {
 } from '@docline/core';
 import { getAuth } from './auth';
 import { getContainer } from './container';
-import { requestMetaFrom } from './request-meta';
+import { ipAddressOptions, requestMetaFrom } from './request-meta';
 
 const MAX_BODY_BYTES = 1_000_000;
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -124,7 +124,7 @@ export function apiHandler<P extends Record<string, string> = Record<string, nev
 ) {
   return async (request: Request, context?: { params?: Promise<P> }): Promise<Response> => {
     const { deps, logger, env } = getContainer();
-    const meta = requestMetaFrom(request.headers);
+    const meta = requestMetaFrom(request.headers, ipAddressOptions(env.TRUSTED_PROXIES));
     try {
       if (MUTATING.has(request.method)) assertSameOrigin(request, env.APP_URL, env.APP_ENV);
 

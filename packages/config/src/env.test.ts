@@ -43,6 +43,17 @@ describe('parseServerEnv', () => {
     expect(env.ALLOW_REAL_SENDS).toBe(true);
   });
 
+  it('converte a lista de proxies confiáveis e valida cada item', () => {
+    expect(parseServerEnv(minimal).TRUSTED_PROXIES).toEqual([]);
+    expect(
+      parseServerEnv({ ...minimal, TRUSTED_PROXIES: ' 10.0.0.0/8, 172.16.0.1 ,fd00::/8' })
+        .TRUSTED_PROXIES,
+    ).toEqual(['10.0.0.0/8', '172.16.0.1', 'fd00::/8']);
+    expect(problemsOf({ ...minimal, TRUSTED_PROXIES: '10.0.0.0/8, proxy.render.com' })[0]).toMatch(
+      /^TRUSTED_PROXIES\.1: cada item deve ser um IP ou CIDR/,
+    );
+  });
+
   it('lista variáveis obrigatórias ausentes', () => {
     const problems = problemsOf({});
     expect(problems).toContain('DATABASE_URL: obrigatória');
