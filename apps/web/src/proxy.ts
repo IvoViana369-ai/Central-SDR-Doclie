@@ -13,9 +13,11 @@ function contentSecurityPolicy(nonce: string): string {
   return [
     `default-src 'self'`,
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? ` 'unsafe-eval'` : ''}`,
-    // Folhas de estilo do app + <style> com nonce. Atributos style="" (usados por
-    // componentes de posicionamento) são permitidos à parte, sem liberar scripts.
-    `style-src 'self' 'nonce-${nonce}'${isDev ? ` 'unsafe-inline'` : ''}`,
+    // Produção: folhas de estilo do app + <style> com nonce. Em desenvolvimento o
+    // Next injeta estilos sem nonce (hot reload); com nonce presente o navegador
+    // ignora 'unsafe-inline', então no dev a política de estilos não usa nonce.
+    isDev ? `style-src 'self' 'unsafe-inline'` : `style-src 'self' 'nonce-${nonce}'`,
+    // Atributos style="" (posicionamento de componentes) sem liberar scripts.
     `style-src-attr 'unsafe-inline'`,
     `img-src 'self' blob: data:`,
     `font-src 'self'`,
