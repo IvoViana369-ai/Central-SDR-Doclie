@@ -236,7 +236,13 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 
 ## 16. Transferência internacional
 
-Hospedagem fora do Brasil (ex.: Render nos EUA/Europa), provedor de IA, Sentry e Meta implicam **transferência internacional** (art. 33). Caminhos: cláusulas-padrão contratuais aprovadas pela ANPD (Resolução CD/ANPD nº 19/2024) nos contratos com fornecedores, ou hospedagem em região brasileira para o banco principal. Decisão pendente ([ARCHITECTURE §16](./ARCHITECTURE.md#16-questões-em-aberto)).
+Hospedagem fora do Brasil (ex.: Render nos EUA/Europa), provedor de IA, Sentry e Meta implicam **transferência internacional** (art. 33). Caminhos: cláusulas-padrão contratuais aprovadas pela ANPD (Resolução CD/ANPD nº 19/2024) nos contratos com fornecedores, ou hospedagem em região brasileira para o banco principal.
+
+**Decisão (2026-10-08):** hospedagem na **Render, região Virginia (EUA)** ([ARCHITECTURE ADR-019](./ARCHITECTURE.md#15-registro-de-decisões-adrs)). Portanto vale o caminho das cláusulas-padrão. Antes de qualquer dado pessoal real entrar no sistema:
+
+- revisar o DPA da Render e incorporar as cláusulas-padrão da ANPD (jurídico/DPO);
+- citar a transferência internacional no aviso de privacidade e no registro de operações (§17);
+- até lá, staging e testes usam **somente dados fictícios**.
 
 ---
 

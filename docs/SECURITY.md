@@ -217,6 +217,7 @@ O limite **por conta** (5 / 15 min) ainda não existe (F2-18). Ele precisa ser d
 - `TRUSTED_PROXIES` lista os proxies da hospedagem (IPs ou CIDRs). A cadeia é lida **da direita para a esquerda**, pulando os proxies confiáveis; o primeiro salto não confiável é o cliente. O primeiro item da cadeia nunca é usado diretamente.
 - Sem `TRUSTED_PROXIES`, o cabeçalho só é aceito quando traz um único IP. Com uma cadeia, o IP fica indefinido: a auditoria registra sem IP e o rate limit usa um contador comum à rota, que é mais restritivo (todos dividem o mesmo limite) mas nunca mais permissivo.
 - **No primeiro deploy de cada ambiente:** conferir o `X-Forwarded-For` que a hospedagem entrega e configurar `TRUSTED_PROXIES` de acordo. O Better Auth avisa no log quando não consegue determinar o IP (*"Rate limiting could not determine a client IP"*). Sem esse ajuste, um pico de tentativas pode esgotar o contador comum e barrar logins legítimos.
+- **Na Render (ADR-019):** segundo relatos de usuários e de um funcionário da Render (não há documentação oficial), ela **acrescenta** itens ao `X-Forwarded-For` enviado pelo cliente, em vez de substituí-lo. Então as requisições devem chegar com uma cadeia, e sem `TRUSTED_PROXIES` **todos os usuários dividiriam o mesmo limite de 10 logins a cada 15 minutos**. Lá, configurar a lista no primeiro deploy é obrigatório.
 
 ---
 

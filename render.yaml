@@ -1,8 +1,10 @@
 # Blueprint da Render — ambiente de STAGING (docs/ARCHITECTURE.md §14).
 #
 # Antes de aplicar:
-# - Região: a Render não tem região no Brasil; "virginia" é a mais próxima.
-#   A decisão final de hospedagem está pendente (ARCHITECTURE §16, LGPD §16).
+# - Região: Virginia, decidida em 2026-10-08 (ARCHITECTURE ADR-019). A Render
+#   não tem região no Brasil e não muda a região de um serviço existente.
+#   Hospedar nos EUA é transferência internacional (LGPD §16): só dados
+#   fictícios até a validação jurídica.
 # - Planos: confira os nomes e preços vigentes na Render. O pre-deploy
 #   (migrações) exige instância paga.
 # - Variáveis "sync: false" são pedidas no painel ao criar o Blueprint.
@@ -35,8 +37,10 @@ envVarGroups:
         sync: false
       - key: LOG_LEVEL
         value: info
-      # Proxies da Render à frente do serviço (IPs/CIDRs). Definir no primeiro
-      # deploy, após conferir o X-Forwarded-For recebido (docs/SECURITY.md §12).
+      # Proxies da Render à frente do serviço (IPs/CIDRs). A Render ACRESCENTA ao
+      # X-Forwarded-For enviado pelo cliente (não substitui): sem esta lista, o
+      # rate limit de login vira um contador único para todos. Definir no
+      # primeiro deploy, após conferir o cabeçalho recebido (SECURITY §12).
       - key: TRUSTED_PROXIES
         sync: false
       - key: JOB_QUEUE_SCHEMA

@@ -2,7 +2,7 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fase 1 (fundação técnica) concluída.** Acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, layout com menu lateral, CI e deploy em Docker. Pendências registradas: subir o staging (depende de hospedagem e credenciais da Docline), Sentry, 2FA e limite de login por conta ([ROADMAP](docs/ROADMAP.md#fase-1--fundação-técnica)). Próxima: **Fase 2 — CRM de leads**. Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Status: Fase 1 (fundação técnica) concluída.** Acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, layout com menu lateral, CI e deploy em Docker. Pendências registradas: subir o staging na Render (depende da conta e das credenciais da Docline), Sentry, 2FA e limite de login por conta ([ROADMAP](docs/ROADMAP.md#fase-1--fundação-técnica)). Próxima: **Fase 2 — CRM de leads**. Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -56,7 +56,7 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API na Fase 7, só com opt-in | Fases 5–7 |
 | Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta; Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
 | Qualidade | ESLint (com regras de fronteira entre módulos), Prettier, Vitest (unitários + integração com Postgres real), Playwright (E2E) | ESLint 10, Vitest 5, Playwright 1.63 |
-| Deploy | Imagem Docker única (web e worker); blueprint da Render para staging; região ainda por decidir | `Dockerfile`, `render.yaml` |
+| Deploy | Imagem Docker única (web e worker) na **Render, região Virginia** (decisão de 2026-10-08) | `Dockerfile`, `render.yaml` |
 | n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio | Fase 12 |
 
 Justificativas e alternativas em [ARCHITECTURE §4](docs/ARCHITECTURE.md#4-análise-da-stack) e nos [ADRs](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs).
@@ -163,4 +163,4 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 ## Próximo passo recomendado
 
 1. **Aprovar a Fase 2 — CRM de leads** ([backlog F2](docs/ROADMAP.md#fase-2--crm-de-leads)): cadastro de leads, pessoas e pontos de contato, filtros com contagem prévia, timeline e a base de conformidade (Lista Não Contatar, base legal por canal).
-2. **Pendências da Docline que já afetam o projeto:** região de hospedagem, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).
+2. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

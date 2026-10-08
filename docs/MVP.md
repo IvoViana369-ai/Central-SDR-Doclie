@@ -286,7 +286,7 @@ Uma história só está pronta quando:
 - [ ] Todas as histórias MUST concluídas e testadas em staging com seed fictício.
 - [ ] Teste de aceitação com 1–2 SDRs e o gestor (UAT).
 - [ ] Validação jurídica: LIA, textos de primeira abordagem, política de retenção, aviso de privacidade ([LGPD §20](./LGPD.md#20-itens-para-validação-jurídica)).
-- [ ] Decisão de hospedagem e transferência internacional resolvida.
+- [ ] Decisão de hospedagem e transferência internacional resolvida. *(Hospedagem decidida: Render/Virginia, ADR-019. Falta a transferência internacional: cláusulas-padrão no DPA.)*
 - [ ] Importação da base real feita em produção, com revisão de duplicados.
 - [ ] Backup e restauração testados.
 - [ ] Monitoramento de erros (Sentry) e alertas de jobs ativos.

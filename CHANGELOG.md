@@ -2,6 +2,12 @@
 
 Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [Não lançado]
+
+### Decidido
+
+- **Hospedagem: Render, região Virginia (EUA)** para staging e produção ([ADR-019](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs)). Antes de dados pessoais reais: cláusulas-padrão da ANPD no DPA da Render e validação jurídica ([LGPD §16](docs/LGPD.md#16-transferência-internacional)).
+
 ## [0.1.0] — Fase 1: Fundação técnica — 2026-10-08
 
 ### Adicionado

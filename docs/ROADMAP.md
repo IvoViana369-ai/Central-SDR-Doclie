@@ -121,7 +121,7 @@ Prioridade: **MUST** · **SHOULD** · **COULD**. Tamanho: **P/M/G** (ver premiss
 
 **Situação (2026-10-08):** ✅ concluída no código, com pendências registradas. O critério de aceite é coberto pela suíte E2E (`apps/web/e2e/fase1.spec.ts`) e o CI roda verde no GitHub. Pendências:
 
-- **Staging no ar:** `render.yaml` e imagem validados de ponta a ponta, mas a subida **depende da decisão de hospedagem e das credenciais da Docline** (ARCHITECTURE §16).
+- **Staging no ar:** hospedagem decidida (Render, região Virginia — ARCHITECTURE ADR-019). `render.yaml` e imagem validados de ponta a ponta; a subida **depende da conta da Docline na Render e das credenciais de e-mail (SMTP)**.
 - **F1-13 parcial:** logs pino com mascaramento entregues; a **integração com o Sentry não foi feita** (só a variável `SENTRY_DSN` está reservada) e passou para F2-17. Depende da conta da Docline no Sentry.
 - **F1-15 (2FA)** não foi feito e passou para F2-16.
 - **Limite de login por conta** (SECURITY §12) não foi feito; hoje o limite é por IP. Passou para F2-18.
@@ -334,7 +334,7 @@ Probabilidade (P) e impacto (I): **A** alta · **M** média · **B** baixa.
 | R11 | Crescimento de escopo | A | A | MVP com MUST/SHOULD; backlog priorizado; fases com aceite | Todas |
 | R12 | Baixa adoção pelos SDRs | M | A | UX rápida, fila, celular, piloto curto com feedback semanal | 6 |
 | R13 | Atraso nas aprovações da Meta (verificação, templates, App Review) | M | M | Iniciar na Fase 1, em paralelo | 7, 8 |
-| R14 | Hospedagem fora do Brasil sem tratamento de transferência | M | M | Cláusulas-padrão ou região BR; decidir antes do go-live | 1, 6 |
+| R14 | Hospedagem fora do Brasil sem tratamento de transferência | M | M | Render/Virginia decidida (ADR-019): cláusulas-padrão no DPA e validação jurídica antes de dados reais; só dados fictícios até lá | 1, 6 |
 | R15 | CNPJ alfanumérico tratado de forma errada | M | M | Suporte e testes desde a Fase 3 | 3 |
 | R16 | Respostas do WhatsApp não associadas ao lead (9º dígito) | M | M | Casamento por variantes, com testes | 7 |
 | R17 | Dependência de um único desenvolvedor | M | A | Documentação, testes, ADRs, PRs pequenos | Todas |
@@ -360,7 +360,7 @@ Probabilidade (P) e impacto (I): **A** alta · **M** média · **B** baixa.
 | Decisão sobre as etapas FU1–FU3 | Comercial | F4 | Durante a F3 |
 | Fatos aprovados da oferta (parceria, benefícios, objeções comuns) e tom de voz | Comercial/Marketing | F6 | Durante a F5 |
 | Conta, chave e DPA do provedor de IA | Docline | F6 | Durante a F5 |
-| Decisão de hospedagem/região de produção | Docline + jurídico | Go-live | Até a F5 |
+| ~~Decisão de hospedagem/região de produção~~ ✅ Render, Virginia (2026-10-08). Falta: cláusulas-padrão no DPA da Render | Docline + jurídico | Go-live | Até a F5 |
 | Equipe do piloto (SDRs, gestor, comercial) para UAT | Docline | F6 | Durante a F5 |
 | Templates de WhatsApp aprovados pela Meta | Comercial + dev | F7 | Durante a F6 |
 | App Meta + App Review (Instagram) | Docline + dev | F8 | Durante a F7 |
