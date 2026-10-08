@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** Fase 0 (baseline de segurança). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -60,7 +60,7 @@
 | Cadastro | **Sem cadastro público.** Só por convite do ADMIN, com link de uso único e expiração |
 | Senhas | Mínimo de 12 caracteres; sem regras de composição forçada; verificação contra senhas comuns/vazadas; hash forte (scrypt/argon2, padrão da biblioteca) |
 | Sessão | Cookie `HttpOnly`, `Secure`, `SameSite=Lax`; expiração por inatividade; renovação; revogação ao desativar usuário ou trocar senha |
-| Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos |
+| Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos *(Fase 1: limite por IP; por conta em F2-18 — ver §12)* |
 | Redefinição de senha | Token de uso único, curto (≤ 30 min), invalida sessões anteriores |
 | 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9) |
 | SSO | Opcional futuro: Google Workspace da Docline |
@@ -200,6 +200,24 @@ Se o enriquecimento buscar páginas de sites de leads (futuro):
 
 MVP com uma instância: limites em memória ou no PostgreSQL. Com várias instâncias: PostgreSQL ou Redis.
 
+**Implementado na Fase 1** (Better Auth, contadores no PostgreSQL, valem com várias instâncias):
+
+| Rota | Limite por IP |
+|---|---|
+| `/sign-in/email` | 10 / 15 min |
+| `/request-password-reset` | 5 / h |
+| `/reset-password` | 10 / 15 min |
+| Demais rotas de autenticação | 100 / min, ou o padrão mais restrito da biblioteca (ex.: troca de senha, 3 / 10 s) |
+
+O limite **por conta** (5 / 15 min) ainda não existe (F2-18). Ele precisa ser desenhado para não virar ferramenta de bloqueio: quem souber o e-mail de um colega não pode trancá-lo para fora (atraso progressivo em vez de bloqueio rígido, alerta ao ADMIN).
+
+**IP do cliente.** O limite por IP só funciona se o IP não puder ser forjado. Regra única, usada pelo rate limit e pela auditoria (`apps/web/src/server/request-meta.ts`):
+
+- Só o `X-Forwarded-For` é lido. `X-Real-IP` e similares são ignorados, porque o cliente pode enviá-los.
+- `TRUSTED_PROXIES` lista os proxies da hospedagem (IPs ou CIDRs). A cadeia é lida **da direita para a esquerda**, pulando os proxies confiáveis; o primeiro salto não confiável é o cliente. O primeiro item da cadeia nunca é usado diretamente.
+- Sem `TRUSTED_PROXIES`, o cabeçalho só é aceito quando traz um único IP. Com uma cadeia, o IP fica indefinido: a auditoria registra sem IP e o rate limit usa um contador comum à rota, que é mais restritivo (todos dividem o mesmo limite) mas nunca mais permissivo.
+- **No primeiro deploy de cada ambiente:** conferir o `X-Forwarded-For` que a hospedagem entrega e configurar `TRUSTED_PROXIES` de acordo. O Better Auth avisa no log quando não consegue determinar o IP (*"Rate limiting could not determine a client IP"*). Sem esse ajuste, um pico de tentativas pode esgotar o contador comum e barrar logins legítimos.
+
 ---
 
 ## 13. Segurança da IA
@@ -258,12 +276,14 @@ MVP com uma instância: limites em memória ou no PostgreSQL. Com várias instâ
 ## 18. Checklist por fase
 
 **Fase 1 — Fundação (MUST)**
-- [ ] `.env.example` sem segredos; `.gitignore` com `.env*`; gitleaks no CI.
-- [ ] Validação de variáveis de ambiente na inicialização.
-- [ ] Better Auth com convite, política de senha, rate limit de login, cookies seguros.
-- [ ] RBAC com matriz testada; auditoria append-only.
-- [ ] Cabeçalhos de segurança, CSP, CSRF.
-- [ ] Logs com mascaramento.
+- [x] `.env.example` sem segredos; `.gitignore` com `.env*`; gitleaks no CI.
+- [x] Validação de variáveis de ambiente na inicialização.
+- [x] Better Auth com convite, política de senha, rate limit de login (por IP; por conta em F2-18), cookies seguros.
+- [x] RBAC com matriz testada; auditoria append-only.
+- [x] Cabeçalhos de segurança, CSP, CSRF.
+- [x] Logs com mascaramento.
+- [ ] Sentry para erros (F2-17; depende da conta da Docline).
+- [ ] Staging: configurar `TRUSTED_PROXIES` após conferir o `X-Forwarded-For` da hospedagem (§12).
 
 **Fases 2–6 — MVP (MUST)**
 - [ ] Escopo por perfil em todas as listas e detalhes (testes de IDOR).

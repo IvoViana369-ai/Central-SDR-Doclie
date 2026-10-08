@@ -2,10 +2,9 @@
 # Actions fixadas por SHA de commit (docs/SECURITY.md §15).
 name: CI
 
+# Todo push (em qualquer branch, inclusive as de PR) e execução manual.
 on:
   push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:

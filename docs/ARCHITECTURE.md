@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** Fase 0 (proposta para aprovação) · **Última revisão:** 2026-10-05
+> **Status:** aprovada; Fase 1 implementada · **Última revisão:** 2026-10-08
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -117,6 +117,20 @@ A preferência inicial foi avaliada item a item. Onde a recomendação diverge, 
 | Observabilidade | — | **pino** (logs estruturados com mascaramento de dados pessoais) + **Sentry** (erros) | Plano gratuito suficiente no início. |
 | Monorepo | — | **pnpm workspaces** (sem Turborepo no início) | Dois apps e três pacotes não justificam um orquestrador de build. Turborepo entra se o build ficar lento. |
 | E-mail transacional | — | Porta `EmailProvider` (SMTP/Resend/SES) | Convites e redefinição de senha. Não é canal de prospecção no MVP. |
+
+### 4.1 Versões adotadas na Fase 1
+
+Node.js 22 · pnpm 10.28 · TypeScript 6.0 · Next.js 16.3 (React 19.3) · Tailwind CSS 4 · Prisma 7.10 (gerador `prisma-client` + adaptador `pg`) · PostgreSQL 16/17 · Better Auth 1.7 · pg-boss 12 · Zod 4 · ESLint 10 · Vitest 5 · Playwright 1.63.
+
+Ajustes em relação à análise acima, decididos durante a implementação:
+
+- **TypeScript 6.0, não 7.x:** a versão 7 (compilador nativo) ainda não é suportada pelo typescript-eslint.
+- **Next.js 16** renomeou o `middleware` para **`proxy`**; a CSP com nonce é aplicada ali (ADR-018).
+- **Prisma 7** exige `prisma.config.ts` e adaptador de driver; o cliente é gerado em `packages/db/src/generated` (não versionado, gerado no `postinstall`).
+- **Componentes de UI** escritos no próprio projeto sobre Radix (no estilo shadcn/ui), sem depender do gerador do shadcn.
+- **Sentry ainda não integrado:** a variável `SENTRY_DSN` está reservada; a integração ficou para F2-17 (depende da conta da Docline). Até lá, erros aparecem nos logs pino com `requestId`.
+- **IP do cliente:** lido só do `X-Forwarded-For`, com a lista `TRUSTED_PROXIES` (CIDR) definindo quais saltos são confiáveis; a mesma regra serve ao rate limit e à auditoria ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)).
+- **Cadeia de suprimentos:** `minimumReleaseAge` de 24 h no pnpm (já barrou uma versão publicada no mesmo dia) e sobrescritas de versão para dependências transitivas vulneráveis (`pnpm-workspace.yaml`).
 
 ---
 
@@ -626,10 +640,11 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 
 ### 14.2 Topologia (produção)
 
-- **Web Service** (`apps/web`, Docker), com *health check* em `/api/health` e *pre-deploy* `prisma migrate deploy`.
-- **Background Worker** (`apps/worker`, Docker).
+- **Uma imagem Docker** (`Dockerfile`) para os dois serviços; o comando define o papel (ADR-016).
+- **Web Service** (`docker/start-web.sh`), com *health check* em `/api/health` e *pre-deploy* `pnpm db:deploy && pnpm db:seed` (migrações + dados de referência).
+- **Background Worker** (`docker/start-worker.sh`), executado com `tsx` (ADR-017).
 - **PostgreSQL gerenciado**, plano pago com backup diário e recuperação a um ponto no tempo (verificar plano). Os bancos gratuitos da Render expiram e não servem para produção.
-- Segredos em *environment groups*; `render.yaml` (Blueprint) versionado no repositório (Fase 1).
+- Segredos em *environment groups*; `render.yaml` (Blueprint de staging) versionado no repositório.
 - Teste de restauração de backup trimestral.
 
 ### 14.3 Custos (ordem de grandeza, a validar)
@@ -663,6 +678,9 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 013 | **Código em inglês, interface e documentação em pt-BR** | Padrão de mercado e bibliotecas; usuário em português | Código em português | Glossário no [README](../README.md#glossário) |
 | 014 | **Google Places só como apoio** (guardar só `place_id`); **dados abertos CNPJ** como fonte primária de descoberta | Termos da Google Maps Platform; dado público oficial | Copiar dados do Places para a base | Depende de validação jurídica (Fase 9) |
 | 015 | **n8n apenas nas bordas** | Regra de negócio versionada, testada e auditada | Fluxos de negócio no n8n | n8n consome a API com chave e escopo |
+| 016 | **Imagem Docker única** para web e worker | Um artefato por versão; a imagem do web traz o CLI do Prisma, então as migrações rodam no pre-deploy | Next `standalone` + imagem separada para o worker | Imagem maior (~1,5 GB descompactada); separar imagens é otimização futura |
+| 017 | **Worker executado com `tsx`** (sem etapa de build) | Resolve os pacotes TypeScript do workspace sem bundler; menos configuração | Bundling com tsup/esbuild | Pequeno custo de transpilação na inicialização |
+| 018 | **CSP com nonce por requisição** no `proxy.ts`; o nonce do documento é registrado para estilos injetados por bibliotecas (Radix) | Política estrita sem `unsafe-inline` para scripts e estilos em produção | `unsafe-inline` em `style-src` | Todas as páginas são dinâmicas; atributos `style=""` liberados via `style-src-attr` |
 
 ---
 

@@ -2,8 +2,7 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fase 0 concluída (descoberta, arquitetura e planejamento). Aguardando aprovação para iniciar a Fase 1.**
-> Ainda não há código de aplicação neste repositório: só a documentação de arquitetura, o modelo de dados, o plano e o modelo de variáveis de ambiente.
+> **Status: Fase 1 (fundação técnica) concluída.** Acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, layout com menu lateral, CI e deploy em Docker. Pendências registradas: subir o staging (depende de hospedagem e credenciais da Docline), Sentry, 2FA e limite de login por conta ([ROADMAP](docs/ROADMAP.md#fase-1--fundação-técnica)). Próxima: **Fase 2 — CRM de leads**. Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -41,22 +40,26 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Portas e adaptadores; WhatsApp, Instagram, Google, dados abertos CNPJ, IA, CRM |
 | [docs/LGPD.md](docs/LGPD.md) | Bases legais, opt-in × base legal, opt-out, direitos dos titulares, retenção, incidentes |
 | [docs/SECURITY.md](docs/SECURITY.md) | Autenticação, RBAC, segredos, uploads, webhooks, IA, auditoria, checklist por fase |
-| [.env.example](.env.example) | Variáveis de ambiente previstas (sem segredos) |
+| [.env.example](.env.example) | Variáveis de ambiente (sem segredos) |
+| [CHANGELOG.md](CHANGELOG.md) | O que foi entregue em cada fase |
 
-## Resumo das decisões
+## Stack e decisões
 
-| Tema | Decisão |
-|---|---|
-| Arquitetura | **Monólito modular** em TypeScript (monorepo pnpm): `apps/web` (Next.js: UI + API `/api/v1`) + `apps/worker` (jobs) + `packages/core` (domínio) + `packages/integrations` (adaptadores) + `packages/db` (Prisma) |
-| Banco | **PostgreSQL** + Prisma; `pg_trgm` para similaridade; eventos append-only para timeline e analytics |
-| Filas | **pg-boss** (no próprio PostgreSQL). Redis/BullMQ só se necessário no futuro |
-| Frontend | Next.js + React + Tailwind + shadcn/ui; responsivo |
-| Autenticação | Better Auth + RBAC próprio (Administrador, Gestor, SDR, Comercial) |
-| IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória |
-| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API na Fase 7, só com opt-in |
-| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta e Google Places apenas como apoio (Fase 9, após parecer jurídico) |
-| Deploy | Docker; Render (web + worker + Postgres), com a região de hospedagem ainda por decidir |
-| n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio |
+| Tema | Decisão | Versão em uso |
+|---|---|---|
+| Arquitetura | **Monólito modular** em TypeScript (monorepo pnpm): `apps/web` (UI + API `/api/v1`) + `apps/worker` (jobs) + `packages/core` (domínio) + `packages/integrations` (adaptadores) + `packages/db` (Prisma) + `packages/config` (ambiente) | Node 22, pnpm 10, TypeScript 6.0 |
+| Banco | **PostgreSQL** + Prisma (adaptador `pg`); `pg_trgm` para similaridade; auditoria append-only | PostgreSQL 16/17, Prisma 7.10 |
+| Filas | **pg-boss** no próprio PostgreSQL, com enfileiramento na mesma transação do dado | pg-boss 12 |
+| Frontend | Next.js (App Router) + Tailwind + componentes próprios sobre Radix; responsivo, tema claro/escuro | Next.js 16.3, React 19.3, Tailwind 4 |
+| Autenticação | Better Auth (e-mail/senha, sem cadastro público) + RBAC próprio (Administrador, Gestor, SDR, Comercial) | Better Auth 1.7 |
+| IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória | Fase 6 |
+| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API na Fase 7, só com opt-in | Fases 5–7 |
+| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta; Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
+| Qualidade | ESLint (com regras de fronteira entre módulos), Prettier, Vitest (unitários + integração com Postgres real), Playwright (E2E) | ESLint 10, Vitest 5, Playwright 1.63 |
+| Deploy | Imagem Docker única (web e worker); blueprint da Render para staging; região ainda por decidir | `Dockerfile`, `render.yaml` |
+| n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio | Fase 12 |
+
+Justificativas e alternativas em [ARCHITECTURE §4](docs/ARCHITECTURE.md#4-análise-da-stack) e nos [ADRs](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs).
 
 ## Principais riscos
 
@@ -68,16 +71,17 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 
 Registro completo em [ROADMAP §6](docs/ROADMAP.md#6-registro-de-riscos).
 
-## Estrutura planejada do repositório
+## Estrutura do repositório
 
 ```
-apps/web            Next.js — UI, API /api/v1, webhooks
-apps/worker         Jobs (importação, dedup, score, cadência, webhooks, retenção)
-packages/core       Domínio e casos de uso (sem dependência de framework)
-packages/db         Prisma: schema, migrações, seeds
-packages/integrations  Adaptadores: whatsapp, instagram, google, enrichment, ai, crm, email
-packages/config     Configurações compartilhadas (TS, lint, schema de env)
-docs/               Documentação do projeto
+apps/web               Next.js — telas, API /api/v1, autenticação, E2E (e2e/)
+apps/worker            Jobs pg-boss (hoje: heartbeat; depois importação, dedup, cadência…)
+packages/core          Domínio: casos de uso, RBAC, auditoria, portas (sem framework)
+packages/db            Prisma: schema, migrações, seed de referência (UFs, municípios, feriados)
+packages/integrations  Adaptadores: logger, e-mail, fila pg-boss, registro de provedores
+packages/config        Validação das variáveis de ambiente (Zod)
+docker/                Scripts de inicialização dos containers
+docs/                  Documentação do projeto
 ```
 
 Detalhes em [ARCHITECTURE §11](docs/ARCHITECTURE.md#11-estrutura-de-pastas).
@@ -109,12 +113,54 @@ Detalhes em [ARCHITECTURE §11](docs/ARCHITECTURE.md#11-estrutura-de-pastas).
 | Modo assistido | `MessageMode.ASSISTED` | O sistema prepara; o humano envia no app; o sistema registra |
 | Transferência | `Opportunity` (handoff) | Passagem do lead qualificado ao Comercial |
 
-## Como rodar
+## Como rodar localmente
 
-Disponível a partir da **Fase 1** (fundação técnica). O plano de setup local (Docker Compose com PostgreSQL) está em [ARCHITECTURE §14](docs/ARCHITECTURE.md#14-implantação-ambientes-e-custos).
+**Pré-requisitos:** Node.js 22 (`.nvmrc`), pnpm 10 (`npm i -g pnpm@10.28.0` ou `corepack enable`) e Docker (ou um PostgreSQL 16+ local).
+
+```bash
+# 1. Variáveis de ambiente
+cp .env.example .env
+# Gere os segredos e cole no .env: BETTER_AUTH_SECRET, ENCRYPTION_KEY, SUPPRESSION_HASH_PEPPER
+openssl rand -base64 32
+
+# 2. PostgreSQL 17 + Mailpit (e-mails de teste em http://localhost:8025)
+docker compose up -d
+# Para ver os convites no Mailpit, use no .env: EMAIL_PROVIDER=smtp
+
+# 3. Dependências (gera o cliente Prisma) e banco
+pnpm install
+pnpm db:migrate
+pnpm db:seed
+
+# 4. Primeiro administrador: imprime o link para definir a senha
+pnpm admin:create --email voce@docline.com.br --name "Seu Nome"
+
+# 5. Web (http://localhost:3000) + worker
+pnpm dev
+```
+
+### Comandos úteis
+
+| Comando | O que faz |
+|---|---|
+| `pnpm dev` | Web e worker em modo desenvolvimento |
+| `pnpm check` | Lint + formatação + tipos + testes unitários |
+| `pnpm test` / `pnpm test:int` | Testes unitários / de integração (banco `*_test`, recriado a cada execução) |
+| `pnpm --filter @docline/web build && pnpm test:e2e` | Build de produção + jornadas E2E (Playwright) |
+| `pnpm db:migrate` / `pnpm db:deploy` | Criar/aplicar migrações (dev) / aplicar migrações (deploy) |
+| `pnpm db:check` | Falha se o schema mudou sem migração |
+| `pnpm db:seed` | Dados de referência (idempotente) |
+| `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
+
+Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TEST` e se recusam a rodar se o nome não terminar em `_test`.
+
+### Deploy
+
+- **Imagem:** `Dockerfile` (uma imagem; o comando define o papel: `docker/start-web.sh` ou `docker/start-worker.sh`).
+- **Render (staging):** `render.yaml` cria PostgreSQL, web (com health check em `/api/health` e migrações no pre-deploy) e worker. Instruções no topo do arquivo.
+- **CI:** `.github/workflows/ci.yml` roda lint, tipos, testes (unitários, integração, E2E), checagem de migrações, auditoria de dependências, varredura de segredos e build da imagem.
 
 ## Próximo passo recomendado
 
-1. **Revisar e aprovar** esta Fase 0, respondendo às [questões em aberto](docs/ARCHITECTURE.md#16-questões-em-aberto), principalmente hospedagem, base existente e etapas de follow-up.
-2. **Iniciar em paralelo, já:** verificação da empresa na Meta (WABA) e validação jurídica LGPD. São os itens com maior prazo externo.
-3. **Autorizar a Fase 1 — Fundação técnica** ([backlog F1](docs/ROADMAP.md#fase-1--fundação-técnica)).
+1. **Aprovar a Fase 2 — CRM de leads** ([backlog F2](docs/ROADMAP.md#fase-2--crm-de-leads)): cadastro de leads, pessoas e pontos de contato, filtros com contagem prévia, timeline e a base de conformidade (Lista Não Contatar, base legal por canal).
+2. **Pendências da Docline que já afetam o projeto:** região de hospedagem, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fase 0 concluída, aguardando aprovação · **Última revisão:** 2026-10-05
+> **Status:** Fase 1 concluída · próxima: Fase 2 (CRM de leads) · **Última revisão:** 2026-10-08
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -21,7 +21,7 @@
 | Fase | Nome | Objetivo | Duração estimada* | Bloco |
 |---|---|---|---|---|
 | 0 | Descoberta e arquitetura | Requisitos, riscos, arquitetura, modelo de dados, plano | ✅ concluída | Planejamento |
-| 1 | Fundação técnica | Monorepo, banco, auth, RBAC, auditoria, fila, layout, CI, staging | ~2 semanas | MVP |
+| 1 | Fundação técnica | Monorepo, banco, auth, RBAC, auditoria, fila, layout, CI, staging | ✅ concluída (2026-10-08) | MVP |
 | 2 | CRM de leads | Cadastro, pessoas, contatos, lista e filtros, timeline, base de conformidade | ~3 semanas | MVP |
 | 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ~3 semanas | MVP |
 | 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ~1,5 semana | MVP |
@@ -119,6 +119,15 @@ Prioridade: **MUST** · **SHOULD** · **COULD**. Tamanho: **P/M/G** (ver premiss
 **Entregáveis:** repositório estruturado, banco com migrações, autenticação e RBAC, auditoria, fila, layout com menu lateral, CI, staging.
 **Aceite da fase:** um ADMIN convida um SDR; o SDR faz login e vê o layout; tentativas fora da permissão são negadas e auditadas; CI verde; staging no ar.
 
+**Situação (2026-10-08):** ✅ concluída no código, com pendências registradas. O critério de aceite é coberto pela suíte E2E (`apps/web/e2e/fase1.spec.ts`) e o CI roda verde no GitHub. Pendências:
+
+- **Staging no ar:** `render.yaml` e imagem validados de ponta a ponta, mas a subida **depende da decisão de hospedagem e das credenciais da Docline** (ARCHITECTURE §16).
+- **F1-13 parcial:** logs pino com mascaramento entregues; a **integração com o Sentry não foi feita** (só a variável `SENTRY_DSN` está reservada) e passou para F2-17. Depende da conta da Docline no Sentry.
+- **F1-15 (2FA)** não foi feito e passou para F2-16.
+- **Limite de login por conta** (SECURITY §12) não foi feito; hoje o limite é por IP. Passou para F2-18.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
+
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|
 | F1-01 | Monorepo pnpm (`apps/web`, `apps/worker`, `packages/core`, `db`, `integrations`, `config`), TypeScript estrito, ESLint/Prettier, regras de fronteira entre módulos | MUST | M |
@@ -133,9 +142,9 @@ Prioridade: **MUST** · **SHOULD** · **COULD**. Tamanho: **P/M/G** (ver premiss
 | F1-10 | Seed de referência: UFs e municípios (IBGE), feriados nacionais | MUST | P |
 | F1-11 | CI (lint, typecheck, testes, build, gitleaks, audit) | MUST | P |
 | F1-12 | Staging: Dockerfiles, Render Blueprint, migrações no pre-deploy | MUST | M |
-| F1-13 | Logs pino com mascaramento + Sentry | MUST | P |
+| F1-13 | Logs pino com mascaramento + Sentry — *Sentry movido para F2-17* | MUST | P |
 | F1-14 | Registro de provedores + adaptadores `fake` (esqueleto) | MUST | P |
-| F1-15 | 2FA (TOTP) para ADMIN/GESTOR | SHOULD | P |
+| F1-15 | 2FA (TOTP) para ADMIN/GESTOR — *movido para F2-16* | SHOULD | P |
 
 ### Fase 2 — CRM de leads
 
@@ -159,6 +168,9 @@ Prioridade: **MUST** · **SHOULD** · **COULD**. Tamanho: **P/M/G** (ver premiss
 | F2-13 | Seed de desenvolvimento com ~2.000 empresas fictícias | MUST | P |
 | F2-14 | Exportação auditada (ADMIN/GESTOR) com proteção contra CSV injection | SHOULD | P |
 | F2-15 | Registro manual de solicitações de titulares | SHOULD | P |
+| F2-16 | 2FA (TOTP) para ADMIN/GESTOR (vindo da F1-15; obrigatório antes das Fases 7–9) | SHOULD | P |
+| F2-17 | Sentry: erros do servidor web e do worker, sem dados pessoais (vindo da F1-13; precisa da conta/DSN da Docline) | MUST | P |
+| F2-18 | Limite de tentativas de login por conta (SECURITY §12), sem permitir bloqueio proposital de terceiros | MUST | P |
 
 ### Fase 3 — Importação, normalização e deduplicação
 

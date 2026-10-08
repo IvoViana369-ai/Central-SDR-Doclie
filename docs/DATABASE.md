@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** Fase 0 (modelo conceitual para aprovação) · **Banco:** PostgreSQL · **ORM:** Prisma
+> **Status:** modelo aprovado; tabelas da Fase 1 implementadas em `packages/db/prisma/schema.prisma` · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -39,7 +39,7 @@
 
 | Domínio | Tabelas |
 |---|---|
-| Identidade e equipe | `users`, `teams`, `user_territories`, `user_availability` (+ tabelas do Better Auth: `sessions`, `accounts`, `verifications`) |
+| Identidade e equipe | `users`, `teams`, `invitations`, `user_territories`, `user_availability` (+ tabelas do Better Auth: `sessions`, `accounts`, `verifications`, `rate_limits`) |
 | Referência | `states`, `municipalities`, `holidays`, `priority_cities`, `lead_sources`, `segments`, `loss_reasons` |
 | Núcleo de leads | `leads`, `lead_people`, `contact_points`, `lead_origins`, `tags`, `lead_tags`, `lead_notes`, `lead_assignments` |
 | Timeline e auditoria | `lead_events`, `audit_logs` |
@@ -127,6 +127,8 @@ erDiagram
 ```mermaid
 erDiagram
   TEAMS ||--o{ USERS : "agrupa"
+  USERS ||--o{ INVITATIONS : "recebe"
+  USERS ||--o{ SESSIONS : "abre"
   USERS ||--o{ USER_TERRITORIES : "atende"
   USERS ||--o{ AUDIT_LOGS : "autor"
   LEADS ||--o{ CONTACT_PERMISSIONS : "base legal por canal"
@@ -156,7 +158,9 @@ erDiagram
 | timezone | text | padrão `America/Fortaleza` |
 | last_login_at | timestamptz | |
 
-**`teams`** (Fase 1): `name`, `manager_id`.
+**`teams`** (Fase 1): `name` (único), `manager_id`.
+**`invitations`** (Fase 1): convite de acesso. `user_id`, `token_hash` (SHA-256 do token; o token em claro só existe no link enviado), `expires_at` (72 h), `used_at`, `revoked_at` (reenvio invalida o anterior), `created_by_id`.
+**Tabelas do Better Auth** (Fase 1), nomes em `snake_case` com IDs UUIDv7 gerados pela aplicação: `sessions` (`token` único, `expires_at`, IP, user agent), `accounts` (credencial `providerId = credential`, `password` só com hash; único `(provider_id, account_id)`), `verifications` (tokens de redefinição de senha) e `rate_limits` (limites de tentativa persistidos, válidos entre instâncias).
 **`user_territories`** (Fase 2, estrutura): `user_id`, `state_uf`, `municipality_code` (nulo = UF inteira), `priority`.
 **`user_availability`** (futura): `user_id`, `available`, `max_active_leads`, `max_daily_contacts`, `out_of_office_until`.
 
