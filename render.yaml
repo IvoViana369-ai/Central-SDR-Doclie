@@ -1,0 +1,91 @@
+# Blueprint da Render — ambiente de STAGING (docs/ARCHITECTURE.md §14).
+#
+# Antes de aplicar:
+# - Região: a Render não tem região no Brasil; "virginia" é a mais próxima.
+#   A decisão final de hospedagem está pendente (ARCHITECTURE §16, LGPD §16).
+# - Planos: confira os nomes e preços vigentes na Render. O pre-deploy
+#   (migrações) exige instância paga.
+# - Variáveis "sync: false" são pedidas no painel ao criar o Blueprint.
+#   ENCRYPTION_KEY e SUPPRESSION_HASH_PEPPER: gere com `openssl rand -base64 32`
+#   e guarde o pepper em local seguro (não pode ser rotacionado — SECURITY §5).
+# - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
+#   serviço web:  pnpm admin:create --email <email> --name "<nome>"
+
+databases:
+  - name: docline-sdr-staging-db
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: '17'
+    databaseName: docline_sdr
+    user: docline
+    ipAllowList: [] # sem acesso externo: só os serviços da Render conectam
+
+envVarGroups:
+  - name: docline-sdr-staging
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: APP_URL
+        sync: false # ex.: https://docline-sdr-staging-web.onrender.com
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: SUPPRESSION_HASH_PEPPER
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: JOB_QUEUE_SCHEMA
+        value: pgboss
+      - key: EMAIL_PROVIDER
+        value: smtp
+      - key: SMTP_URL
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      # Integrações externas permanecem desligadas/assistidas até as fases 6–9.
+      - key: WHATSAPP_PROVIDER
+        value: assisted
+      - key: INSTAGRAM_PROVIDER
+        value: assisted
+      - key: AI_PROVIDER
+        value: fake
+      - key: PLACES_PROVIDER
+        value: disabled
+      - key: COMPANY_REGISTRY_PROVIDER
+        value: disabled
+
+services:
+  - type: web
+    name: docline-sdr-staging-web
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-web.sh
+    preDeployCommand: pnpm db:deploy && pnpm db:seed
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging
+
+  - type: worker
+    name: docline-sdr-staging-worker
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-worker.sh
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging

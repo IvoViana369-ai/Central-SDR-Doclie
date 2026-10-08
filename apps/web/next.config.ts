@@ -8,9 +8,6 @@ const rootEnv = fileURLToPath(new URL('../../.env', import.meta.url));
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const nextConfig: NextConfig = {
-  // Imagem enxuta para Docker/Render (docs/ARCHITECTURE.md §14).
-  output: 'standalone',
-  outputFileTracingRoot: new URL('../..', import.meta.url).pathname,
   poweredByHeader: false,
   reactStrictMode: true,
   // Pacotes internos publicados como TypeScript.

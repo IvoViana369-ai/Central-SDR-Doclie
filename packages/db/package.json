@@ -16,17 +16,18 @@
     "migrate:status": "prisma migrate status",
     "seed": "tsx seed/index.ts",
     "build-reference-data": "tsx scripts/build-reference-data.ts",
-    "studio": "prisma studio"
+    "studio": "prisma studio",
+    "migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "pg": "^8.23.1",
+    "prisma": "7.10.0",
+    "tsx": "^4.23.15",
     "uuidv7": "^1.2.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.23.1",
-    "prisma": "7.10.0",
-    "tsx": "^4.23.15"
+    "@types/pg": "^8.23.1"
   }
 }

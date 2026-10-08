@@ -14,3 +14,11 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 minimumReleaseAge: 1440
+
+# Correções de segurança em dependências transitivas (pnpm audit), ambas vindas
+# do CLI do Prisma 7.10: deepmerge-ts (@prisma/config) e mysql2 (usado só pelo
+# comando `prisma dev`, que o projeto não utiliza). Remover quando o Prisma
+# publicar versões já corrigidas.
+overrides:
+  deepmerge-ts: '>=8.0.0'
+  mysql2: '>=3.23.1 <4'

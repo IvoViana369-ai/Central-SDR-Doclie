@@ -8,12 +8,13 @@ export const PASSWORD_MAX_LENGTH = 128;
  * Lista curta e local; a verificação contra vazamentos públicos pode ser
  * adicionada depois sem mudar a interface.
  */
+// gitleaks:allow — exemplos públicos de senhas fracas, não credenciais.
 const COMMON = new Set([
   '123456789012',
   '1234567890123',
   'senha1234567',
   'senhasenha12',
-  'password1234',
+  'password1234', // gitleaks:allow
   'qwertyuiop12',
   'docline12345',
   'doclinesdr123',
