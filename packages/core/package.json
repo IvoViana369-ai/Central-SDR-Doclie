@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./password-policy": "./src/modules/identity/domain/password-policy.ts",
     "./roles": "./src/modules/identity/domain/roles.ts",
-    "./permissions": "./src/modules/identity/domain/permissions.ts"
+    "./permissions": "./src/modules/identity/domain/permissions.ts",
+    "./normalization": "./src/modules/normalization/domain/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

@@ -7,6 +7,11 @@ export { maskEmail } from './shared/mask';
 export { escapeHtml } from './shared/html';
 export { generateToken, hashToken } from './shared/tokens';
 export {
+  createIdentifierHasher,
+  type IdentifierHasher,
+  type IdentifierType,
+} from './shared/identifier-hash';
+export {
   assertAccess,
   checkAccess,
   defineUseCase,
@@ -20,4 +25,5 @@ export {
 export type * from './ports';
 export * from './modules/identity';
 export * from './modules/audit';
+export * from './modules/normalization';
 export * from './jobs/catalog';

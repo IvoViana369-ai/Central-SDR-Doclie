@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./test/helpers.ts",
-    "./seed": "./seed/reference.ts"
+    "./seed": "./seed/reference.ts",
+    "./search-key": "./src/search-key.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
