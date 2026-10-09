@@ -7,7 +7,7 @@ import type {
   PhoneKind,
   WhatsappStatus,
 } from '@docline/db';
-import { cleanText, nameCore, toSearchKey } from '../../normalization';
+import { cleanText, formatName, nameCore, toSearchKey } from '../../normalization';
 
 /** Código legível do lead: 123 → "L-000123". */
 export function formatLeadCode(code: number): string {
@@ -20,10 +20,13 @@ export function parseLeadCode(value: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** Nome exibido (fantasia → razão social) e chaves de busca e comparação. */
+/**
+ * Nome exibido (fantasia → razão social) e chaves de busca e comparação.
+ * Texto todo em maiúsculas ou minúsculas ganha capitalização (M05).
+ */
 export function buildLeadNames(input: { companyName?: string | null; tradeName?: string | null }) {
-  const companyName = input.companyName ? cleanText(input.companyName) || null : null;
-  const tradeName = input.tradeName ? cleanText(input.tradeName) || null : null;
+  const companyName = input.companyName ? formatName(input.companyName) || null : null;
+  const tradeName = input.tradeName ? formatName(input.tradeName) || null : null;
   const displayName = tradeName ?? companyName;
   if (!displayName) return null;
   return {

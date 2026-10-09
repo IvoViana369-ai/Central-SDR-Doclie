@@ -38,6 +38,7 @@ describe('normalizePhone', () => {
       kind: 'LANDLINE',
       ddd: '85',
       flags: [],
+      extension: null,
     });
     expect(value(normalizePhone('85 98765 4321')).kind).toBe('MOBILE');
   });

@@ -6,6 +6,7 @@ import { createLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
 import { firstNameOf, formatLeadCode } from '../domain/lead';
 import { refreshLeadContactState } from '../../compliance';
+import { formatName } from '../../normalization';
 import { auditLead, recordLeadEvent } from '../infra/events';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
 import {
@@ -189,8 +190,8 @@ export const createLead = defineUseCase({
         data: input.people.map((person, index) => ({
           id: personIds[index],
           leadId: lead.id,
-          fullName: person.fullName,
-          firstName: firstNameOf(person.fullName),
+          fullName: formatName(person.fullName),
+          firstName: firstNameOf(formatName(person.fullName)),
           roleTitle: person.roleTitle ?? null,
           isPrimary: primaryPerson === -1 ? index === 0 : index === primaryPerson,
           isDecisionMaker: person.isDecisionMaker,

@@ -3,6 +3,7 @@ import { diffFields } from '../../../shared/diff';
 import { defineUseCase, type UseCaseContext } from '../../../shared/use-case';
 import { addPersonInput, personRefInput, updatePersonInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
+import { formatName } from '../../normalization';
 import { firstNameOf } from '../domain/lead';
 import { auditLead, recordLeadEvent, touchLead } from '../infra/events';
 import { requireEditableLead } from '../infra/scope';
@@ -41,8 +42,8 @@ export const addPerson = defineUseCase({
     const person = await ctx.tx.leadPerson.create({
       data: {
         leadId,
-        fullName: input.fullName,
-        firstName: firstNameOf(input.fullName),
+        fullName: formatName(input.fullName),
+        firstName: firstNameOf(formatName(input.fullName)),
         roleTitle: input.roleTitle ?? null,
         isPrimary: input.isPrimary || hasPrimary === 0,
         isDecisionMaker: input.isDecisionMaker,
@@ -73,7 +74,10 @@ export const updatePerson = defineUseCase({
     const person = await requirePerson(ctx, leadId, personId);
     const data = {
       ...(input.fullName !== undefined
-        ? { fullName: input.fullName, firstName: firstNameOf(input.fullName) }
+        ? {
+            fullName: formatName(input.fullName),
+            firstName: firstNameOf(formatName(input.fullName)),
+          }
         : {}),
       ...(input.roleTitle !== undefined ? { roleTitle: input.roleTitle } : {}),
       ...(input.isPrimary !== undefined ? { isPrimary: input.isPrimary } : {}),

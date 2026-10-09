@@ -7,3 +7,5 @@ export * from './instagram';
 export * from './url';
 export * from './text';
 export * from './identifier';
+export * from './names';
+export * from './location';

@@ -13,7 +13,7 @@ import { fail, ok, type Normalized } from './result';
 export type PhoneKind = 'MOBILE' | 'LANDLINE' | 'SERVICE' | 'UNKNOWN';
 
 export type PhoneFlag =
-  'ADDED_NINTH_DIGIT' | 'INFERRED_DDD' | 'REMOVED_CARRIER_CODE' | 'INTERNATIONAL';
+  'ADDED_NINTH_DIGIT' | 'INFERRED_DDD' | 'REMOVED_CARRIER_CODE' | 'INTERNATIONAL' | 'HAS_EXTENSION';
 
 export interface NormalizedPhone {
   /** E.164 para números comuns; só dígitos para números de serviço. */
@@ -22,6 +22,8 @@ export interface NormalizedPhone {
   /** DDD (só para números brasileiros comuns). */
   ddd: string | null;
   flags: PhoneFlag[];
+  /** Ramal informado junto ("ramal 25", "r. 25", "ext 25"), fora do número. */
+  extension: string | null;
 }
 
 /** DDDs em uso no Brasil (Anatel). */
@@ -38,16 +40,24 @@ export const BRAZIL_DDDS: ReadonlySet<string> = new Set([
 ]);
 
 const SERVICE_PREFIXES = ['0800', '0300', '0500', '0900'];
+/** Ramal no fim do texto: "ramal 25", "ram. 25", "r. 25", "ext 25", "x25". */
+const EXTENSION = /(?:^|[\s,;-])(?:ramal|ram\.?|r\.|ext\.?|extens[aã]o|x)\s*:?\s*(\d{1,6})\s*$/i;
 
 export function normalizePhone(
   raw: string,
   options: { defaultDdd?: string | null } = {},
 ): Normalized<NormalizedPhone> {
-  const trimmed = raw.trim();
+  let trimmed = raw.trim();
+  const flags: PhoneFlag[] = [];
+  const extensionMatch = EXTENSION.exec(trimmed);
+  const extension = extensionMatch ? extensionMatch[1]! : null;
+  if (extensionMatch) {
+    trimmed = trimmed.slice(0, extensionMatch.index).trim();
+    flags.push('HAS_EXTENSION');
+  }
   let digits = trimmed.replace(/\D/g, '');
   if (digits.length === 0) return fail('EMPTY', 'Informe o telefone.');
 
-  const flags: PhoneFlag[] = [];
   // Com "+" ou "00" o código do país é explícito.
   const explicitCountry = trimmed.startsWith('+') || digits.startsWith('00');
   if (digits.startsWith('00')) digits = digits.slice(2);
@@ -56,15 +66,21 @@ export function normalizePhone(
     if (digits.length < 8 || digits.length > 15) {
       return fail('INVALID_LENGTH', 'Telefone internacional com quantidade de dígitos inválida.');
     }
-    return ok({ e164: `+${digits}`, kind: 'UNKNOWN', ddd: null, flags: ['INTERNATIONAL'] });
+    return ok({
+      e164: `+${digits}`,
+      kind: 'UNKNOWN',
+      ddd: null,
+      flags: [...flags, 'INTERNATIONAL'],
+      extension,
+    });
   }
 
   // Números de serviço não têm DDD nem formato E.164 utilizável.
   if (digits.length === 11 && SERVICE_PREFIXES.some((p) => digits.startsWith(p))) {
-    return ok({ e164: digits, kind: 'SERVICE', ddd: null, flags });
+    return ok({ e164: digits, kind: 'SERVICE', ddd: null, flags, extension });
   }
   if (digits.length === 8 && /^[34]00/.test(digits)) {
-    return ok({ e164: digits, kind: 'SERVICE', ddd: null, flags });
+    return ok({ e164: digits, kind: 'SERVICE', ddd: null, flags, extension });
   }
 
   let national = digits;
@@ -74,7 +90,10 @@ export function normalizePhone(
     national = national.slice(2);
   } else if (national.startsWith('0')) {
     national = national.slice(1);
-    if (national.length === 12 || national.length === 13) {
+    if ((national.length === 12 || national.length === 13) && national.startsWith('55')) {
+      // "055 88 99999-9999": zero + código do país.
+      national = national.slice(2);
+    } else if (national.length === 12 || national.length === 13) {
       // 0 + código da operadora (2 dígitos) + DDD + número.
       national = national.slice(2);
       flags.push('REMOVED_CARRIER_CODE');
@@ -113,7 +132,24 @@ export function normalizePhone(
     return fail('INVALID_NUMBER', 'Número de telefone inválido.');
   }
 
-  return ok({ e164: `+55${ddd}${subscriber}`, kind, ddd, flags });
+  return ok({ e164: `+55${ddd}${subscriber}`, kind, ddd, flags, extension });
+}
+
+/**
+ * Identificadores que o WhatsApp pode usar para um celular brasileiro: o
+ * `wa_id` de contas antigas às vezes vem sem o 9º dígito. Usado para casar
+ * mensagens recebidas (Fase 7) com o contato certo.
+ */
+export function whatsappIdVariants(e164: string): string[] {
+  const match = /^\+55(\d{2})9(\d{8})$/.exec(e164);
+  if (match) return [`55${match[1]}9${match[2]}`, `55${match[1]}${match[2]}`];
+  return e164.startsWith('+') ? [e164.slice(1)] : [];
+}
+
+/** Volta um `wa_id` (com ou sem o 9º dígito) para o E.164 do contato. */
+export function e164FromWhatsappId(waId: string): string | null {
+  const phone = normalizePhone(`+${waId.replace(/\D/g, '')}`);
+  return phone.ok && phone.value.kind !== 'SERVICE' ? phone.value.e164 : null;
 }
 
 /** Exibição: "+5588999999999" → "(88) 99999-9999"; outros formatos voltam como estão. */
