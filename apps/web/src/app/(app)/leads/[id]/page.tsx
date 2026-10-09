@@ -1,12 +1,19 @@
 import {
+  getContactRules,
   getLead,
+  getLeadCadence,
   getLeadContactability,
   getLeadScore,
   getPipeline,
+  listCadences,
+  listLeadMessages,
+  listLeadOpportunities,
   listLeadStageHistory,
+  listLeadTasks,
   listLeadTimeline,
   listLossReasons,
   listTags,
+  listSalesOwners,
   listUsers,
   NotFoundError,
   roleHasPermission,
@@ -45,6 +52,18 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         throw error;
       }),
     ]);
+  // Operação SDR (Fase 5): tarefas, mensagens, cadência e transferência ao Comercial.
+  const [tasks, messages, enrollments, cadences, opportunities, salesOwners, rules] =
+    await Promise.all([
+      listLeadTasks(deps, actor, { leadId: id }, meta),
+      listLeadMessages(deps, actor, { leadId: id }, meta),
+      getLeadCadence(deps, actor, { leadId: id }, meta),
+      listCadences(deps, actor, {}, meta),
+      listLeadOpportunities(deps, actor, { leadId: id }, meta),
+      can('lead.update') ? listSalesOwners(deps, actor, {}, meta) : Promise.resolve([]),
+      getContactRules(deps, actor, {}, meta),
+    ]);
+  const privileged = actor.role === 'ADMIN' || actor.role === 'MANAGER';
 
   return (
     <LeadDetail
@@ -56,7 +75,20 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         lossReasons,
         stageHistory,
         score,
-        privileged: actor.role === 'ADMIN' || actor.role === 'MANAGER',
+        privileged,
+      }}
+      operation={{
+        tasks,
+        messages,
+        enrollments,
+        cadences: cadences.map((c) => ({ id: c.id, name: c.name, isDefault: c.isDefault })),
+        opportunities,
+        salesOwners,
+        lossReasons: lossReasons.map((r) => ({ id: r.id, name: r.name })),
+        optOutKeywords: rules.optOutKeywords,
+        userId: actor.id,
+        privileged,
+        canEdit: can('lead.update'),
       }}
       options={{
         tags,

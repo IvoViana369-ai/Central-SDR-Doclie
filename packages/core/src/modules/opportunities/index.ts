@@ -7,6 +7,7 @@ export {
   handoffToSales,
   listLeadOpportunities,
   listOpportunities,
+  listSalesOwners,
   markOpportunityLost,
   markOpportunityWon,
 } from './application/opportunities';

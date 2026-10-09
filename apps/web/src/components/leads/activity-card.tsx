@@ -1,5 +1,18 @@
 'use client';
 
+import { STOP_REASON_LABELS } from '@docline/core/engagement-domain';
+import {
+  CHANNEL_LABELS,
+  MESSAGE_TYPE_LABELS,
+  REPLY_CLASSIFICATION_LABELS,
+} from '@docline/core/messaging-domain';
+import { CONVERSION_TYPE_LABELS } from '@docline/core/opportunities-domain';
+import {
+  ACTIVITY_OUTCOME_LABELS,
+  ACTIVITY_TYPE_LABELS,
+  TASK_STATUS_LABELS,
+  TASK_TYPE_LABELS,
+} from '@docline/core/tasks-domain';
 import { useState } from 'react';
 import { auditActionLabel, describeAuditEntry } from '@/components/audit/labels';
 import { Button } from '@/components/ui/button';
@@ -14,6 +27,8 @@ export interface TimelineEvent {
   occurredAt: string | Date;
   actorName: string | null;
   payload: unknown;
+  /** Canal do contato (mensagens e respostas). */
+  channel?: string | null;
 }
 
 export interface TimelinePage {
@@ -50,6 +65,11 @@ const FIELD_NAMES: Record<string, string> = {
   description: 'observações gerais',
 };
 
+/** Rótulo de um valor do payload (ou null, se ausente ou desconhecido). */
+function label(map: Record<string, string>, value: unknown): string | null {
+  return typeof value === 'string' ? (map[value] ?? value) : null;
+}
+
 /** Detalhe curto de um evento, a partir do payload (que não guarda dados pessoais em claro). */
 function eventDetail(event: TimelineEvent, users: Record<string, string>): string | null {
   const p = (event.payload ?? {}) as Record<string, unknown>;
@@ -80,6 +100,51 @@ function eventDetail(event: TimelineEvent, users: Record<string, string>): strin
     case 'lead.archived':
     case 'lead.unarchived':
       return typeof p.reason === 'string' ? p.reason : null;
+    // Fase 5: só tipos e datas (texto livre não vai para a timeline).
+    case 'task.created':
+      return [
+        label(TASK_TYPE_LABELS, p.type),
+        p.dueAt ? `vence ${formatDateTime(String(p.dueAt))}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    case 'task.completed':
+      return [label(TASK_TYPE_LABELS, p.type), label(TASK_STATUS_LABELS, p.status)]
+        .filter(Boolean)
+        .join(' · ');
+    case 'activity.logged':
+      return [label(ACTIVITY_TYPE_LABELS, p.type), label(ACTIVITY_OUTCOME_LABELS, p.outcome)]
+        .filter(Boolean)
+        .join(' · ');
+    case 'message.sent':
+      return [label(CHANNEL_LABELS, event.channel), label(MESSAGE_TYPE_LABELS, p.messageType)]
+        .filter(Boolean)
+        .join(' · ');
+    case 'message.received':
+      return [
+        label(CHANNEL_LABELS, event.channel),
+        label(REPLY_CLASSIFICATION_LABELS, p.classification) ?? 'sem classificação',
+        p.optOut === 'CERTAIN' ? 'pedido de opt-out' : null,
+        p.optOut === 'POSSIBLE' ? 'possível opt-out' : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    case 'reply.classified':
+      return `${label(REPLY_CLASSIFICATION_LABELS, p.from) ?? 'sem classificação'} → ${label(REPLY_CLASSIFICATION_LABELS, p.to) ?? '—'}`;
+    case 'cadence.enrolled':
+    case 'cadence.resumed':
+    case 'cadence.completed':
+      return typeof p.cadence === 'string' ? p.cadence : null;
+    case 'cadence.paused':
+      return [p.cadence, p.until ? `até ${formatDateTime(String(p.until))}` : null]
+        .filter(Boolean)
+        .join(' · ');
+    case 'cadence.stopped':
+      return [p.cadence, label(STOP_REASON_LABELS, p.reason)].filter(Boolean).join(' · ');
+    case 'handoff.created':
+      return `para ${user(p.salesOwnerId)}`;
+    case 'opportunity.won':
+      return label(CONVERSION_TYPE_LABELS, p.conversionType);
     default:
       return null;
   }

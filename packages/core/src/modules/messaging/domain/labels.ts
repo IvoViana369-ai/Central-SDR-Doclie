@@ -65,3 +65,14 @@ export type AssistedChannel = (typeof ASSISTED_CHANNELS)[number];
 
 /** Canais em que uma resposta pode chegar (colada pelo SDR). */
 export const REPLY_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'EMAIL', 'PHONE', 'SMS', 'OTHER'] as const;
+
+/** Canais de contato e de cadência, para telas e auditoria. */
+export const CHANNEL_LABELS: Record<string, string> = {
+  WHATSAPP: 'WhatsApp',
+  INSTAGRAM: 'Instagram',
+  EMAIL: 'E-mail',
+  PHONE: 'Telefone',
+  SMS: 'SMS',
+  OTHER: 'Outro',
+  ANY: 'Qualquer canal',
+};

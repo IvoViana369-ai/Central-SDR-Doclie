@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CADENCE_ACTIONS, CADENCE_CHANNELS, CADENCE_MESSAGE_TYPES } from '../domain/options';
 
 const id = z.uuid({ message: 'Identificador inválido.' });
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use o formato HH:MM.');
@@ -9,17 +10,6 @@ const text = (max: number) =>
     .max(max, `Máximo de ${max} caracteres.`)
     .nullish()
     .transform((v) => v || null);
-
-export const CADENCE_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'EMAIL', 'PHONE', 'ANY'] as const;
-export const CADENCE_ACTIONS = ['ASSISTED_MESSAGE', 'CALL', 'TASK'] as const;
-export const CADENCE_MESSAGE_TYPES = [
-  'FIRST_CONTACT',
-  'FOLLOW_UP_1',
-  'FOLLOW_UP_2',
-  'FOLLOW_UP_3',
-  'REACTIVATION',
-  'OTHER',
-] as const;
 
 /** Inscrever o lead (padrão: a cadência padrão). */
 export const enrollLeadInput = z.object({ leadId: id, cadenceId: id.optional() });

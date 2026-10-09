@@ -13,3 +13,4 @@ export {
   prepareAssistedMessage,
 } from './application/outbound';
 export { classifyReply, recordReply } from './application/replies';
+export { listMessages } from './application/list';

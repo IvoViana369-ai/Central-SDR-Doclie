@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Select } from '@/components/ui/input';
+import { ContactDialog } from '@/components/sdr/contact-dialog';
 import { api } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { DuplicateList, type DuplicateMatch } from './duplicate-list';
@@ -30,7 +31,37 @@ export interface ContactPointView {
 
 const ICONS = { PHONE: Phone, EMAIL: Mail, INSTAGRAM: AtSign } as const;
 
-/** Link de contato liberado pelo gate; bloqueado mostra o motivo (MVP M13/M14). */
+type ComposeChannel = 'WHATSAPP' | 'INSTAGRAM' | 'EMAIL';
+
+/**
+ * Mensagem pelo contato assistido (Fase 5): abre o diálogo que registra o envio.
+ * Bloqueado pelo gate (ou sem permissão de atuar no lead), mostra o motivo.
+ */
+function ComposeButton({
+  allowed,
+  reason,
+  onClick,
+  children,
+}: {
+  allowed: boolean;
+  reason: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={!allowed}
+      title={allowed ? undefined : reason}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** Ligação liberada pelo gate; bloqueada mostra o motivo (MVP M13/M14). */
 function ContactLink({
   href,
   allowed,
@@ -70,6 +101,7 @@ export function ContactPointsCard({
   gate,
   canEdit,
   canOptOut,
+  compose,
   run,
   busy,
 }: {
@@ -79,6 +111,8 @@ export function ContactPointsCard({
   gate: GateResult[];
   canEdit: boolean;
   canOptOut: boolean;
+  /** Contato assistido liberado (lead ativo e perfil que atua no lead); `null` desativa. */
+  compose: { leadName: string } | null;
   run: <T>(action: () => Promise<T>, success?: string) => Promise<T | null>;
   busy: boolean;
 }) {
@@ -86,11 +120,20 @@ export function ContactPointsCard({
   const [value, setValue] = useState('');
   const [isWhatsapp, setIsWhatsapp] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [composing, setComposing] = useState<{
+    channel: ComposeChannel;
+    contactPointId: string;
+  } | null>(null);
   const channel = (name: GateResult['channel']) => gate.find((g) => g.channel === name);
   const usable = (name: GateResult['channel'], id: string) =>
     channel(name)?.usableContactPointIds.includes(id) ?? false;
   const reasonOf = (name: GateResult['channel']) =>
     channel(name)?.reasons.join(' ') || 'Contato não permitido.';
+  const composeProps = (name: ComposeChannel, id: string) => ({
+    allowed: compose !== null && usable(name, id),
+    reason: compose ? reasonOf(name) : 'Mensagens só para quem atua neste lead, com ele ativo.',
+    onClick: () => setComposing({ channel: name, contactPointId: id }),
+  });
   const personName = (id: string | null) => people.find((p) => p.id === id)?.fullName;
 
   async function add() {
@@ -117,7 +160,8 @@ export function ContactPointsCard({
       <CardHeader>
         <CardTitle>Contatos</CardTitle>
         <CardDescription>
-          Os botões só ficam ativos quando o contato é permitido (base legal, Lista Não Contatar).
+          Os botões só ficam ativos quando o contato é permitido (base legal, Lista Não Contatar,
+          horário e intervalo entre contatos).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -168,32 +212,22 @@ export function ContactPointsCard({
                         >
                           <Phone /> Ligar
                         </ContactLink>
-                        <ContactLink
-                          href={cp.links.whatsapp}
-                          allowed={usable('WHATSAPP', cp.id)}
-                          reason={reasonOf('WHATSAPP')}
-                        >
-                          <MessageCircle /> WhatsApp
-                        </ContactLink>
+                        {cp.links.whatsapp ? (
+                          <ComposeButton {...composeProps('WHATSAPP', cp.id)}>
+                            <MessageCircle /> WhatsApp
+                          </ComposeButton>
+                        ) : null}
                       </>
                     ) : null}
                     {cp.type === 'EMAIL' ? (
-                      <ContactLink
-                        href={cp.links.mailto}
-                        allowed={usable('EMAIL', cp.id)}
-                        reason={reasonOf('EMAIL')}
-                      >
+                      <ComposeButton {...composeProps('EMAIL', cp.id)}>
                         <Mail /> E-mail
-                      </ContactLink>
+                      </ComposeButton>
                     ) : null}
                     {cp.type === 'INSTAGRAM' ? (
-                      <ContactLink
-                        href={cp.links.instagram}
-                        allowed={usable('INSTAGRAM', cp.id)}
-                        reason={reasonOf('INSTAGRAM')}
-                      >
-                        <AtSign /> Abrir perfil
-                      </ContactLink>
+                      <ComposeButton {...composeProps('INSTAGRAM', cp.id)}>
+                        <AtSign /> Mensagem no Instagram
+                      </ComposeButton>
                     ) : null}
                     {canEdit ? (
                       <>
@@ -323,6 +357,18 @@ export function ContactPointsCard({
         ) : null}
         {duplicates.length > 0 ? (
           <DuplicateList duplicates={duplicates} title="Este contato também está em outros leads" />
+        ) : null}
+        {composing && compose ? (
+          <ContactDialog
+            lead={{ id: leadId, displayName: compose.leadName }}
+            defaultChannel={composing.channel}
+            defaultContactPointId={composing.contactPointId}
+            onClose={() => setComposing(null)}
+            onDone={(message) => {
+              setComposing(null);
+              void run(async () => null, message);
+            }}
+          />
         ) : null}
       </CardContent>
     </Card>

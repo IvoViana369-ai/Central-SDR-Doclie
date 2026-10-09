@@ -2,7 +2,7 @@
 // tarefas, pelas mensagens e pela conformidade (inscrição em andamento, tarefas
 // abertas, datas de contato). Não depende de outros módulos (evita ciclos:
 // opt-out, arquivamento e mudança de etapa encerram a cadência por aqui).
-export * from './domain/stop-reasons';
+export * from './domain';
 export {
   OUTREACH_TASK_TYPES,
   cancelOpenTasks,

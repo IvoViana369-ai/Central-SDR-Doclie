@@ -24,7 +24,7 @@ export const contactRulesSchema = z
     maxFirstContactsPerDay: z.number().int().min(1).max(500),
     /** Lead sem atividade há N dias, em etapa aberta e sem tarefa, é "esquecido". */
     forgottenAfterDays: z.number().int().min(1).max(90),
-    /** Resposta recebida sem ação do SDR por mais de N horas úteis fica em destaque. */
+    /** Prazo (horas corridas) para agir sobre uma resposta recebida; depois disso, fica em destaque. */
     replySlaHours: z.number().int().min(1).max(72),
     /** Dias úteis para o comercial aceitar uma transferência. */
     handoffAcceptBusinessDays: z.number().int().min(1).max(10),

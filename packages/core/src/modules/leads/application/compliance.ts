@@ -9,7 +9,7 @@ import {
   type SuppressionToCreate,
 } from '../../compliance';
 import { cancelOpenTasks, engagementActorOf, stopLeadEnrollment } from '../../engagement';
-import { maskIdentifier, toSearchKey } from '../../normalization';
+import { formatPhone, maskIdentifier, toSearchKey } from '../../normalization';
 import {
   anonymizeLeadInput,
   contactabilityInput,
@@ -250,17 +250,35 @@ export const getLeadContactability = defineUseCase({
       actor: ctx.actor,
       now: ctx.now,
     });
+    const points = await ctx.tx.contactPoint.findMany({
+      where: { leadId: lead.id, status: 'ACTIVE' },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      select: { id: true, type: true, valueNormalized: true },
+    });
     return {
       contactStatus: lead.contactStatus,
       contactStatusLabel: CONTACT_STATUS_LABELS[lead.contactStatus],
       mode: input.mode,
       channels: gate.channels,
+      /** Contatos ativos, para a tela escolher por qual falar. */
+      contactPoints: points.map((cp) => ({
+        id: cp.id,
+        type: cp.type,
+        display:
+          cp.type === 'PHONE'
+            ? formatPhone(cp.valueNormalized)
+            : cp.type === 'INSTAGRAM'
+              ? `@${cp.valueNormalized}`
+              : cp.valueNormalized,
+      })),
     };
   },
 });
 
 const ANONYMIZED_PERSON = 'Pessoa anonimizada';
 const ANONYMIZED_NOTE = '[conteúdo removido na anonimização]';
+/** Título livre de tarefa pode citar pessoas (ex.: "Ligar para a sócia Ana"). */
+const ANONYMIZED_TASK_TITLE = 'Tarefa (conteúdo removido na anonimização)';
 
 /**
  * Anonimização (ADMIN; docs/LGPD.md §13): remove nome, CNPJ, endereço, site,
@@ -366,7 +384,15 @@ async function scrubLead(
   // Operação comercial (Fase 5): textos das mensagens, anotações e checklist.
   await ctx.tx.message.updateMany({ where: { leadId }, data: { body: null, optOutMatch: null } });
   await ctx.tx.activity.updateMany({ where: { leadId }, data: { notes: null } });
-  await ctx.tx.task.updateMany({ where: { leadId }, data: { description: null, outcome: null } });
+  await ctx.tx.task.updateMany({
+    where: { leadId },
+    data: { title: ANONYMIZED_TASK_TITLE, description: null, outcome: null },
+  });
+  // Avisos citam o nome do lead no título.
+  await ctx.tx.notification.updateMany({
+    where: { leadId },
+    data: { title: 'Aviso sobre um lead anonimizado', body: null },
+  });
   await ctx.tx.opportunity.updateMany({
     where: { leadId },
     data: { qualification: { anonymized: true }, notes: null },

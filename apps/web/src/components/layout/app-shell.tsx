@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { Brand } from './brand';
+import { NotificationsBell } from './notifications-bell';
 import { SidebarNav } from './sidebar-nav';
 import { UserMenu } from './user-menu';
 
@@ -73,6 +74,9 @@ export function AppShell({ user, permissions, twoFactorPending, children }: AppS
 
       <main id="conteudo" className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-6xl">
+          <div className="-mt-2 mb-2 flex justify-end lg:-mt-4">
+            <NotificationsBell />
+          </div>
           {twoFactorPending ? (
             <p
               role="status"

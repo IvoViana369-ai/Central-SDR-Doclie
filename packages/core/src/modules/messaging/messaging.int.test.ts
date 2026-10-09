@@ -13,6 +13,7 @@ import {
   type CreateLeadInput,
 } from '../leads';
 import { DEFAULT_CONTACT_RULES, updateContactRules } from '../settings';
+import { createTask } from '../tasks';
 import {
   cancelAssistedMessage,
   classifyReply,
@@ -279,8 +280,30 @@ describe('contato assistido e respostas (M13, M14, F5-08 a F5-10)', () => {
       'LOGGED',
     ]);
 
+    // Texto livre que cita uma pessoa (fictícia): na tarefa e num aviso.
+    await createTask(deps, sdr, {
+      leadId: id,
+      title: 'Ligar para a sócia Fulana Teste',
+      description: 'Pediu retorno à tarde.',
+      dueAt: '2026-10-20T13:00:00Z',
+    });
+    await db.notification.create({
+      data: { userId: sdr.id, type: 'test', title: 'Escritório Ingá', body: 'Fulana', leadId: id },
+    });
+
     await anonymizeLead(deps, admin, { leadId: id, reason: 'Pedido do titular (teste).' });
     const messages = await db.message.findMany({ where: { leadId: id } });
     expect(messages.every((m) => m.body === null)).toBe(true);
+    const tasks = await db.task.findMany({ where: { leadId: id } });
+    expect(tasks.map((t) => [t.title, t.description])).toEqual(
+      tasks.map(() => ['Tarefa (conteúdo removido na anonimização)', null]),
+    );
+    expect(await db.notification.findFirstOrThrow({ where: { leadId: id } })).toMatchObject({
+      title: 'Aviso sobre um lead anonimizado',
+      body: null,
+    });
+    // A timeline (append-only) nunca recebeu o texto livre.
+    const events = await db.leadEvent.findMany({ where: { leadId: id } });
+    expect(JSON.stringify(events.map((e) => e.payload))).not.toContain('Fulana');
   });
 });

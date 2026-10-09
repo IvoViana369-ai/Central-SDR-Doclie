@@ -50,6 +50,7 @@ export const NAVIGATION: NavGroup[] = [
         href: '/fila',
         icon: ListTodo,
         phase: 5,
+        permission: 'lead.read',
         description: 'Contatos, follow-ups e respostas do dia, por prioridade.',
       },
       {
@@ -163,7 +164,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 4;
+export const CURRENT_PHASE = 5;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

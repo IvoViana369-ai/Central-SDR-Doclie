@@ -11,20 +11,19 @@ export const metadata: Metadata = { title: 'Dashboard' };
 
 const NEXT_PHASES = [
   {
-    phase: 3,
-    title: 'Importação e deduplicação',
-    text: 'Planilhas CSV/XLSX com prévia, normalização e revisão de duplicados.',
-  },
-  { phase: 4, title: 'Pipeline SDR', text: 'Kanban das etapas e lead scoring configurável.' },
-  {
-    phase: 5,
-    title: 'Fila e follow-ups',
-    text: 'Minha Fila, cadência D0/D2/D5/D10 e contato assistido.',
-  },
-  {
     phase: 6,
     title: 'IA de prospecção',
-    text: 'Abordagens personalizadas com aprovação humana e dashboard completo.',
+    text: 'Abordagens personalizadas com aprovação humana, dashboard e relatórios.',
+  },
+  {
+    phase: 7,
+    title: 'WhatsApp oficial',
+    text: 'API oficial da Meta com opt-in, templates aprovados e webhooks.',
+  },
+  {
+    phase: 8,
+    title: 'Instagram',
+    text: 'Mensagens diretas pela API oficial, dentro das regras da Meta.',
   },
 ];
 
@@ -34,9 +33,29 @@ export default async function DashboardPage() {
   const role = user.actor.role;
   const available = [
     {
+      label: 'Minha Fila: respostas, follow-ups e contatos do dia',
+      href: '/fila',
+      show: roleHasPermission(role, 'lead.read'),
+    },
+    {
       label: 'Leads: cadastro, filtros, timeline e ações em massa',
       href: '/leads',
       show: roleHasPermission(role, 'lead.read'),
+    },
+    {
+      label: 'Pipeline: Kanban das etapas e score',
+      href: '/pipeline',
+      show: roleHasPermission(role, 'lead.read'),
+    },
+    {
+      label: 'Mensagens: envios a confirmar e respostas',
+      href: '/mensagens',
+      show: roleHasPermission(role, 'lead.read'),
+    },
+    {
+      label: 'Importar planilhas e revisar duplicados',
+      href: '/importar',
+      show: roleHasPermission(role, 'lead.import'),
     },
     {
       label: 'Conformidade: Lista Não Contatar e titulares',
@@ -71,7 +90,8 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Disponível agora</CardTitle>
             <CardDescription>
-              CRM de leads (Fase 2) sobre a fundação de acesso seguro, perfis e auditoria.
+              Operação SDR completa no modo assistido: leads, pipeline, cadências e contato
+              registrado, com Lista Não Contatar e auditoria.
             </CardDescription>
           </CardHeader>
           <CardContent>

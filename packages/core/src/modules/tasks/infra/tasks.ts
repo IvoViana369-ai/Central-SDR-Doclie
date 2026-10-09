@@ -59,7 +59,8 @@ export async function createTaskRecord(
       actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
       subjectType: 'task',
       subjectId: task.id,
-      payload: toJson({ type: data.type, title: data.title, dueAt: data.dueAt.toISOString() }),
+      // Sem título nem descrição: texto livre pode ter dados pessoais e a timeline é append-only.
+      payload: toJson({ type: data.type, dueAt: data.dueAt.toISOString() }),
     },
   });
   await refreshNextAction(ctx.tx, data.leadId);
@@ -105,7 +106,8 @@ export async function closeTask(
       actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
       subjectType: 'task',
       subjectId: task.id,
-      payload: toJson({ type: task.type, title: task.title, status, outcome }),
+      // O resultado (texto livre) fica só na tarefa, que a anonimização limpa.
+      payload: toJson({ type: task.type, status, hasOutcome: Boolean(outcome) }),
     },
   });
   if (task.enrollmentId) {

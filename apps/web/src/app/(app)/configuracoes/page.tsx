@@ -1,10 +1,17 @@
 import { roleHasPermission } from '@docline/core';
-import { Gauge, History, MapPin, Settings2, SquareKanban, type LucideIcon } from 'lucide-react';
+import {
+  Clock,
+  Gauge,
+  History,
+  ListOrdered,
+  MapPin,
+  SquareKanban,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AccessDenied } from '@/components/access-denied';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPageContext } from '@/server/page-context';
 
@@ -35,11 +42,18 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     description: 'Cidades que pontuam no score.',
     Icon: MapPin,
   },
-];
-
-const UPCOMING = [
-  { title: 'Cadências e horários de contato', phase: 5 },
-  { title: 'Palavras de opt-out nas respostas', phase: 5 },
+  {
+    href: '/configuracoes/cadencias',
+    title: 'Cadências',
+    description: 'Passos de contato (D0, D2, D5…), canais e etapas de destino.',
+    Icon: ListOrdered,
+  },
+  {
+    href: '/configuracoes/contato',
+    title: 'Regras de contato',
+    description: 'Horário, limites, prazos da fila e palavras de opt-out.',
+    Icon: Clock,
+  },
 ];
 
 export default async function SettingsPage() {
@@ -60,17 +74,6 @@ export default async function SettingsPage() {
               </CardHeader>
             </Card>
           </Link>
-        ))}
-        {UPCOMING.map((item) => (
-          <Card key={item.title} className="opacity-70">
-            <CardHeader>
-              <Settings2 className="mb-1 size-5 text-muted-foreground" aria-hidden />
-              <CardTitle>{item.title}</CardTitle>
-              <CardDescription>
-                <Badge variant="muted">Fase {item.phase}</Badge>
-              </CardDescription>
-            </CardHeader>
-          </Card>
         ))}
       </div>
     </>

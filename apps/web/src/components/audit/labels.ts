@@ -1,5 +1,12 @@
+import {
+  CHANNEL_LABELS,
+  MESSAGE_TYPE_LABELS,
+  REPLY_CLASSIFICATION_LABELS,
+} from '@docline/core/messaging-domain';
+import { CONVERSION_TYPE_LABELS } from '@docline/core/opportunities-domain';
 import type { Permission } from '@docline/core/permissions';
 import { ROLE_LABELS, USER_STATUS_LABELS } from '@docline/core/roles';
+import { ACTIVITY_TYPE_LABELS, TASK_TYPE_LABELS } from '@docline/core/tasks-domain';
 
 /** Rótulos em português das ações registradas na auditoria. */
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -71,6 +78,27 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'scoring.activate': 'Modelo de score ativado',
   'priority_city.add': 'Cidade prioritária incluída',
   'priority_city.remove': 'Cidade prioritária retirada',
+  'task.create': 'Tarefa criada',
+  'task.reschedule': 'Tarefa reagendada',
+  'task.complete': 'Tarefa concluída',
+  'task.cancel': 'Tarefa cancelada',
+  'activity.log': 'Ligação, reunião ou visita registrada',
+  'message.sent': 'Mensagem enviada',
+  'reply.record': 'Resposta registrada',
+  'reply.classify': 'Resposta reclassificada',
+  'cadence.enroll': 'Inscrito na cadência',
+  'cadence.pause': 'Cadência pausada',
+  'cadence.resume': 'Cadência retomada',
+  'cadence.stop': 'Cadência encerrada',
+  'cadence.skip_step': 'Passo da cadência pulado',
+  'cadence.create': 'Cadência criada',
+  'cadence.update': 'Cadência alterada',
+  'cadence.set_default': 'Cadência padrão alterada',
+  'settings.contact_rules': 'Regras de contato alteradas',
+  'opportunity.handoff': 'Transferido ao Comercial',
+  'opportunity.accept': 'Transferência aceita',
+  'opportunity.won': 'Oportunidade ganha',
+  'opportunity.lost': 'Oportunidade perdida',
 };
 
 export function auditActionLabel(action: string): string {
@@ -165,6 +193,33 @@ const FIELD_LABELS: Record<string, string> = {
   version: 'Versão',
   activeVersion: 'Versão ativa',
   rules: 'Regras',
+  type: 'Tipo',
+  dueAt: 'Vencimento',
+  assigneeId: 'Responsável pela tarefa',
+  hasOutcome: 'Com resultado anotado',
+  outcome: 'Resultado',
+  taskId: 'Tarefa',
+  channel: 'Canal',
+  mode: 'Modo',
+  messageType: 'Tipo de mensagem',
+  classification: 'Classificação',
+  optOut: 'Opt-out na resposta',
+  cadence: 'Cadência',
+  until: 'Pausada até',
+  salesOwnerId: 'Comercial',
+  acceptDueAt: 'Prazo de aceite',
+  conversionType: 'Conversão',
+  steps: 'Passos',
+  windowStart: 'Início da janela',
+  windowEnd: 'Fim da janela',
+  workDays: 'Dias com contato',
+  minHoursBetweenContacts: 'Intervalo entre contatos (h)',
+  maxFirstContactsPerDay: 'Primeiros contatos por dia',
+  replySlaHours: 'Prazo de resposta (h)',
+  handoffAcceptBusinessDays: 'Prazo de aceite (dias úteis)',
+  forgottenAfterDays: 'Esquecido após (dias)',
+  newLeadDays: 'Novos leads (dias)',
+  optOutKeywords: 'Palavras de opt-out',
 };
 
 /** Campo com prefixo (ex.: `NEW.name` na configuração de etapas) → "NEW · Nome". */
@@ -213,7 +268,16 @@ function valueLabel(field: string, value: unknown): string {
     return USER_STATUS_LABELS[text as keyof typeof USER_STATUS_LABELS] ?? text;
   if (field === 'required') return PERMISSION_LABELS[text as Permission] ?? text;
   if (field === 'reason') return REASON_LABELS[text] ?? text;
-  return text;
+  const maps: Record<string, Record<string, string>> = {
+    type: { ...TASK_TYPE_LABELS, ...ACTIVITY_TYPE_LABELS },
+    messageType: MESSAGE_TYPE_LABELS,
+    classification: REPLY_CLASSIFICATION_LABELS,
+    channel: CHANNEL_LABELS,
+    conversionType: CONVERSION_TYPE_LABELS,
+  };
+  if (typeof value === 'boolean') return value ? 'sim' : 'não';
+  if (Array.isArray(value)) return value.join(', ');
+  return maps[field]?.[text] ?? text;
 }
 
 /** Resumo legível de alterações e metadados de um registro de auditoria. */

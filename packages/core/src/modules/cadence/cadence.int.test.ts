@@ -6,7 +6,7 @@ import { createTestDeps } from '../../testing/test-deps';
 import { createLead, registerOptOut, type CreateLeadInput } from '../leads';
 import { confirmAssistedMessage, prepareAssistedMessage, recordReply } from '../messaging';
 import { moveLeadStage } from '../pipeline';
-import { completeTask } from '../tasks';
+import { completeTask, rescheduleTask } from '../tasks';
 import {
   createCadence,
   enrollLead,
@@ -204,6 +204,15 @@ describe('cadência (M11; suíte de cadência)', () => {
     });
     expect(await runCadenceTick(deps)).toMatchObject({ repaired: 1 });
     expect(await db.task.count({ where: { leadId: id, status: 'OPEN' } })).toBe(1);
+
+    // Reagendar o passo leva a inscrição junto.
+    await rescheduleTask(deps, sdr, {
+      taskId: (await openTask(id)).id,
+      dueAt: '2026-10-27T14:00:00Z',
+    });
+    expect(await enrollment(id)).toMatchObject({
+      nextStepDueAt: new Date('2026-10-27T14:00:00Z'),
+    });
 
     const view = await getLeadCadence(deps, sdr, { leadId: id });
     expect(view[0]).toMatchObject({ statusLabel: 'Ativa', currentStepPosition: 2 });

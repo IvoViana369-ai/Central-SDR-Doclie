@@ -65,10 +65,12 @@ test('cadastro completo: cidade, contato com WhatsApp, pessoa, origem e base leg
   // Telefone sem DDD: completado com o DDD da cidade e com o 9º dígito.
   const contact = page.getByTestId('contact-point').first();
   await expect(contact).toContainText('(88) 98765-4321');
-  await expect(contact.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute(
-    'href',
-    'https://wa.me/5588987654321',
-  );
+  // O WhatsApp abre o contato assistido (Fase 5), já com o número escolhido.
+  await contact.getByRole('button', { name: 'WhatsApp', exact: true }).click();
+  const compose = page.getByRole('dialog', { name: 'Enviar mensagem' });
+  await expect(compose).toContainText('Para: (88) 98765-4321');
+  await compose.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(compose).toBeHidden();
   await expect(page.getByText('Paula Teste')).toBeVisible();
   // Timeline (M09).
   await expect(page.getByRole('list', { name: 'Timeline' })).toContainText('Lead cadastrado');

@@ -1,4 +1,5 @@
 import type { Prisma } from '@docline/db';
+import { z } from 'zod';
 import { dueAfter } from '../../../shared/calendar';
 import {
   BusinessRuleError,
@@ -59,6 +60,11 @@ function describeOpportunity(o: OpportunityRow, now: Date) {
   return {
     ...o,
     expectedValue: o.expectedValue ? Number(o.expectedValue) : null,
+    // Validado na transferência; um valor inesperado na coluna vira checklist vazio.
+    qualification:
+      o.qualification && typeof o.qualification === 'object' && !Array.isArray(o.qualification)
+        ? o.qualification
+        : {},
     lead: { ...o.lead, codeLabel: formatLeadCode(o.lead.code) },
     statusLabel: OPPORTUNITY_STATUS_LABELS[o.status],
     conversionTypeLabel: o.conversionType ? CONVERSION_TYPE_LABELS[o.conversionType] : null,
@@ -396,5 +402,19 @@ export const listLeadOpportunities = defineUseCase({
       select: opportunitySelect,
     });
     return rows.map((o) => describeOpportunity(o, ctx.now));
+  },
+});
+
+/** Quem pode receber a transferência (só nome e perfil; o SDR não lista a equipe). */
+export const listSalesOwners = defineUseCase({
+  name: 'opportunities.salesOwners',
+  access: 'lead.update',
+  input: z.object({}),
+  async run(ctx) {
+    return ctx.tx.user.findMany({
+      where: { status: 'ACTIVE', role: { in: [...SALES_ROLES] } },
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, role: true },
+    });
   },
 });

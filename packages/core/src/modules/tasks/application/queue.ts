@@ -319,6 +319,7 @@ export const getMyQueue = defineUseCase({
       return {
         key: s.key,
         label: s.label,
+        hint: s.hint,
         count: list.length,
         countCapped: list.length >= SCAN_LIMIT,
         items: list.slice(0, SHOW_LIMIT),

@@ -59,6 +59,13 @@ export const rescheduleTask = defineUseCase({
   async run(ctx, input) {
     const task = await requireOpenTask(ctx, input.taskId);
     await ctx.tx.task.update({ where: { id: task.id }, data: { dueAt: input.dueAt } });
+    if (task.enrollmentId) {
+      // Passo de cadência: a inscrição acompanha a nova data (a ficha mostra "Próximo passo em").
+      await ctx.tx.cadenceEnrollment.updateMany({
+        where: { id: task.enrollmentId, currentStepPosition: { not: null } },
+        data: { nextStepDueAt: input.dueAt },
+      });
+    }
     await refreshNextAction(ctx.tx, task.leadId);
     await auditLead(ctx, task.leadId, 'task.reschedule', {
       subjectId: task.id,
@@ -79,7 +86,7 @@ export const completeTask = defineUseCase({
     await closeTask(ctx, task, 'DONE', input.outcome);
     await auditLead(ctx, task.leadId, 'task.complete', {
       subjectId: task.id,
-      metadata: { type: task.type, ...(input.outcome ? { outcome: input.outcome } : {}) },
+      metadata: { type: task.type, hasOutcome: Boolean(input.outcome) },
     });
     return { taskId: task.id, status: 'DONE' as const };
   },

@@ -91,7 +91,6 @@ export async function createStepTask(
       subjectId: task.id,
       payload: toJson({
         type: task.type,
-        title: task.title,
         dueAt: dueAt.toISOString(),
         cadenceStep: step.position,
       }),

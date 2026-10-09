@@ -47,8 +47,14 @@ export const listLeadTimeline = defineUseCase({
         const payload = (e.payload ?? {}) as {
           fromUserId?: string | null;
           toUserId?: string | null;
+          salesOwnerId?: string | null;
         };
-        return [e.actorId, payload.fromUserId ?? null, payload.toUserId ?? null];
+        return [
+          e.actorId,
+          payload.fromUserId ?? null,
+          payload.toUserId ?? null,
+          payload.salesOwnerId ?? null,
+        ];
       }),
     );
     return {

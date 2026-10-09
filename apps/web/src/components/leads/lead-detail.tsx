@@ -14,6 +14,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { LeadScoreCard, type LeadScoreView } from '@/components/pipeline/lead-score-card';
 import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead-stage-card';
 import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
+import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
 import { api } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { ActivityCard, type TimelinePage } from './activity-card';
@@ -113,12 +114,13 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-/** Detalhe do lead (F2-05): contatos com tel:/wa.me liberados pelo gate, timeline, histórico e conformidade. */
+/** Detalhe do lead (F2-05): contatos liberados pelo gate, operação SDR (Fase 5), timeline, histórico e conformidade. */
 export function LeadDetail({
   lead,
   gate,
   timeline,
   sales,
+  operation,
   permissions,
   options,
 }: {
@@ -126,6 +128,7 @@ export function LeadDetail({
   gate: GateResult[];
   timeline: TimelinePage;
   sales: LeadSalesView;
+  operation: LeadSalesData;
   permissions: LeadDetailPermissions;
   options: {
     tags: { id: string; name: string; color: string }[];
@@ -274,6 +277,7 @@ export function LeadDetail({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
+          <LeadSalesPanel lead={lead} data={operation} />
           <ContactPointsCard
             leadId={lead.id}
             contactPoints={lead.contactPoints}
@@ -281,6 +285,11 @@ export function LeadDetail({
             gate={gate}
             canEdit={editable}
             canOptOut={permissions.canOptOut && lead.status !== 'ANONYMIZED'}
+            compose={
+              permissions.canEdit && lead.status === 'ACTIVE'
+                ? { leadName: lead.displayName }
+                : null
+            }
             run={run}
             busy={busy}
           />

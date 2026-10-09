@@ -4,16 +4,66 @@
  */
 
 export const QUEUE_SECTIONS = [
-  { key: 'REPLIES', label: 'Respostas aguardando ação', weight: 100 },
-  { key: 'OVERDUE', label: 'Follow-ups atrasados', weight: 80 },
-  { key: 'PENDING_CONFIRMATION', label: 'Envios a confirmar', weight: 70 },
-  { key: 'TODAY_FIRST_CONTACT', label: 'Contatos de hoje', weight: 60 },
-  { key: 'TODAY_FOLLOW_UP', label: 'Follow-ups de hoje', weight: 55 },
-  { key: 'HOT_LEADS', label: 'Leads quentes', weight: 40 },
-  { key: 'NEW_LEADS', label: 'Novos leads', weight: 30 },
-  { key: 'FORGOTTEN', label: 'Esquecidos', weight: 20 },
-  { key: 'AWAITING_REPLY', label: 'Aguardando resposta', weight: 10 },
-  { key: 'OPEN_OPPORTUNITIES', label: 'Oportunidades abertas', weight: 5 },
+  {
+    key: 'REPLIES',
+    label: 'Respostas aguardando ação',
+    weight: 100,
+    hint: 'O lead escreveu depois do último contato: responda dentro do prazo.',
+  },
+  {
+    key: 'OVERDUE',
+    label: 'Follow-ups atrasados',
+    weight: 80,
+    hint: 'Tarefas vencidas e ainda abertas.',
+  },
+  {
+    key: 'PENDING_CONFIRMATION',
+    label: 'Envios a confirmar',
+    weight: 70,
+    hint: 'Mensagens preparadas sem confirmação de envio.',
+  },
+  {
+    key: 'TODAY_FIRST_CONTACT',
+    label: 'Contatos de hoje',
+    weight: 60,
+    hint: 'Primeiros contatos previstos para hoje.',
+  },
+  {
+    key: 'TODAY_FOLLOW_UP',
+    label: 'Follow-ups de hoje',
+    weight: 55,
+    hint: 'Follow-ups e outras tarefas que vencem hoje.',
+  },
+  {
+    key: 'HOT_LEADS',
+    label: 'Leads quentes',
+    weight: 40,
+    hint: 'Score alto e ainda sem contato.',
+  },
+  {
+    key: 'NEW_LEADS',
+    label: 'Novos leads',
+    weight: 30,
+    hint: 'Atribuídos a você nos últimos dias.',
+  },
+  {
+    key: 'FORGOTTEN',
+    label: 'Esquecidos',
+    weight: 20,
+    hint: 'Sem atividade recente e sem próxima ação marcada.',
+  },
+  {
+    key: 'AWAITING_REPLY',
+    label: 'Aguardando resposta',
+    weight: 10,
+    hint: 'Cadência concluída; viram "Sem resposta" no prazo indicado.',
+  },
+  {
+    key: 'OPEN_OPPORTUNITIES',
+    label: 'Oportunidades abertas',
+    weight: 5,
+    hint: 'Transferidas ao Comercial e ainda em andamento.',
+  },
 ] as const;
 
 export type QueueSectionKey = (typeof QUEUE_SECTIONS)[number]['key'];
