@@ -10,15 +10,19 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "@types/nodemailer": "^8.0.2"
+    "@types/nodemailer": "^8.0.2",
+    "@types/papaparse": "5.5.2"
   },
   "dependencies": {
     "@docline/config": "workspace:*",
     "@docline/core": "workspace:*",
     "@docline/db": "workspace:*",
     "@sentry/node": "10.75.3",
+    "fflate": "0.8.3",
     "nodemailer": "^10.0.14",
+    "papaparse": "5.7.0",
     "pg-boss": "^12.36.0",
-    "pino": "^10.4.0"
+    "pino": "^10.4.0",
+    "saxes": "6.0.0"
   }
 }

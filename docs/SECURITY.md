@@ -175,6 +175,13 @@
 - Arquivo processado e **descartado** (não fica em disco nem em bucket no MVP).
 - Conteúdo das células tratado como texto (nada é executado ou avaliado).
 
+> **Implementado na Fase 3** (`packages/integrations/src/spreadsheet`, ADR-020):
+> - **Formatos:** `.csv`, `.txt` e `.xlsx`, conferindo extensão e assinatura. `.xls` (formato OLE), `.xlsm`/`.xltm` e XLSX com `vbaProject.bin` são recusados.
+> - **Zip bomb:** antes de descompactar, no máximo 2.000 entradas e um total declarado de até 30× o arquivo (teto de 250 MB). Cada entrada é descompactada num buffer do tamanho declarado, então quem mente o tamanho é cortado, não cresce.
+> - **XML:** lido em streaming, sem DTD (documento com `DOCTYPE` é recusado).
+> - **Timeout:** a leitura tem tempo máximo.
+> - **Arquivo descartado:** os bytes ficam em `import_files` só até a leitura no worker e são apagados na mesma transação que grava as linhas.
+
 ---
 
 ## 9. Webhooks

@@ -10,6 +10,7 @@ export {
   type ErrorContext,
   type ErrorReporter,
 } from './observability/error-reporter';
+export { readSpreadsheet, spreadsheetReader } from './spreadsheet';
 export { ConsoleEmailProvider } from './email/console';
 export { FileEmailProvider } from './email/file';
 export { SmtpEmailProvider } from './email/smtp';

@@ -24,6 +24,7 @@ export {
   type UseCaseContext,
 } from './shared/use-case';
 export type * from './ports';
+export { SpreadsheetError } from './ports/spreadsheet';
 export * from './modules/identity';
 export * from './modules/audit';
 export * from './modules/normalization';
