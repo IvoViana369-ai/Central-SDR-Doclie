@@ -25,3 +25,8 @@ export {
   getLeadInstagram,
   listInstagramConversations,
 } from './application/reads';
+export {
+  refreshLeadInstagram,
+  runInstagramDiscovery,
+  type DiscoverySummary,
+} from './application/discovery';

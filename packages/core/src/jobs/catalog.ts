@@ -179,6 +179,17 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 180,
   },
+  /**
+   * Métricas públicas dos @ dos leads (Business Discovery, F8-04): de hora em
+   * hora, no máximo o limite da configuração por rodada.
+   */
+  instagramDiscovery: {
+    name: 'instagram.discovery',
+    cron: '17 * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 900,
+  },
   /** Confere a conta e o token do Instagram (diário, 04:13 em Fortaleza). */
   instagramAccountCheck: {
     name: 'instagram.account-check',

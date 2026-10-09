@@ -211,7 +211,8 @@ export const DEFAULT_SCORE_RULES = [
     params: { maxDaysSincePost: 30 },
     points: 10,
     active: false,
-    description: 'Inativo até haver dado de atividade do Instagram (Fase 8).',
+    description:
+      'Inativo até ligar o Instagram pela API e a consulta de perfis (Business Discovery, Fase 8).',
   },
   { criterionKey: 'in_priority_city', params: {}, points: 15, active: true },
   { criterionKey: 'replied_before', params: {}, points: 20, active: true },

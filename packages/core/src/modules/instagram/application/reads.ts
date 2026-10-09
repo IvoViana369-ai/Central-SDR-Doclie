@@ -233,41 +233,55 @@ export const getInstagramOverview = defineUseCase({
   async run(ctx) {
     const provider = ctx.deps.instagram?.name ?? null;
     const monthStart = new Date(Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth(), 1));
-    const [connection, settingsRow, pendingUnmatched, sent, received, comments, failures] =
-      await Promise.all([
-        provider
-          ? ctx.tx.integrationConnection.findUnique({
-              where: { provider: instagramConnectionKey(provider) },
-            })
-          : null,
-        ctx.tx.appSetting.findUnique({ where: { key: INSTAGRAM_SETTINGS_KEY } }),
-        ctx.tx.inboundUnmatched.count({ where: { channel: 'INSTAGRAM', status: 'PENDING' } }),
-        ctx.tx.message.findMany({
-          where: {
-            channel: 'INSTAGRAM',
-            mode: 'API',
-            direction: 'OUTBOUND',
-            createdAt: { gte: monthStart },
-          },
-          select: { status: true, readAt: true },
-        }),
-        ctx.tx.message.count({
-          where: { channel: 'INSTAGRAM', direction: 'INBOUND', receivedAt: { gte: monthStart } },
-        }),
-        ctx.tx.socialComment.count({ where: { commentedAt: { gte: monthStart } } }),
-        ctx.tx.message.groupBy({
-          by: ['errorCode'],
-          where: {
-            channel: 'INSTAGRAM',
-            mode: 'API',
-            status: 'FAILED',
-            createdAt: { gte: monthStart },
-          },
-          _count: { _all: true },
-          orderBy: { _count: { errorCode: 'desc' } },
-          take: 5,
-        }),
-      ]);
+    const [
+      connection,
+      settingsRow,
+      pendingUnmatched,
+      sent,
+      received,
+      comments,
+      failures,
+      profiles,
+    ] = await Promise.all([
+      provider
+        ? ctx.tx.integrationConnection.findUnique({
+            where: { provider: instagramConnectionKey(provider) },
+          })
+        : null,
+      ctx.tx.appSetting.findUnique({ where: { key: INSTAGRAM_SETTINGS_KEY } }),
+      ctx.tx.inboundUnmatched.count({ where: { channel: 'INSTAGRAM', status: 'PENDING' } }),
+      ctx.tx.message.findMany({
+        where: {
+          channel: 'INSTAGRAM',
+          mode: 'API',
+          direction: 'OUTBOUND',
+          createdAt: { gte: monthStart },
+        },
+        select: { status: true, readAt: true },
+      }),
+      ctx.tx.message.count({
+        where: { channel: 'INSTAGRAM', direction: 'INBOUND', receivedAt: { gte: monthStart } },
+      }),
+      ctx.tx.socialComment.count({ where: { commentedAt: { gte: monthStart } } }),
+      ctx.tx.message.groupBy({
+        by: ['errorCode'],
+        where: {
+          channel: 'INSTAGRAM',
+          mode: 'API',
+          status: 'FAILED',
+          createdAt: { gte: monthStart },
+        },
+        _count: { _all: true },
+        orderBy: { _count: { errorCode: 'desc' } },
+        take: 5,
+      }),
+      // Consulta de perfis (F8-04): situação dos @ consultados.
+      ctx.tx.instagramProfile.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+        _max: { checkedAt: true },
+      }),
+    ]);
     return {
       provider,
       month: monthStart.toISOString().slice(0, 7),
@@ -281,6 +295,16 @@ export const getInstagramOverview = defineUseCase({
         failed: sent.filter((m) => m.status === 'FAILED').length,
         received,
         comments,
+      },
+      discovery: {
+        found: profiles.find((p) => p.status === 'FOUND')?._count._all ?? 0,
+        notFound: profiles.find((p) => p.status === 'NOT_FOUND')?._count._all ?? 0,
+        errors: profiles.find((p) => p.status === 'ERROR')?._count._all ?? 0,
+        lastCheckAt:
+          profiles
+            .map((p) => p._max.checkedAt)
+            .filter((d): d is Date => d !== null)
+            .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
       },
       failures: failures.map((f) => ({
         code: f.errorCode ?? 'desconhecido',

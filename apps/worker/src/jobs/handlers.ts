@@ -10,6 +10,7 @@ import {
   runImportPreview,
   runImportPurge,
   runInstagramAccountCheck,
+  runInstagramDiscovery,
   runInstagramSend,
   runInstagramSuggestClassification,
   runInstagramWebhook,
@@ -75,5 +76,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.instagramSuggestClassification.name]: async (data) =>
       runInstagramSuggestClassification(deps, data),
     [JOBS.instagramAccountCheck.name]: async () => runInstagramAccountCheck(deps),
+    [JOBS.instagramDiscovery.name]: async () => runInstagramDiscovery(deps),
   };
 }

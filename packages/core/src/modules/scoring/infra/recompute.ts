@@ -90,6 +90,25 @@ export async function loadScoreFacts(
       })
     ).map((m) => m.leadId),
   );
+  // "Instagram ativo" (Fase 8): última publicação conhecida pela consulta de
+  // perfis, só do @ que o contato ainda tem (o dado de um @ antigo não vale).
+  const lastPost = new Map<string, Date>();
+  const profiles = await tx.instagramProfile.findMany({
+    where: {
+      lastPostAt: { not: null },
+      contactPoint: { leadId: { in: leadIds }, type: 'INSTAGRAM', status: 'ACTIVE' },
+    },
+    select: {
+      handle: true,
+      lastPostAt: true,
+      contactPoint: { select: { leadId: true, valueNormalized: true } },
+    },
+  });
+  for (const p of profiles) {
+    if (p.handle !== p.contactPoint.valueNormalized || !p.lastPostAt) continue;
+    const current = lastPost.get(p.contactPoint.leadId);
+    if (!current || p.lastPostAt > current) lastPost.set(p.contactPoint.leadId, p.lastPostAt);
+  }
   const priority = codes.length
     ? new Set(
         (
@@ -116,9 +135,8 @@ export async function loadScoreFacts(
       tagIds: l.tags.map((t) => t.tagId),
       repliedBefore: l.firstReplyAt !== null,
       showedInterest: interested.has(l.id),
-      // Atividade do Instagram chega na Fase 8; avaliações do Google, só após a
-      // validação jurídica.
-      instagramLastPostAt: null,
+      instagramLastPostAt: lastPost.get(l.id) ?? null,
+      // Avaliações do Google, só após a validação jurídica.
       googleReviewsCount: null,
     },
     current: {

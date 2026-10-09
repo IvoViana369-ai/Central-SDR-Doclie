@@ -186,7 +186,8 @@ export const CRITERIA = {
         ? { matched: true, detail: `Última publicação há ${days} dias.` }
         : { matched: false, detail: `Última publicação há ${days} dias.` };
     },
-    availability: 'Dado de atividade do Instagram a partir da Fase 8.',
+    availability:
+      'Depende do Instagram pela API com a consulta de perfis ligada (Configurações > Instagram).',
   } satisfies CriterionDefinition<{ maxDaysSincePost: number }>,
   google_reviews_gte: {
     key: 'google_reviews_gte',
