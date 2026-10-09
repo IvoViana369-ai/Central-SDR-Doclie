@@ -30,4 +30,6 @@ export * from './modules/audit';
 export * from './modules/normalization';
 export * from './modules/compliance';
 export * from './modules/leads';
+export * from './modules/import';
+export * from './modules/dedup';
 export * from './jobs/catalog';

@@ -23,6 +23,9 @@ export const LEAD_EVENTS = {
   optOutRegistered: 'optout.registered',
   suppressionRevoked: 'suppression.revoked',
   anonymized: 'lead.anonymized',
+  originAdded: 'origin.added',
+  merged: 'lead.merged',
+  mergedInto: 'lead.merged_into',
 } as const;
 
 export type LeadEventType = (typeof LEAD_EVENTS)[keyof typeof LEAD_EVENTS];
@@ -47,4 +50,7 @@ export const LEAD_EVENT_LABELS: Record<LeadEventType, string> = {
   'optout.registered': 'Opt-out registrado',
   'suppression.revoked': 'Item da Lista Não Contatar revogado',
   'lead.anonymized': 'Lead anonimizado',
+  'origin.added': 'Encontrado em nova origem',
+  'lead.merged': 'Lead mesclado com outro',
+  'lead.merged_into': 'Lead mesclado em outro',
 };

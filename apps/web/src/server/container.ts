@@ -7,6 +7,7 @@ import {
   createEmailProvider,
   createErrorReporter,
   createLogger,
+  LazyPgBossJobQueue,
   type AppLogger,
   type ErrorReporter,
 } from '@docline/integrations';
@@ -41,6 +42,16 @@ export function getContainer(): WebContainer {
     passwordHasher: { hash: hashPassword },
     identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
     appUrl: env.APP_URL,
+    // O web só enfileira; os jobs rodam no worker.
+    jobs: new LazyPgBossJobQueue({
+      connectionString: env.DATABASE_URL,
+      schema: env.JOB_QUEUE_SCHEMA,
+      logger,
+    }),
+    importLimits: {
+      maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
+      maxRows: env.IMPORT_MAX_ROWS,
+    },
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,

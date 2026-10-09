@@ -50,6 +50,8 @@ const deps: CoreDeps = {
   },
   passwordHasher: { hash: async (password) => `hashed:${password}` },
   identifiers: createIdentifierHasher('pepper-de-teste-com-pelo-menos-32-caracteres'),
+  jobs: { enqueue: async () => null },
+  importLimits: { maxBytes: 10 * 1024 * 1024, maxRows: 50_000 },
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

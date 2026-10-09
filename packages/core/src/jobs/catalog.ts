@@ -21,6 +21,35 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 60,
   },
+  /** Lê a planilha enviada e grava as linhas (docs/ARCHITECTURE.md §10). */
+  importParse: {
+    name: 'import.parse',
+    retryLimit: 1,
+    retryDelaySeconds: 10,
+    expireInSeconds: 300,
+  },
+  /** Normaliza, valida e casa as linhas com a base e com a Lista Não Contatar. */
+  importPreview: {
+    name: 'import.preview',
+    retryLimit: 1,
+    retryDelaySeconds: 10,
+    expireInSeconds: 1800,
+  },
+  /** Grava as linhas confirmadas (retoma de onde parou, se o worker cair). */
+  importCommit: {
+    name: 'import.commit',
+    retryLimit: 3,
+    retryDelaySeconds: 30,
+    expireInSeconds: 3600,
+  },
+  /** Apaga as linhas temporárias vencidas e lotes abandonados (docs/LGPD.md §12). */
+  importPurge: {
+    name: 'import.purge',
+    cron: '17 4 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 300,
+    expireInSeconds: 900,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

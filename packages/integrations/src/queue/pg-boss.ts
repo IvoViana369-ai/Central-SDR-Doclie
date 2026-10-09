@@ -47,6 +47,32 @@ export async function ensureQueues(boss: PgBoss, jobs: JobDefinition[]): Promise
   }
 }
 
+/**
+ * Fila para quem só enfileira (web, CLI): o pg-boss sobe no primeiro uso,
+ * sem atrasar a inicialização nem abrir conexões à toa.
+ */
+export class LazyPgBossJobQueue implements JobQueue {
+  private boss: Promise<PgBoss> | null = null;
+
+  constructor(private readonly options: Omit<PgBossOptions, 'role'>) {}
+
+  private start(): Promise<PgBoss> {
+    this.boss ??= startPgBoss({ ...this.options, role: 'producer' }).catch((error: unknown) => {
+      this.boss = null;
+      throw error;
+    });
+    return this.boss;
+  }
+
+  async enqueue(name: string, data: object, options: EnqueueOptions = {}): Promise<string | null> {
+    return new PgBossJobQueue(await this.start()).enqueue(name, data, options);
+  }
+
+  async stop(): Promise<void> {
+    if (this.boss) await (await this.boss).stop({ graceful: true, timeout: 5_000 });
+  }
+}
+
 /** Implementação da porta JobQueue do core sobre o pg-boss. */
 export class PgBossJobQueue implements JobQueue {
   constructor(private readonly boss: PgBoss) {}

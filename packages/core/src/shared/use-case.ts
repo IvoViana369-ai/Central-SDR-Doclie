@@ -2,6 +2,7 @@ import type { DbClient, DbTransaction, Prisma } from '@docline/db';
 import type { z } from 'zod';
 import { roleHasPermission, type Permission } from '../modules/identity/domain/permissions';
 import type { EmailProvider } from '../ports/email';
+import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { Actor } from './actor';
 import type { Clock } from './clock';
@@ -20,6 +21,10 @@ export interface CoreDeps {
   identifiers: IdentifierHasher;
   /** URL pública da aplicação, usada em links de e-mail. */
   appUrl: string;
+  /** Fila de jobs do worker (leitura e gravação de importações, deduplicação). */
+  jobs: JobQueue;
+  /** Limites de importação (IMPORT_MAX_FILE_MB e IMPORT_MAX_ROWS). */
+  importLimits: { maxBytes: number; maxRows: number };
 }
 
 /** Metadados da requisição, gravados na auditoria. */

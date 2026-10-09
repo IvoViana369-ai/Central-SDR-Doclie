@@ -1,6 +1,7 @@
 import { getTestDb } from '@docline/db/testing';
 import type { Role, UserStatus } from '../modules/identity/domain/roles';
 import type { TransactionalEmail } from '../ports/email';
+import type { EnqueueOptions } from '../ports/job-queue';
 import type { Actor } from '../shared/actor';
 import { fixedClock, type Clock } from '../shared/clock';
 import { createIdentifierHasher } from '../shared/identifier-hash';
@@ -15,6 +16,8 @@ export function createTestDeps(options: { now?: Date } = {}) {
   const db = getTestDb();
   const clock: Clock = fixedClock(options.now ?? new Date('2026-10-13T12:00:00Z'));
   const sent: TransactionalEmail[] = [];
+  /** Jobs enfileirados (os testes executam os handlers diretamente). */
+  const enqueued: { name: string; data: object; options?: EnqueueOptions }[] = [];
   const noop = () => undefined;
   const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
   const deps: CoreDeps = {
@@ -30,6 +33,13 @@ export function createTestDeps(options: { now?: Date } = {}) {
     },
     passwordHasher: { hash: async (password) => `hashed:${password}` },
     identifiers: createIdentifierHasher('pepper-de-teste-com-pelo-menos-32-caracteres'),
+    jobs: {
+      async enqueue(name, data, options) {
+        enqueued.push({ name, data, options });
+        return `job-${enqueued.length}`;
+      },
+    },
+    importLimits: { maxBytes: 10 * 1024 * 1024, maxRows: 50_000 },
   };
 
   let counter = 0;
@@ -48,5 +58,5 @@ export function createTestDeps(options: { now?: Date } = {}) {
     return { user, actor };
   }
 
-  return { db, deps, sent, createActor };
+  return { db, deps, sent, enqueued, createActor };
 }

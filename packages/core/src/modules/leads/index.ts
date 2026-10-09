@@ -11,7 +11,12 @@ export {
   type DuplicateReason,
   type DuplicateReasonKind,
 } from './application/duplicates';
-export { createLead } from './application/create-lead';
+export {
+  createLead,
+  insertLead,
+  prepareLeadCreation,
+  type PreparedLead,
+} from './application/create-lead';
 export { updateLead } from './application/update-lead';
 export { getLead, type LeadDetail } from './application/get-lead';
 export { addPerson, removePerson, updatePerson } from './application/people';

@@ -14,7 +14,7 @@ import { getServerEnv } from '@docline/config';
 import { createIdentifierHasher, systemClock } from '@docline/core';
 import { seedDevLeads } from '@docline/core/dev';
 import { createDbClient } from '@docline/db';
-import { createEmailProvider, createLogger } from '@docline/integrations';
+import { createEmailProvider, createLogger, LazyPgBossJobQueue } from '@docline/integrations';
 import { hashPassword } from 'better-auth/crypto';
 
 const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
@@ -42,6 +42,11 @@ if (env.APP_ENV !== 'development') {
 }
 const logger = createLogger({ service: 'cli', level: env.LOG_LEVEL, appEnv: env.APP_ENV });
 const db = createDbClient(env.DATABASE_URL, { maxConnections: 2 });
+const jobs = new LazyPgBossJobQueue({
+  connectionString: env.DATABASE_URL,
+  schema: env.JOB_QUEUE_SCHEMA,
+  logger,
+});
 
 try {
   const started = Date.now();
@@ -54,6 +59,11 @@ try {
       passwordHasher: { hash: hashPassword },
       identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
       appUrl: env.APP_URL,
+      jobs,
+      importLimits: {
+        maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
+        maxRows: env.IMPORT_MAX_ROWS,
+      },
     },
     {
       count,
@@ -76,5 +86,6 @@ try {
   console.error(error);
   process.exitCode = 1;
 } finally {
+  await jobs.stop();
   await db.$disconnect();
 }

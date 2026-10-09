@@ -504,8 +504,10 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 | Job | Gatilho | O que faz | Fase |
 |---|---|---|---|
-| `import.preview` | Mapeamento salvo | Lê o arquivo em streaming, normaliza, valida, casa com a base e com a Lista Não Contatar, grava `import_rows` | 3 |
-| `import.commit` | Confirmação | Cria e atualiza leads em lotes de 500, emite eventos, gera candidatos a duplicado e relatório | 3 |
+| `import.parse` | Upload | Lê o arquivo (CSV/XLSX) com limites, grava as linhas como texto em `import_rows` e apaga os bytes na mesma transação | 3 |
+| `import.preview` | Mapeamento salvo | Normaliza e valida cada linha, casa com a base, com o próprio arquivo e com a Lista Não Contatar (lotes de 1.000 linhas) e propõe a decisão pela política do lote | 3 |
+| `import.commit` | Confirmação | Grava as linhas confirmadas, uma transação por linha (erro numa linha não derruba as outras), pelo mesmo caminho do cadastro manual. Emite eventos, sinaliza possíveis duplicados e gera o relatório. Retoma de onde parou | 3 |
+| `import.purge` | Diário (04:17 UTC) | Apaga as `import_rows` 30 dias após o lote e cancela lotes abandonados há mais de 7 dias | 3 |
 | `dedup.check-lead` | `lead.created` / `lead.updated` (identificadores) | Busca candidatos para um lead (índices exatos + trigram por cidade) | 3 |
 | `dedup.scan` | Diário (madrugada) e manual | Varredura completa em blocos (*blocking* por cidade/UF) | 3 |
 | `score.recompute-lead` | Eventos que mudam critérios | Recalcula score e grava histórico se mudou | 4 |
@@ -513,7 +515,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `cadence.tick` | A cada 5 min | Passos vencidos → tarefas (modo assistido) ou envios (Fase 7); fim da cadência → `NO_RESPONSE` | 5 |
 | `tasks.overdue-scan` | De hora em hora | Marca atrasos, recalcula prioridade, notifica | 5 |
 | `leads.forgotten-scan` | Diário | Marca leads sem atividade há N dias em etapas abertas | 5 |
-| `retention.enforce` | Diário | Purga `import_rows` vencidas, anonimiza conforme política | 3+ |
+| `retention.enforce` | Diário | Anonimiza conforme a política de retenção (as `import_rows` têm job próprio, `import.purge`) | 5+ |
 | `ai.generate-batch` | Agendado (opcional) | Pré-gera rascunhos para a fila do dia seguinte (Batch API, custo menor) | 6+ |
 | `webhook.process` | Webhook recebido | Processa eventos da Meta (status, mensagens, opt-out) | 7 |
 | `message.send` | Mensagem aprovada no modo API | Envia via provedor com retentativa e idempotência | 7 |
