@@ -15,6 +15,7 @@ import { LeadScoreCard, type LeadScoreView } from '@/components/pipeline/lead-sc
 import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead-stage-card';
 import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
 import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
+import { WhatsappCard, type LeadWhatsappView } from '@/components/whatsapp/whatsapp-card';
 import { api } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { ActivityCard, type TimelinePage } from './activity-card';
@@ -104,6 +105,8 @@ export interface LeadDetailPermissions {
   canClaim: boolean;
   canOptOut: boolean;
   canSetPermission: boolean;
+  /** Opt-in do WhatsApp por formulário, evento etc. (ADMIN/GESTOR). */
+  canRecordOptInEvidence: boolean;
   canAnonymize: boolean;
 }
 
@@ -121,6 +124,7 @@ export function LeadDetail({
   lead,
   gate,
   timeline,
+  whatsapp,
   sales,
   operation,
   permissions,
@@ -129,6 +133,8 @@ export function LeadDetail({
   lead: LeadDetailView;
   gate: GateResult[];
   timeline: TimelinePage;
+  /** WhatsApp pela API (Fase 7); `null` no modo assistido. */
+  whatsapp: LeadWhatsappView | null;
   sales: LeadSalesView;
   operation: LeadSalesData;
   permissions: LeadDetailPermissions;
@@ -296,6 +302,14 @@ export function LeadDetail({
             run={run}
             busy={busy}
           />
+          {whatsapp ? (
+            <WhatsappCard
+              leadId={lead.id}
+              data={whatsapp}
+              canEdit={permissions.canEdit}
+              canRecordEvidence={permissions.canRecordOptInEvidence}
+            />
+          ) : null}
           <ActivityCard leadId={lead.id} initial={timeline} />
         </div>
 

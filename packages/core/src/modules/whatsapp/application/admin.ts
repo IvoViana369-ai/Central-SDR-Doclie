@@ -18,7 +18,7 @@ import {
   WHATSAPP_SETTINGS_KEY,
   whatsappSettingsSchema,
 } from '../domain/settings';
-import { attachInbound } from '../infra/inbound';
+import { attachInbound, matchInbound } from '../infra/inbound';
 import { markConnection } from '../infra/effects';
 
 /**
@@ -373,6 +373,48 @@ export const linkUnmatchedInbound = defineUseCase({
     });
     await auditLead(ctx, lead.id, 'whatsapp.unmatched.link', { subjectId: row.id });
     return { leadId: lead.id };
+  },
+});
+
+/**
+ * "Procurar de novo": depois de cadastrar o lead (ou o telefone num lead), a
+ * mensagem é casada como as que chegam pelo webhook.
+ */
+export const retryUnmatchedInbound = defineUseCase({
+  name: 'whatsapp.unmatched.retry',
+  access: 'lead.assign',
+  input: z.object({ unmatchedId: z.uuid() }),
+  async run(ctx, input) {
+    const row = await ctx.tx.inboundUnmatched.findUnique({ where: { id: input.unmatchedId } });
+    if (!row || row.status !== 'PENDING')
+      throw new NotFoundError('Mensagem pendente não encontrada.');
+    const match = await matchInbound(ctx, row.externalThreadId);
+    if (match.kind !== 'matched') {
+      throw new BusinessRuleError(
+        match.candidateLeadIds.length > 1
+          ? 'O número está em mais de um lead: escolha o lead certo.'
+          : 'Ainda não há lead ativo com este número. Cadastre o lead (ou o telefone) e tente de novo.',
+      );
+    }
+    await attachInbound(ctx, match, {
+      waId: row.externalThreadId,
+      profileName: row.profileName,
+      providerMessageId: row.providerMessageId,
+      provider: row.provider,
+      receivedAt: row.receivedAt,
+      body: row.body ?? '[Mensagem sem texto]',
+    });
+    await ctx.tx.inboundUnmatched.update({
+      where: { id: row.id },
+      data: {
+        status: 'LINKED',
+        resolvedLeadId: match.leadId,
+        resolvedById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+        resolvedAt: ctx.now,
+      },
+    });
+    await auditLead(ctx, match.leadId, 'whatsapp.unmatched.link', { subjectId: row.id });
+    return { leadId: match.leadId };
   },
 });
 

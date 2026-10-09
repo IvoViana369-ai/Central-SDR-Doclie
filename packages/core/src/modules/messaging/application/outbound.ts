@@ -42,6 +42,13 @@ export const messageSelect = {
   approachId: true,
   contactPoint: { select: { id: true, type: true, valueNormalized: true } },
   sentBy: { select: { id: true, name: true } },
+  // Última sugestão de classificação da IA (pedida pela pessoa ou automática, F7-07).
+  aiClassifications: {
+    where: { kind: 'REPLY_CLASSIFICATION', status: 'GENERATED' },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { output: true, guardrailFlags: true },
+  },
 } satisfies Prisma.MessageSelect;
 
 type MessageRow = Prisma.MessageGetPayload<{ select: typeof messageSelect }>;
@@ -53,9 +60,29 @@ function contactDisplay(cp: { type: string; valueNormalized: string } | null): s
   return cp.valueNormalized;
 }
 
-export function describeMessage(m: MessageRow) {
+/** Sugestão guardada no formato que a tela mostra (ou nada, se fora do formato). */
+function suggestionOf(m: MessageRow) {
+  const row = m.aiClassifications[0];
+  const output = row?.output as Record<string, unknown> | null | undefined;
+  if (!output || typeof output.label !== 'string' || typeof output.confidence !== 'number') {
+    return null;
+  }
   return {
-    ...m,
+    label: output.label,
+    confidence: output.confidence,
+    rationale: typeof output.rationale === 'string' ? output.rationale : '',
+    suggestedNextStep: typeof output.suggestedNextStep === 'string' ? output.suggestedNextStep : '',
+    flags: Array.isArray(row!.guardrailFlags)
+      ? (row!.guardrailFlags as { code: string; message: string }[])
+      : [],
+  };
+}
+
+export function describeMessage(m: MessageRow) {
+  const { aiClassifications: _suggestions, ...rest } = m;
+  return {
+    ...rest,
+    suggestion: m.direction === 'INBOUND' && !m.classification ? suggestionOf(m) : null,
     contactPoint: m.contactPoint
       ? {
           id: m.contactPoint.id,

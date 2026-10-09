@@ -5,6 +5,7 @@ import {
   History,
   ListOrdered,
   MapPin,
+  MessageCircle,
   Sparkles,
   SquareKanban,
   type LucideIcon,
@@ -60,6 +61,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'IA de prospecção',
     description: 'Base de conhecimento, abordagens e regras dos rascunhos.',
     Icon: Sparkles,
+  },
+  {
+    href: '/configuracoes/whatsapp',
+    title: 'WhatsApp',
+    description: 'Número na Meta, modelos aprovados, envios do mês, preços e automação.',
+    Icon: MessageCircle,
   },
 ];
 

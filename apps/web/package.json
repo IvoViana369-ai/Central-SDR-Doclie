@@ -12,6 +12,7 @@
     "seed:dev": "tsx scripts/seed-dev.ts",
     "ai:eval": "tsx scripts/ai-eval.ts",
     "perf:100k": "tsx scripts/perf-100k.ts",
+    "whatsapp:simulate": "tsx scripts/whatsapp-simulate.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

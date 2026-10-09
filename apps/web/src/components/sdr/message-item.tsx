@@ -70,6 +70,7 @@ export function MessageItem({
           {canEdit && m.classification !== 'OPT_OUT' && m.body ? (
             <ClassifySuggestion
               messageId={m.id}
+              initial={m.suggestion ?? undefined}
               disabled={busy}
               onUse={(classification) =>
                 run(

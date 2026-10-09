@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Megaphone,
+  MessageCircle,
   MessagesSquare,
   Plug,
   Radar,
@@ -68,6 +69,14 @@ export const NAVIGATION: NavGroup[] = [
         phase: 4,
         permission: 'lead.read',
         description: 'Kanban das etapas do SDR.',
+      },
+      {
+        label: 'Conversas',
+        href: '/conversas',
+        icon: MessageCircle,
+        phase: 7,
+        permission: 'lead.read',
+        description: 'WhatsApp pela API: respostas, janela de 24 h e números sem lead.',
       },
     ],
   },
@@ -164,7 +173,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 6;
+export const CURRENT_PHASE = 7;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

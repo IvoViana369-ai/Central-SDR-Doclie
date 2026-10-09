@@ -10,6 +10,9 @@ export const baseURL = `http://localhost:${PORT}`;
 const testDatabaseUrl =
   process.env.DATABASE_URL_TEST ?? 'postgresql://docline:docline@localhost:5432/docline_sdr_test';
 export const OUTBOX_FILE = fileURLToPath(new URL('./e2e/.state/outbox.jsonl', import.meta.url));
+/** WhatsApp simulado (Fase 7): os testes assinam os webhooks como a Meta. */
+export const META_APP_SECRET = 'e2e-meta-app-secret-nao-real';
+export const META_WEBHOOK_VERIFY_TOKEN = 'e2e-verify-token-nao-real';
 
 /** Navegador pré-instalado (ambientes sem download de browsers). */
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -52,6 +55,9 @@ export default defineConfig({
       SUPPRESSION_HASH_PEPPER:
         process.env.SUPPRESSION_HASH_PEPPER ?? 'e2e-pepper-com-pelo-menos-32-caracteres!!',
       LOG_LEVEL: 'warn',
+      WHATSAPP_PROVIDER: 'fake',
+      META_APP_SECRET,
+      META_WEBHOOK_VERIFY_TOKEN,
     },
   },
 });

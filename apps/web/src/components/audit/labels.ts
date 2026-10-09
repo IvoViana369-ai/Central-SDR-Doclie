@@ -110,6 +110,16 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'ai.rules': 'Regras da IA alteradas',
   'approach.create': 'Abordagem criada',
   'approach.update': 'Abordagem alterada',
+  'whatsapp.optin': 'Opt-in do WhatsApp registrado',
+  'whatsapp.optin.revoke': 'Opt-in do WhatsApp revogado',
+  'whatsapp.send': 'Envio pelo WhatsApp (API) pedido',
+  'whatsapp.retry': 'Envio pelo WhatsApp (API) repetido',
+  'whatsapp.failed': 'Envio pelo WhatsApp (API) falhou',
+  'whatsapp.templates.sync': 'Modelos do WhatsApp sincronizados',
+  'whatsapp.templates.update': 'Modelo do WhatsApp alterado',
+  'whatsapp.settings': 'Configuração do WhatsApp alterada',
+  'whatsapp.unmatched.link': 'Mensagem de número sem lead vinculada',
+  'whatsapp.unmatched.dismiss': 'Mensagem de número sem lead descartada',
 };
 
 export function auditActionLabel(action: string): string {

@@ -4,6 +4,7 @@ import {
   getLeadCadence,
   getLeadContactability,
   getLeadScore,
+  getLeadWhatsapp,
   getPipeline,
   listCadences,
   listLeadMessages,
@@ -64,12 +65,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       getContactRules(deps, actor, {}, meta),
     ]);
   const privileged = actor.role === 'ADMIN' || actor.role === 'MANAGER';
+  // WhatsApp pela API (Fase 7): só com o provedor ligado (fora do modo assistido).
+  const whatsapp = deps.whatsapp ? await getLeadWhatsapp(deps, actor, { leadId: id }, meta) : null;
 
   return (
     <LeadDetail
       lead={lead}
       gate={gate.channels}
       timeline={timeline}
+      whatsapp={whatsapp}
       sales={{
         stages: pipeline.stages,
         lossReasons,
@@ -102,6 +106,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         canClaim: actor.role === 'SDR' && lead.ownerId === null && lead.status === 'ACTIVE',
         canOptOut: can('optout.register'),
         canSetPermission: can('permission.update'),
+        canRecordOptInEvidence: can('permission.update'),
         canAnonymize: can('lead.anonymize'),
       }}
     />

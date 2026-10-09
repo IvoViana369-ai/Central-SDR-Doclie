@@ -12,6 +12,7 @@ export {
   getWhatsappSettings,
   linkUnmatchedInbound,
   listUnmatchedInbound,
+  retryUnmatchedInbound,
   runWhatsappHealthCheck,
   runWhatsappSuggestClassification,
   runWhatsappTemplateSync,
@@ -24,3 +25,9 @@ export {
   runWebhooksPurge,
   runWhatsappWebhook,
 } from './application/webhooks';
+export {
+  getLeadWhatsapp,
+  getWhatsappOverview,
+  listConversations,
+  listWhatsappTemplates,
+} from './application/reads';

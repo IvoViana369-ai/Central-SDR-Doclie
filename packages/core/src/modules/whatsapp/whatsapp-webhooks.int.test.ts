@@ -10,6 +10,10 @@ import { DEFAULT_CONTACT_RULES, updateContactRules } from '../settings';
 import {
   checkWhatsappHealth,
   dismissUnmatchedInbound,
+  getLeadWhatsapp,
+  getWhatsappOverview,
+  listConversations,
+  retryUnmatchedInbound,
   FAKE_TEMPLATES,
   FakeWhatsappProvider,
   linkUnmatchedInbound,
@@ -461,6 +465,81 @@ describe('WhatsApp pela API: webhooks (F7-02, F7-03, F7-04, F7-06, F7-07, F7-08)
       body('phone_number_quality_update', { event: 'DOWNGRADE', current_limit: 'TIER_250' }),
     );
     expect(enqueued.map((j) => j.name)).toContain('whatsapp.health-check');
+  });
+
+  it('leituras: ficha, conversas no escopo, visão do mês; "procurar de novo" depois do cadastro', async () => {
+    const { leadId, contactPointId, waId } = await leadWithPhone('Escritório Umbu');
+    const sent = await sentTemplate(leadId, contactPointId);
+    await deliver(
+      statusBody([
+        {
+          id: sent.providerMessageId,
+          status: 'delivered',
+          timestamp: unix('2026-10-13T12:01:00Z'),
+          recipient_id: waId,
+          pricing: { billable: true, category: 'marketing' },
+        },
+      ]),
+    );
+    await deliver(inboundBody(waId, 'wamid.leitura', 'Pode ser amanhã?', '2026-10-13T12:05:00Z'));
+    at('2026-10-13T12:10:00Z');
+
+    const view = await getLeadWhatsapp(deps, sdr, { leadId });
+    expect(view).toMatchObject({ provider: 'fake', leadActive: true, gate: { allowed: true } });
+    expect(view.numbers).toEqual([
+      expect.objectContaining({
+        contactPointId,
+        display: expect.stringMatching(/^\(88\) 99812-/),
+        optIn: expect.objectContaining({ status: 'GRANTED', method: 'FORM' }),
+        window: { open: true, expiresAt: new Date('2026-10-14T12:05:00Z') },
+        usable: true,
+      }),
+    ]);
+    expect(view.messages.map((m) => [m.direction, m.status, m.retry])).toEqual([
+      ['OUTBOUND', 'DELIVERED', 'none'],
+      ['INBOUND', 'RECEIVED', 'none'],
+    ]);
+    expect(view.templates.map((t) => t.name)).toEqual([
+      'apresentacao_parceria',
+      'confirmacao_reuniao',
+      'retomada_contato',
+    ]);
+
+    // Conversas: o SDR vê as dos seus leads; a que espera resposta aparece em destaque.
+    const otherSdr = (await createActor('SDR')).actor;
+    expect(await listConversations(deps, otherSdr, {})).toEqual([]);
+    const attention = await listConversations(deps, sdr, { filter: 'attention' });
+    expect(attention).toEqual([
+      expect.objectContaining({
+        awaitingReply: true,
+        lead: expect.objectContaining({ id: leadId }),
+      }),
+    ]);
+
+    const overview = await getWhatsappOverview(deps, admin, {});
+    expect(overview).toMatchObject({
+      provider: 'fake',
+      month: '2026-10',
+      totals: { requested: 1, accepted: 1, delivered: 1, read: 0, failed: 0, costUsd: 0.0625 },
+      byCategory: [{ category: 'marketing', count: 1, costUsd: 0.0625 }],
+    });
+    await expect(getWhatsappOverview(deps, manager, {})).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Número que ainda não estava em lead: cadastrado depois, "procurar de novo" casa a mensagem.
+    await deliver(inboundBody('5588998127499', 'wamid.novo', 'Olá', '2026-10-13T12:06:00Z'));
+    const [pending] = await listUnmatchedInbound(deps, manager, {});
+    await expect(
+      retryUnmatchedInbound(deps, manager, { unmatchedId: pending!.id }),
+    ).rejects.toThrow(/Ainda não há lead ativo/);
+    const later = await leadWithPhone('Escritório Novo', {
+      contactPoints: [{ type: 'PHONE', value: '(88) 99812-7499', isWhatsapp: true }],
+    });
+    expect(await retryUnmatchedInbound(deps, manager, { unmatchedId: pending!.id })).toEqual({
+      leadId: later.leadId,
+    });
+    expect(
+      await db.message.findFirstOrThrow({ where: { providerMessageId: 'wamid.novo' } }),
+    ).toMatchObject({ leadId: later.leadId, direction: 'INBOUND' });
   });
 
   it('mesclagem leva conversas e opt-in; anonimização e purga apagam o que cita o titular', async () => {

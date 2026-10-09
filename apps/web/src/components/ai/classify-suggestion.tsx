@@ -21,14 +21,19 @@ interface Suggestion {
  */
 export function ClassifySuggestion({
   messageId,
+  initial,
   disabled,
   onUse,
 }: {
   messageId: string;
+  /** Sugestão já feita (ex.: automática, assim que a resposta chegou pelo WhatsApp). */
+  initial?: { label: string } & Omit<Suggestion, 'label'>;
   disabled?: boolean;
   onUse: (classification: string) => void;
 }) {
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(
+    initial ? (initial as Suggestion) : null,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

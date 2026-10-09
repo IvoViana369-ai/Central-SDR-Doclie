@@ -45,6 +45,14 @@ export interface MessageView {
   optOutMatch: string | null;
   contactPoint: { id: string; type: string; display: string | null } | null;
   sentBy: { id: string; name: string } | null;
+  /** Sugestão de classificação da IA já pedida (inclusive a automática do WhatsApp, F7-07). */
+  suggestion?: {
+    label: string;
+    confidence: number;
+    rationale: string;
+    suggestedNextStep: string;
+    flags: { code: string; message: string }[];
+  } | null;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
