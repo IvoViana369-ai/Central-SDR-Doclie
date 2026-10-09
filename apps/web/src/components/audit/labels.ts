@@ -100,6 +100,16 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'opportunity.accept': 'Transferência aceita',
   'opportunity.won': 'Oportunidade ganha',
   'opportunity.lost': 'Oportunidade perdida',
+  'ai.generate': 'Rascunho gerado pela IA',
+  'ai.edit': 'Rascunho da IA editado',
+  'ai.approve': 'Rascunho da IA aprovado',
+  'ai.discard': 'Rascunho da IA descartado',
+  'ai.rate': 'Rascunho da IA avaliado',
+  'ai.classify_suggest': 'Classificação sugerida pela IA',
+  'ai.knowledge.upsert': 'Fato da base de conhecimento salvo',
+  'ai.rules': 'Regras da IA alteradas',
+  'approach.create': 'Abordagem criada',
+  'approach.update': 'Abordagem alterada',
 };
 
 export function auditActionLabel(action: string): string {

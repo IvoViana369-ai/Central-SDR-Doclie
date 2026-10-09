@@ -1,8 +1,11 @@
 'use client';
 
+import type { GenerationView } from '@docline/core';
+import { OUTREACH_KINDS } from '@docline/core/ai-domain';
 import { CHANNEL_LABELS, MESSAGE_TYPE_LABELS } from '@docline/core/messaging-domain';
-import { Copy, ExternalLink } from 'lucide-react';
+import { Copy, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { DraftNotes, DraftRating } from '@/components/ai/draft-notes';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -29,6 +32,22 @@ interface Prepared {
   message: MessageView;
   link: string | null;
 }
+
+interface ApproachOption {
+  id: string;
+  name: string;
+}
+
+const DISCARD_REASONS = [
+  'Texto genérico',
+  'Informação errada ou inventada',
+  'Tom inadequado',
+  'Longo demais',
+  'Prefiro escrever do meu jeito',
+];
+
+const isOutreachKind = (value: string): value is (typeof OUTREACH_KINDS)[number] =>
+  (OUTREACH_KINDS as readonly string[]).includes(value);
 
 /**
  * Contato assistido (MVP M13; docs/SDR-FLOW.md §6): o gate decide o canal, o
@@ -65,6 +84,14 @@ export function ContactDialog({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Rascunho da IA (M12): o texto vai para a mensagem e só sai com aprovação.
+  const [draft, setDraft] = useState<GenerationView | null>(null);
+  const [checkedText, setCheckedText] = useState('');
+  const [approaches, setApproaches] = useState<ApproachOption[] | null>(null);
+  const [approachId, setApproachId] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [discarding, setDiscarding] = useState(false);
+  const [discardReason, setDiscardReason] = useState(DISCARD_REASONS[0]!);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,20 +115,100 @@ export function ContactDialog({
   // O que a tela mostra é o que vai no envio (o principal, se nada foi escolhido).
   const selected = usable.find((cp) => cp.id === contactPointId) ?? usable[0];
 
+  function loadApproaches() {
+    if (approaches) return;
+    api<{ data: ApproachOption[] }>('/approaches')
+      .then((result) => setApproaches(result.data))
+      .catch(() => setApproaches([]));
+  }
+
+  async function generate() {
+    if (!isOutreachKind(messageType)) return;
+    setBusy(true);
+    setError(null);
+    setDiscarding(false);
+    try {
+      const result = await api<GenerationView>('/ai/generations', {
+        method: 'POST',
+        body: {
+          leadId: lead.id,
+          kind: messageType,
+          channel,
+          approachId: approachId || null,
+          instructions: instructions.trim() || null,
+          replacesGenerationId: draft?.id ?? null,
+        },
+      });
+      if (result.status === 'BLOCKED') {
+        setDraft(null);
+        setError(
+          `A IA não gera mensagem para este lead agora: ${result.flags.map((f) => f.message).join(' ')}`,
+        );
+        return;
+      }
+      setDraft(result);
+      setBody(result.text ?? '');
+      setCheckedText(result.text ?? '');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível gerar o rascunho.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Texto editado: confere de novo os guardrails (sem chamar a IA). */
+  async function recheck() {
+    if (!draft || !body.trim() || body === checkedText) return;
+    try {
+      const result = await api<GenerationView>(`/ai/generations/${draft.id}`, {
+        method: 'PATCH',
+        body: { text: body },
+      });
+      setDraft(result);
+      setCheckedText(body);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível conferir o texto.');
+    }
+  }
+
+  async function discard() {
+    if (!draft) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/ai/generations/${draft.id}/discard`, {
+        method: 'POST',
+        body: { reason: discardReason },
+      });
+      if (body === draft.text || body === draft.textGenerated) setBody('');
+      setDraft(null);
+      setDiscarding(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível descartar.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function prepare() {
     setBusy(true);
     setError(null);
     try {
-      const response = await api<Prepared>(`/leads/${lead.id}/messages/assisted`, {
-        method: 'POST',
-        body: {
-          channel,
-          contactPointId: selected?.id ?? null,
-          body,
-          messageType,
-          taskId: task?.id ?? null,
-        },
-      });
+      const response = draft
+        ? await api<Prepared>(`/ai/generations/${draft.id}/approve`, {
+            method: 'POST',
+            body: { text: body, contactPointId: selected?.id ?? null, taskId: task?.id ?? null },
+          })
+        : await api<Prepared>(`/leads/${lead.id}/messages/assisted`, {
+            method: 'POST',
+            body: {
+              channel,
+              contactPointId: selected?.id ?? null,
+              body,
+              messageType,
+              taskId: task?.id ?? null,
+            },
+          });
       setPrepared(response);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível preparar o envio.');
@@ -160,6 +267,7 @@ export function ContactDialog({
                   setChannel(e.target.value as AssistedChannel);
                   setContactPointId('');
                 }}
+                disabled={Boolean(draft)}
               >
                 {CHANNELS.map((c) => {
                   const r = gate?.channels.find((g) => g.channel === c);
@@ -200,7 +308,7 @@ export function ContactDialog({
                 id="contactMessageType"
                 value={messageType}
                 onChange={(e) => setMessageType(e.target.value)}
-                disabled={Boolean(task?.messageType)}
+                disabled={Boolean(task?.messageType) || Boolean(draft)}
               >
                 {TYPES_FOR_CONTACT.map((t) => (
                   <option key={t} value={t}>
@@ -209,6 +317,100 @@ export function ContactDialog({
                 ))}
               </Select>
             </Field>
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generate}
+                  disabled={busy || !result?.allowed || !isOutreachKind(messageType)}
+                >
+                  {draft ? <RefreshCw /> : <Sparkles />}
+                  {draft ? 'Gerar de novo' : 'Gerar com IA'}
+                </Button>
+                {draft ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setDiscarding((v) => !v)}
+                  >
+                    Descartar rascunho
+                  </Button>
+                ) : null}
+                {!isOutreachKind(messageType) ? (
+                  <span className="text-xs text-muted-foreground">
+                    Escolha o tipo de mensagem para gerar com IA.
+                  </span>
+                ) : null}
+              </div>
+              <details onToggle={loadApproaches}>
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  Orientar a IA (opcional)
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <Field label="Abordagem" htmlFor="aiApproach">
+                    <Select
+                      id="aiApproach"
+                      value={approachId}
+                      onChange={(e) => setApproachId(e.target.value)}
+                    >
+                      <option value="">Sem abordagem específica</option>
+                      {(approaches ?? []).map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field
+                    label="Instruções para a IA"
+                    htmlFor="aiInstructions"
+                    hint="Ex.: mencionar o evento do CRC. Não coloque telefones, e-mails ou links."
+                  >
+                    <Textarea
+                      id="aiInstructions"
+                      rows={2}
+                      maxLength={500}
+                      value={instructions}
+                      onChange={(e) => setInstructions(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </details>
+              {discarding && draft ? (
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label="Por que descartar?" htmlFor="aiDiscardReason">
+                    <Select
+                      id="aiDiscardReason"
+                      value={discardReason}
+                      onChange={(e) => setDiscardReason(e.target.value)}
+                    >
+                      {DISCARD_REASONS.map((r) => (
+                        <option key={r}>{r}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={busy}
+                    onClick={discard}
+                  >
+                    Confirmar descarte
+                  </Button>
+                </div>
+              ) : null}
+              {draft ? (
+                <DraftNotes
+                  draft={draft}
+                  onApplySuggestion={(text) => setBody((current) => `${current.trimEnd()} ${text}`)}
+                />
+              ) : null}
+            </div>
             <Field
               label="Mensagem"
               htmlFor="contactBody"
@@ -220,6 +422,7 @@ export function ContactDialog({
                 maxLength={4000}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
+                onBlur={() => void recheck()}
               />
             </Field>
             {error ? <Alert variant="error">{error}</Alert> : null}
@@ -228,7 +431,7 @@ export function ContactDialog({
                 Cancelar
               </Button>
               <Button type="submit" disabled={busy || !gate || !result?.allowed || !body.trim()}>
-                Preparar envio
+                {draft ? 'Aprovar e preparar envio' : 'Preparar envio'}
               </Button>
             </div>
           </form>
@@ -258,6 +461,7 @@ export function ContactDialog({
               Enviou? Confirme para registrar o contato e avançar a cadência. Se não enviou,
               cancele.
             </p>
+            {draft ? <DraftRating generationId={draft.id} /> : null}
             {error ? <Alert variant="error">{error}</Alert> : null}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" disabled={busy} onClick={() => finish('cancel')}>

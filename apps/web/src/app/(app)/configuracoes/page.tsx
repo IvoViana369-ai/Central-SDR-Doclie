@@ -5,6 +5,7 @@ import {
   History,
   ListOrdered,
   MapPin,
+  Sparkles,
   SquareKanban,
   type LucideIcon,
 } from 'lucide-react';
@@ -53,6 +54,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'Regras de contato',
     description: 'Horário, limites, prazos da fila e palavras de opt-out.',
     Icon: Clock,
+  },
+  {
+    href: '/configuracoes/ia',
+    title: 'IA de prospecção',
+    description: 'Base de conhecimento, abordagens e regras dos rascunhos.',
+    Icon: Sparkles,
   },
 ];
 

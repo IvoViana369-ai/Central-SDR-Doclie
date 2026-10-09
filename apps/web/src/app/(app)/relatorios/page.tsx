@@ -12,8 +12,9 @@ import {
   METRICS,
   type MetricKey,
 } from '@docline/core/analytics-domain';
-import { Download } from 'lucide-react';
+import { Download, Sparkles } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AccessDenied } from '@/components/access-denied';
 import { BreakdownTable } from '@/components/analytics/breakdown-table';
@@ -123,6 +124,13 @@ export default async function ReportsPage({
       <PageHeader
         title="Relatórios"
         description={`${scope.person ? `Números de ${scope.person.name}` : 'Toda a equipe'} · ${fmtDate(scope.from)} a ${fmtDate(scope.to)}. As exportações ficam registradas na auditoria.`}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/relatorios/ia">
+              <Sparkles aria-hidden /> Uso e custos da IA
+            </Link>
+          </Button>
+        }
       />
       {notice ? (
         <Alert variant="error" className="mb-4">

@@ -7,6 +7,7 @@ import {
 } from '@docline/core/messaging-domain';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
+import { ClassifySuggestion } from '@/components/ai/classify-suggestion';
 import type { useAction } from '@/components/leads/use-action';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,22 @@ export function MessageItem({
           ) : (
             <Badge variant="warning">Sem classificação</Badge>
           )}
+          {canEdit && m.classification !== 'OPT_OUT' && m.body ? (
+            <ClassifySuggestion
+              messageId={m.id}
+              disabled={busy}
+              onUse={(classification) =>
+                run(
+                  () =>
+                    api(`/messages/${m.id}/classify`, {
+                      method: 'POST',
+                      body: { classification },
+                    }),
+                  'Resposta classificada.',
+                )
+              }
+            />
+          ) : null}
           {canEdit && m.classification !== 'OPT_OUT' ? (
             <Select
               aria-label="Classificar resposta"

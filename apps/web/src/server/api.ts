@@ -47,6 +47,7 @@ const TITLES: Record<string, string> = {
   POSSIBLE_DUPLICATE: 'Possível duplicado',
   BUSINESS_RULE: 'Regra de negócio',
   RATE_LIMITED: 'Limite atingido',
+  EXTERNAL_SERVICE: 'Serviço externo indisponível',
 };
 
 function problem(

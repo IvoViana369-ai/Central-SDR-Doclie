@@ -3,9 +3,9 @@ import { baseURL } from '../playwright.config';
 import { ADMIN, lastInviteLinkFor, signIn, watchCsp } from './helpers';
 
 /**
- * Fase 6: dashboard e relatórios (M16). Dados fictícios; a administradora
- * registra um contato e uma resposta pela API para movimentar os números.
- * Com E2E_SCREENSHOT_DIR, guarda capturas das telas (revisão visual).
+ * Fase 6: IA de prospecção (M12) com o provedor falso (sem custo e sem dados
+ * para terceiros), dashboard e relatórios (M16). Dados fictícios. Com
+ * E2E_SCREENSHOT_DIR, guarda capturas das telas (revisão visual).
  */
 test.describe.configure({ mode: 'serial', timeout: 90_000 });
 
@@ -47,6 +47,121 @@ async function createOwnLead(page: Page, tradeName: string, phone: string): Prom
   expect(created.status()).toBe(201);
   return ((await created.json()) as { id: string }).id;
 }
+
+test('IA: ADMIN cadastra fato e abordagem', async ({ page }) => {
+  const assertNoCsp = watchCsp(page);
+  await signIn(page, ADMIN.email, ADMIN.password);
+  await page.goto('/configuracoes/ia');
+  await expect(page.getByRole('heading', { name: 'IA de prospecção', level: 1 })).toBeVisible();
+  await expect(page.getByText('IA real desligada')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Novo fato' }).click();
+  await page.getByLabel('Chave').fill('parceria contábil');
+  await page.getByLabel('Título').fill('Programa de parceria');
+  await page
+    .getByLabel('Conteúdo')
+    .fill(
+      'A Docline tem um programa de parceria para escritórios de contabilidade (texto de teste).',
+    );
+  await page.getByRole('button', { name: 'Salvar e aprovar' }).click();
+  await expect(page.getByText('Fato salvo e aprovado.')).toBeVisible();
+  await expect(page.getByText('PARCERIA_CONTABIL · v1')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Nova abordagem' }).click();
+  await page.getByLabel('Chave').fill('VIDEO');
+  await page.getByLabel('Nome').fill('Validação por vídeo');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Abordagem salva.')).toBeVisible();
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/configuracoes-ia.png`, fullPage: true });
+  assertNoCsp();
+});
+
+test('aceite M12: gerar com IA, revisar avisos, corrigir, aprovar, enviar e avaliar', async ({
+  page,
+}) => {
+  const assertNoCsp = watchCsp(page);
+  await signIn(page, ADMIN.email, ADMIN.password);
+  const id = await createOwnLead(page, 'Escritório IA Teste', '(88) 99812-6602');
+  await page.goto(`/leads/${id}`);
+  await page
+    .getByTestId('contact-point')
+    .first()
+    .getByRole('button', { name: 'WhatsApp', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Enviar mensagem' });
+  await dialog.getByLabel('Tipo de mensagem').selectOption('FIRST_CONTACT');
+  await dialog.getByRole('button', { name: 'Gerar com IA' }).click();
+
+  const message = dialog.getByLabel('Mensagem', { exact: true });
+  await expect(message).toHaveValue(/Sou Ana, da Docline/);
+  const notes = dialog.getByTestId('ai-draft-notes');
+  await expect(notes).toContainText('Rascunho da IA');
+  await expect(notes).toContainText('IA de demonstração');
+  await expect(notes).toContainText('Sem nome do responsável');
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/rascunho-ia.png` });
+
+  // Termo proibido no texto editado: a aprovação fica bloqueada até corrigir.
+  const generated = await message.inputValue();
+  await message.fill(`${generated} Promoção imperdível!`);
+  await message.blur();
+  await expect(notes).toContainText('Corrija antes de aprovar');
+  await dialog.getByRole('button', { name: 'Aprovar e preparar envio' }).click();
+  await expect(
+    dialog.getByRole('alert').filter({ hasText: 'Corrija antes de aprovar: Termo não permitido' }),
+  ).toBeVisible();
+  await message.fill(generated);
+  await message.blur();
+  await expect(notes).not.toContainText('Corrija antes de aprovar');
+
+  // Aprovado: o texto aprovado é o que vai no link; o envio só conta com a confirmação.
+  await dialog.getByRole('button', { name: 'Aprovar e preparar envio' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Envie e confirme' });
+  await expect(confirm.getByRole('link', { name: 'Abrir no WhatsApp' })).toHaveAttribute(
+    'href',
+    `https://wa.me/5588998126602?text=${encodeURIComponent(generated)}`,
+  );
+  await confirm.getByRole('button', { name: 'Nota 4' }).click();
+  await expect(confirm.getByText('Obrigado!')).toBeVisible();
+  await confirm.getByRole('button', { name: 'Confirmar envio' }).click();
+  await expect(page.getByText('Envio registrado.')).toBeVisible();
+
+  const drafts = await api(page).json<{
+    data: { status: string; rating: number; editDistanceRatio: number; approvedBy: object }[];
+  }>(`/leads/${id}/ai-generations`);
+  expect(drafts.data[0]).toMatchObject({ status: 'SENT', rating: 4, editDistanceRatio: 0 });
+  expect(drafts.data[0]!.approvedBy).toBeTruthy();
+
+  // Sugestão de classificação: a IA sugere, a pessoa confirma.
+  expect(
+    (
+      await api(page).post(`/leads/${id}/replies`, {
+        channel: 'WHATSAPP',
+        body: 'Tenho interesse, pode me ligar amanhã?',
+      })
+    ).status(),
+  ).toBe(201);
+  await page.reload();
+  const reply = page.getByTestId('message').filter({ hasText: 'Tenho interesse' });
+  await expect(reply).toContainText('Sem classificação');
+  await reply.getByRole('button', { name: 'Sugerir com IA' }).click();
+  await expect(reply).toContainText('Sugestão da IA: Interessado');
+  await reply.getByRole('button', { name: 'Usar sugestão' }).click();
+  await expect(page.getByText('Resposta classificada.')).toBeVisible();
+  await expect(reply).toContainText('Interessado');
+  assertNoCsp();
+});
+
+test('IA: uso e custos do mês para ADMIN e GESTOR', async ({ page }) => {
+  await signIn(page, ADMIN.email, ADMIN.password);
+  await page.goto('/relatorios');
+  await page.getByRole('link', { name: 'Uso e custos da IA' }).click();
+  await expect(page.getByRole('heading', { name: 'Uso e custos da IA', level: 1 })).toBeVisible();
+  const summary = page.getByRole('region', { name: 'Resumo do mês' });
+  await expect(summary).toContainText('Pedidos à IA');
+  await expect(summary).toContainText('Aprovados sem edição');
+  await expect(page.getByRole('cell', { name: 'Primeiro contato' })).toBeVisible();
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/uso-ia.png`, fullPage: true });
+});
 
 test('aceite M16: dashboard com indicadores, evolução diária, funis e quebras', async ({
   page,
