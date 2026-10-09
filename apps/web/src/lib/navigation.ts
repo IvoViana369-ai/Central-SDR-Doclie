@@ -163,7 +163,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 2;
+export const CURRENT_PHASE = 3;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

@@ -1,4 +1,9 @@
-import type { DuplicatePolicy, ImportMatchStatus, ImportRowDecision } from '@docline/db';
+import type {
+  DuplicatePolicy,
+  ImportMatchStatus,
+  ImportRowDecision,
+  ImportStatus,
+} from '@docline/db';
 
 /** Motivo do casamento de uma linha (valores sempre mascarados). */
 export interface MatchReason {
@@ -6,6 +11,17 @@ export interface MatchReason {
     'CNPJ' | 'CNPJ_ROOT' | 'PHONE' | 'EMAIL' | 'INSTAGRAM' | 'NAME_CITY' | 'IN_FILE' | 'SUPPRESSED';
   detail: string;
 }
+
+export const IMPORT_STATUS_LABELS: Record<ImportStatus, string> = {
+  UPLOADED: 'Lendo o arquivo',
+  MAPPING: 'Aguardando o mapeamento',
+  PREVIEWING: 'Gerando a prévia',
+  PREVIEW_READY: 'Prévia pronta',
+  COMMITTING: 'Gravando',
+  COMPLETED: 'Concluída',
+  FAILED: 'Falhou',
+  CANCELED: 'Cancelada',
+};
 
 export const MATCH_STATUS_LABELS: Record<ImportMatchStatus, string> = {
   NEW: 'Novo',

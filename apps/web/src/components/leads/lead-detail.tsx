@@ -26,6 +26,8 @@ export interface LeadDetailView {
   codeLabel: string;
   version: number;
   status: 'ACTIVE' | 'ARCHIVED' | 'MERGED' | 'ANONYMIZED';
+  /** Para leads mesclados: o lead que reuniu os dados. */
+  mergedInto: { id: string; codeLabel: string } | null;
   displayName: string;
   companyName: string | null;
   tradeName: string | null;
@@ -235,6 +237,15 @@ export function LeadDetail({
       </div>
 
       {notice ? <Alert variant={notice.variant}>{notice.text}</Alert> : null}
+      {lead.status === 'MERGED' && lead.mergedInto ? (
+        <Alert title="Lead mesclado">
+          Contatos, pessoas, observações e histórico foram reunidos em{' '}
+          <Link href={`/leads/${lead.mergedInto.id}`} className="font-medium underline">
+            {lead.mergedInto.codeLabel}
+          </Link>
+          . Este registro fica só para consulta; nada foi excluído.
+        </Alert>
+      ) : null}
       {lead.organizationSuppressions.length > 0 ? (
         <Alert variant="error" title="Lead na Lista Não Contatar">
           Desde {formatDate(lead.organizationSuppressions[0]!.since)}

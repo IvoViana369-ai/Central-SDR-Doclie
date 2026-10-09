@@ -11,6 +11,8 @@
     "./normalization": "./src/modules/normalization/domain/index.ts",
     "./leads-domain": "./src/modules/leads/domain/index.ts",
     "./compliance-domain": "./src/modules/compliance/domain/index.ts",
+    "./import-domain": "./src/modules/import/domain/index.ts",
+    "./dedup-domain": "./src/modules/dedup/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

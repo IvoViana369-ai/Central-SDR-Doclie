@@ -1,15 +1,17 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getServerEnv } from '@docline/config';
-import { JOBS } from '@docline/core';
+import { ALL_JOBS, createIdentifierHasher, JOBS, systemClock, type CoreDeps } from '@docline/core';
 import { createDbClient } from '@docline/db';
 import {
   assertProvidersImplemented,
+  createEmailProvider,
   createErrorReporter,
   createLogger,
+  PgBossJobQueue,
   startPgBoss,
 } from '@docline/integrations';
-import { recordHeartbeat } from './jobs/heartbeat';
+import { jobHandlers } from './jobs/handlers';
 
 // Em desenvolvimento, usa o .env da raiz do monorepo.
 const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
@@ -26,10 +28,10 @@ const errors = createErrorReporter({
 });
 
 /** Falha de job vai para o Sentry e volta para o pg-boss (que faz a retentativa). */
-function reported<T>(job: string, handler: () => Promise<T>) {
-  return async () => {
+function reported<A extends unknown[], T>(job: string, handler: (...args: A) => Promise<T>) {
+  return async (...args: A) => {
     try {
-      return await handler();
+      return await handler(...args);
     } catch (error) {
       errors.capture(error, { job });
       throw error;
@@ -46,16 +48,41 @@ const boss = await startPgBoss({
   logger,
 });
 
-// --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------
-await boss.work(
-  JOBS.heartbeat.name,
-  reported(JOBS.heartbeat.name, () => recordHeartbeat(db, startedAt)),
-);
-await boss.schedule(JOBS.heartbeat.name, JOBS.heartbeat.cron);
-// Sinal imediato, sem esperar o primeiro minuto do cron.
-await recordHeartbeat(db, startedAt);
+// Mesmas dependências do web; aqui a fila é o próprio pg-boss do worker.
+const deps: CoreDeps = {
+  db,
+  clock: systemClock,
+  logger,
+  email: createEmailProvider(env, logger),
+  passwordHasher: {
+    hash: () => Promise.reject(new Error('O worker não define senhas.')),
+  },
+  identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
+  appUrl: env.APP_URL,
+  jobs: new PgBossJobQueue(boss),
+  importLimits: {
+    maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
+    maxRows: env.IMPORT_MAX_ROWS,
+  },
+};
 
-logger.info({ jobs: Object.values(JOBS).map((j) => j.name) }, 'Worker iniciado');
+// --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------
+const handlers = jobHandlers(deps, startedAt);
+for (const job of ALL_JOBS) {
+  const handler = handlers[job.name];
+  if (!handler) throw new Error(`Job sem handler no worker: ${job.name}`);
+  await boss.work<object>(
+    job.name,
+    reported(job.name, async (jobs) => {
+      for (const item of jobs) await handler(item.data);
+    }),
+  );
+  if (job.cron) await boss.schedule(job.name, job.cron);
+}
+// Sinal imediato, sem esperar o primeiro minuto do cron.
+await handlers[JOBS.heartbeat.name]!(undefined);
+
+logger.info({ jobs: ALL_JOBS.map((j) => j.name) }, 'Worker iniciado');
 
 // --- Encerramento gracioso ---------------------------------------------------
 let stopping = false;

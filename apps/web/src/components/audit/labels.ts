@@ -49,6 +49,20 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'dsr.create': 'Solicitação de titular registrada',
   'dsr.update': 'Solicitação de titular atualizada',
   'legal_basis_assessment.create': 'Avaliação de base legal registrada',
+  'import.upload': 'Planilha enviada',
+  'import.configure': 'Importação configurada',
+  'import.commit': 'Importação confirmada',
+  'import.completed': 'Importação concluída',
+  'import.cancel': 'Importação cancelada',
+  'import.purge': 'Linhas de importação apagadas (retenção)',
+  'lead.import_link': 'Origem registrada por importação',
+  'lead.import_update': 'Lead completado por importação',
+  'lead.merge': 'Lead mesclado com outro',
+  'lead.merged_into': 'Lead mesclado em outro',
+  'duplicate.keep_separate': 'Duplicados mantidos separados',
+  'duplicate.ignore': 'Possível duplicado ignorado',
+  'duplicate.scan_requested': 'Varredura de duplicados solicitada',
+  'duplicate.scan_completed': 'Varredura de duplicados concluída',
 };
 
 export function auditActionLabel(action: string): string {
@@ -115,6 +129,22 @@ const FIELD_LABELS: Record<string, string> = {
   scope: 'Abrangência',
   failures: 'Falhas',
   sources: 'Origens',
+  fileName: 'Arquivo',
+  fileSize: 'Tamanho (bytes)',
+  importBatchId: 'Importação',
+  rowNumber: 'Linha',
+  mergedCode: 'Lead mesclado',
+  survivorCode: 'Lead que ficou',
+  fields: 'Campos escolhidos',
+  leads: 'Leads',
+  note: 'Observação',
+  created: 'Criados',
+  linked: 'Vinculados',
+  updated: 'Completados',
+  skipped: 'Pulados',
+  errors: 'Com erro',
+  duplicatesFlagged: 'Duplicados sinalizados',
+  pairs: 'Pares',
 };
 
 const PERMISSION_LABELS: Record<Permission, string> = {

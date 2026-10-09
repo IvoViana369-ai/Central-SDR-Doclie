@@ -52,6 +52,8 @@ export const leadDetailSelect = {
   originSource: { select: { id: true, key: true, name: true } },
   owner: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
+  /** Lead que absorveu este na mesclagem (status MERGED). */
+  mergedInto: { select: { id: true, code: true } },
   people: {
     where: { status: 'ACTIVE' },
     orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
@@ -140,10 +142,13 @@ export async function loadLeadDetail(ctx: UseCaseContext, leadId: string) {
     since: s.createdAt,
   });
 
-  const { cnpjHash: _cnpjHash, ...rest } = lead;
+  const { cnpjHash: _cnpjHash, mergedInto, ...rest } = lead;
   return {
     ...rest,
     codeLabel: formatLeadCode(lead.code),
+    mergedInto: mergedInto
+      ? { id: mergedInto.id, codeLabel: formatLeadCode(mergedInto.code) }
+      : null,
     cnpjFormatted: lead.cnpj ? formatCnpj(lead.cnpj) : null,
     contactStatusLabel: CONTACT_STATUS_LABELS[lead.contactStatus],
     legalBasis: lead.permissions.find((p) => p.channel === 'ALL') ?? null,

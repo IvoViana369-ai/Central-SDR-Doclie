@@ -14,6 +14,7 @@
     "@docline/db": "workspace:*",
     "@docline/integrations": "workspace:*",
     "pg-boss": "^12.36.0",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
   }
 }
