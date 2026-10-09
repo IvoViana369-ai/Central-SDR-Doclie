@@ -34,4 +34,5 @@ export * from './modules/import';
 export * from './modules/dedup';
 export * from './modules/pipeline';
 export * from './modules/scoring';
+export * from './modules/settings';
 export * from './jobs/catalog';
