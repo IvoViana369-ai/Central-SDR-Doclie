@@ -219,13 +219,17 @@ export function PermissionDialog({
             ))}
           </Select>
         </Field>
-        {channel !== 'ALL' ? (
+        {channel === 'WHATSAPP' ? (
+          <p className="text-xs text-muted-foreground">
+            O opt-in do WhatsApp é registrado por número, na seção WhatsApp do lead.
+          </p>
+        ) : channel !== 'ALL' ? (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={optIn} onChange={(e) => setOptIn(e.target.checked)} />
             Opt-in de plataforma registrado
           </label>
         ) : null}
-        {optIn && channel !== 'ALL' ? (
+        {optIn && channel !== 'ALL' && channel !== 'WHATSAPP' ? (
           <Field label="Como o opt-in foi obtido" htmlFor="permMethod">
             <Select
               id="permMethod"
@@ -257,8 +261,12 @@ export function PermissionDialog({
                     method: 'PUT',
                     body: {
                       legalBasis,
-                      ...(channel !== 'ALL' ? { optInStatus: optIn ? 'GRANTED' : 'NONE' } : {}),
-                      ...(optIn && channel !== 'ALL' ? { optInMethod } : {}),
+                      ...(channel !== 'ALL' && channel !== 'WHATSAPP'
+                        ? { optInStatus: optIn ? 'GRANTED' : 'NONE' }
+                        : {}),
+                      ...(optIn && channel !== 'ALL' && channel !== 'WHATSAPP'
+                        ? { optInMethod }
+                        : {}),
                       evidence: evidence || null,
                     },
                   }),

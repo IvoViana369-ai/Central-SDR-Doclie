@@ -14,7 +14,11 @@ import {
 import { loadLeadSuppressions } from './contact-state';
 
 /** Monta a entrada do gate de contactabilidade a partir do banco. */
-export async function loadGateInput(tx: DbTransaction, leadId: string): Promise<GateInput> {
+export async function loadGateInput(
+  tx: DbTransaction,
+  leadId: string,
+  now: Date,
+): Promise<GateInput> {
   const lead = await tx.lead.findUniqueOrThrow({
     where: { id: leadId },
     select: {
@@ -23,7 +27,22 @@ export async function loadGateInput(tx: DbTransaction, leadId: string): Promise<
       cnpjHash: true,
       contactPoints: {
         where: { status: 'ACTIVE' },
-        select: { id: true, type: true, valueHash: true, phoneKind: true, whatsappStatus: true },
+        select: {
+          id: true,
+          type: true,
+          valueHash: true,
+          phoneKind: true,
+          whatsappStatus: true,
+          // Opt-in do WhatsApp do número e janela de atendimento aberta (Fase 7).
+          permissions: {
+            where: { channel: 'WHATSAPP', optInStatus: 'GRANTED' },
+            select: { id: true },
+          },
+          conversations: {
+            where: { channel: 'WHATSAPP', serviceWindowExpiresAt: { gt: now } },
+            select: { id: true },
+          },
+        },
       },
       permissions: {
         where: { personId: null, contactPointId: null },
@@ -54,6 +73,8 @@ export async function loadGateInput(tx: DbTransaction, leadId: string): Promise<
       phoneKind: cp.phoneKind,
       whatsappStatus: cp.whatsappStatus,
       suppressions: suppressions.byContactPoint.get(cp.id) ?? [],
+      whatsappOptIn: cp.permissions.length > 0,
+      serviceWindowOpen: cp.conversations.length > 0,
     })),
   };
 }
@@ -119,7 +140,7 @@ export async function evaluateLeadGate(
   options: { mode: ContactMode; actor: Actor; now: Date },
 ): Promise<{ channels: GateResult[]; timing: ContactTimingResult }> {
   const [input, timing] = await Promise.all([
-    loadGateInput(tx, leadId),
+    loadGateInput(tx, leadId, options.now),
     loadContactTiming(tx, leadId, options.actor, options.now),
   ]);
   const channels = evaluateAllChannels(input, options.mode).map((result) =>

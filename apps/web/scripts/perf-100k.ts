@@ -233,6 +233,7 @@ const deps: CoreDeps = {
     maxGenerationsPerUserPerDay: 200,
     monthlyBudgetUsd: null,
   },
+  whatsapp: null,
 };
 
 try {

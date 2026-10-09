@@ -109,6 +109,17 @@ export const JOBS = {
     retryDelaySeconds: 600,
     expireInSeconds: 900,
   },
+  /**
+   * Envia uma mensagem do WhatsApp pela API (dados: `{ messageId }`). Sem nova
+   * tentativa automática: falha conhecida vira "Tentar de novo" para a pessoa,
+   * e resultado incerto nunca é repetido sozinho (docs/INTEGRATIONS.md §6.2).
+   */
+  whatsappSend: {
+    name: 'whatsapp.send',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 120,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

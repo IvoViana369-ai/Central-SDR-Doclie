@@ -116,10 +116,39 @@ export async function applyLeadOptOut(
     reason: SuppressionReason;
     contactPointId?: string | null;
     notes?: string | null;
+    /** Origem do pedido (padrão pelo ator); ex.: WEBHOOK quando a Meta avisa. */
+    source?: SuppressionToCreate['source'];
   },
 ) {
   const entries = await leadSuppressions(ctx, lead, input);
   const result = await suppressIdentifiers(ctx, entries);
+  // Opt-out é retirada da permissão: o opt-in do WhatsApp dos números atingidos
+  // cai junto (e não volta sozinho se a supressão for revogada depois).
+  if (input.scope === 'ALL_CHANNELS' || input.scope === 'WHATSAPP') {
+    const phoneHashes = entries.filter((e) => e.type === 'PHONE').map((e) => e.valueHash);
+    const wholeLead = entries.some((e) => e.type === 'LEAD');
+    const targets = [
+      ...(phoneHashes.length > 0
+        ? [{ contactPoint: { type: 'PHONE' as const, valueHash: { in: phoneHashes } } }]
+        : []),
+      ...(wholeLead ? [{ leadId: lead.id }] : []),
+    ];
+    if (targets.length > 0) {
+      await ctx.tx.contactPermission.updateMany({
+        where: {
+          channel: 'WHATSAPP',
+          optInStatus: 'GRANTED',
+          contactPointId: { not: null },
+          OR: targets,
+        },
+        data: {
+          optInStatus: 'REVOKED',
+          recordedAt: ctx.now,
+          recordedById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+        },
+      });
+    }
+  }
   for (const leadId of result.leadIds) {
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.optOutRegistered, {
       payload: {
@@ -183,6 +212,13 @@ export const setChannelPermission = defineUseCase({
     if (input.optInStatus === 'GRANTED') {
       if (input.channel === 'ALL') {
         issues.push({ path: 'optInStatus', message: 'Opt-in é registrado por canal.' });
+      }
+      if (input.channel === 'WHATSAPP') {
+        // Fase 7: a Meta exige a permissão do próprio número.
+        issues.push({
+          path: 'optInStatus',
+          message: 'O opt-in do WhatsApp é registrado por número, na seção WhatsApp do lead.',
+        });
       }
       if (!input.optInMethod)
         issues.push({ path: 'optInMethod', message: 'Informe como o opt-in foi obtido.' });

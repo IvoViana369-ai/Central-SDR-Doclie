@@ -15,9 +15,11 @@ import type {
  * legíveis. Encontrar um telefone não significa autorização: telefone
  * identificado ≠ contato permitido.
  *
- * Lista Não Contatar, base legal, opt-in (modo API), contato ativo do canal e
- * situação do lead. Janela de horário e limites de frequência, que passam com
- * o tempo, ficam em `contact-timing.ts` e são somados em `infra/gate.ts`.
+ * Lista Não Contatar, base legal, contato ativo do canal e situação do lead.
+ * No modo API do WhatsApp (Fase 7), só números com opt-in registrado ou com a
+ * janela de atendimento aberta pelo próprio contato. Janela de horário e
+ * limites de frequência, que passam com o tempo, ficam em `contact-timing.ts`
+ * e são somados em `infra/gate.ts`.
  */
 
 export const GATE_CHANNELS = ['WHATSAPP', 'PHONE', 'EMAIL', 'INSTAGRAM'] as const;
@@ -43,6 +45,10 @@ export interface GateContactPoint {
   phoneKind: PhoneKind | null;
   whatsappStatus: WhatsappStatus;
   suppressions: GateSuppression[];
+  /** Opt-in do WhatsApp registrado para este número (Fase 7). */
+  whatsappOptIn?: boolean;
+  /** Janela de atendimento do WhatsApp aberta por este número (até 24 h da última mensagem dele). */
+  serviceWindowOpen?: boolean;
 }
 
 export interface GateInput {
@@ -151,12 +157,8 @@ export function evaluateChannel(
     reasons.push('Sem base legal registrada para este canal.');
   }
 
-  if (mode === 'API' && channel === 'WHATSAPP' && specific?.optInStatus !== 'GRANTED') {
-    reasons.push('Sem opt-in de plataforma (exigido para envio pela API do WhatsApp).');
-  }
-
   const candidates = candidatesFor(channel, input.contactPoints);
-  const usable = candidates.filter((cp) => !cp.suppressions.some((s) => appliesTo(s, channel)));
+  let usable = candidates.filter((cp) => !cp.suppressions.some((s) => appliesTo(s, channel)));
   if (candidates.length === 0) {
     reasons.push(MISSING_CONTACT[channel]);
   } else if (usable.length === 0) {
@@ -164,6 +166,14 @@ export function evaluateChannel(
     reasons.push(
       `Contato na Lista Não Contatar desde ${formatDate(first.createdAt)} (${SUPPRESSION_REASON_LABELS[first.reason]}).`,
     );
+  } else if (mode === 'API' && channel === 'WHATSAPP') {
+    // A Meta exige permissão do próprio número (ou a conversa aberta por ele).
+    usable = usable.filter((cp) => cp.whatsappOptIn || cp.serviceWindowOpen);
+    if (usable.length === 0) {
+      reasons.push(
+        'Nenhum número com opt-in registrado nem conversa aberta pelo contato nas últimas 24 h (exigido para enviar pela API do WhatsApp).',
+      );
+    }
   }
 
   return {

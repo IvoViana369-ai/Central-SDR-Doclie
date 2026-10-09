@@ -5,6 +5,7 @@ import type { AiEffort, AiProvider } from '../ports/ai';
 import type { EmailProvider } from '../ports/email';
 import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
+import type { WhatsappProvider } from '../ports/whatsapp';
 import type { Actor } from './actor';
 import type { Clock } from './clock';
 import type { IdentifierHasher } from './identifier-hash';
@@ -29,6 +30,8 @@ export interface CoreDeps {
   /** IA de prospecção (Fase 6): provedor e controles de custo. */
   ai: AiProvider;
   aiLimits: AiLimits;
+  /** WhatsApp pela API (Fase 7); `null` no modo assistido (só `wa.me`). */
+  whatsapp: WhatsappProvider | null;
 }
 
 /** Controles de custo da IA (AI_* no ambiente; docs/AI-SDR.md §15). */

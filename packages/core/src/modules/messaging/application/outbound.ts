@@ -113,10 +113,10 @@ async function openTaskOf(ctx: UseCaseContext, leadId: string, taskId: string | 
 }
 
 /**
- * Depois de um envio (confirmado ou registrado): datas de contato, etapa de
- * primeiro contato, tarefa cumprida, evento e auditoria.
+ * Depois de um envio (confirmado, registrado ou aceito pela API do WhatsApp):
+ * datas de contato, etapa de primeiro contato, tarefa cumprida, evento e auditoria.
  */
-async function afterSent(
+export async function recordOutboundSent(
   ctx: UseCaseContext,
   message: {
     id: string;
@@ -303,7 +303,7 @@ export const confirmAssistedMessage = defineUseCase({
         data: { status: 'SENT' },
       });
     }
-    await afterSent(ctx, message, sentAt, message.taskId);
+    await recordOutboundSent(ctx, message, sentAt, message.taskId);
     return describeMessage(
       await ctx.tx.message.findUniqueOrThrow({ where: { id: message.id }, select: messageSelect }),
     );
@@ -371,7 +371,7 @@ export const logOutboundMessage = defineUseCase({
       },
       select: messageSelect,
     });
-    await afterSent(ctx, message, input.sentAt, task?.id ?? null);
+    await recordOutboundSent(ctx, message, input.sentAt, task?.id ?? null);
     return describeMessage(message);
   },
 });

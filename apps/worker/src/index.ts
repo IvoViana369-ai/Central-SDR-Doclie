@@ -15,6 +15,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createWhatsappProvider,
   createErrorReporter,
   createLogger,
   PgBossJobQueue,
@@ -75,6 +76,7 @@ const deps: CoreDeps = {
   },
   ai: createAiProvider(env),
   aiLimits: aiLimitsFromEnv(env),
+  whatsapp: createWhatsappProvider(env),
 };
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------

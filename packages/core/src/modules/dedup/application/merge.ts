@@ -62,6 +62,8 @@ async function moveContactPoints(ctx: UseCaseContext, survivor: FullLead, merged
   );
   const moved: string[] = [];
   const kept: string[] = [];
+  /** Contato do mesclado → o mesmo contato no sobrevivente. */
+  const pairs = new Map<string, string>();
   for (const cp of theirs!) {
     const same = byValue.get(`${cp.type}:${cp.valueNormalized}`);
     if (!same) {
@@ -69,6 +71,7 @@ async function moveContactPoints(ctx: UseCaseContext, survivor: FullLead, merged
       continue;
     }
     kept.push(cp.id);
+    pairs.set(cp.id, same.id);
     // O mesmo contato nos dois: o do sobrevivente fica (inclusive a situação dele,
     // mesmo removido ou inválido) e herda o que só o outro sabia. A cópia do
     // outro continua no lead mesclado.
@@ -92,20 +95,23 @@ async function moveContactPoints(ctx: UseCaseContext, survivor: FullLead, merged
       data: { leadId: survivor.id },
     });
   }
-  return { moved, kept };
+  return { moved, kept, pairs };
 }
 
 /**
  * Base legal e opt-in por canal do lead: o canal que o sobrevivente não tem
  * passa para ele; se os dois têm, fica o do sobrevivente, mas um opt-in
  * revogado no mesclado vale para o sobrevivente (o mais restritivo prevalece).
- * Permissões de pessoas e contatos acompanham a pessoa ou o contato.
+ * Permissões de pessoas e contatos acompanham a pessoa ou o contato. Opt-in
+ * de um número que os dois têm (Fase 7): revogado em qualquer um prevalece; o
+ * do mesclado passa para o número do sobrevivente que não tem registro.
  */
 async function movePermissions(
   ctx: UseCaseContext,
   survivorId: string,
   mergedId: string,
   movedContactPoints: string[],
+  pairs: Map<string, string>,
 ) {
   const theirs = await ctx.tx.contactPermission.findMany({ where: { leadId: mergedId } });
   const mine = await ctx.tx.contactPermission.findMany({
@@ -125,6 +131,27 @@ async function movePermissions(
       continue;
     }
     kept.push(permission.id);
+    const pairedPoint = permission.contactPointId
+      ? pairs.get(permission.contactPointId)
+      : undefined;
+    if (pairedPoint) {
+      const mineForNumber = await ctx.tx.contactPermission.findFirst({
+        where: { contactPointId: pairedPoint, channel: permission.channel },
+      });
+      if (!mineForNumber) {
+        const { id: _id, createdAt: _c, updatedAt: _u, ...data } = permission;
+        await ctx.tx.contactPermission.create({
+          data: { ...data, leadId: survivorId, contactPointId: pairedPoint },
+        });
+      } else if (permission.optInStatus === 'REVOKED' && mineForNumber.optInStatus === 'GRANTED') {
+        await ctx.tx.contactPermission.update({
+          where: { id: mineForNumber.id },
+          data: { optInStatus: 'REVOKED', recordedAt: ctx.now },
+        });
+        revoked.push(permission.channel);
+      }
+      continue;
+    }
     const same = leadLevel ? myChannels.get(permission.channel) : undefined;
     if (same && permission.optInStatus === 'REVOKED' && same.optInStatus !== 'REVOKED') {
       await ctx.tx.contactPermission.update({
@@ -141,6 +168,58 @@ async function movePermissions(
     });
   }
   return { moved, kept, revoked };
+}
+
+/**
+ * Conversas do WhatsApp (Fase 7): passam para o sobrevivente. Se ele já tem a
+ * conversa do mesmo número, as mensagens vão para ela e a janela de
+ * atendimento fica com o que for mais recente.
+ */
+async function moveConversations(
+  ctx: UseCaseContext,
+  survivorId: string,
+  mergedId: string,
+  pairs: Map<string, string>,
+) {
+  const theirs = await ctx.tx.conversation.findMany({ where: { leadId: mergedId } });
+  const latest = (a: Date | null, b: Date | null) => (!a ? b : !b ? a : a > b ? a : b);
+  for (const conversation of theirs) {
+    const contactPointId = conversation.contactPointId
+      ? (pairs.get(conversation.contactPointId) ?? conversation.contactPointId)
+      : null;
+    const target = await ctx.tx.conversation.findUnique({
+      where: {
+        leadId_channel_externalThreadId: {
+          leadId: survivorId,
+          channel: conversation.channel,
+          externalThreadId: conversation.externalThreadId,
+        },
+      },
+    });
+    if (!target) {
+      await ctx.tx.conversation.update({
+        where: { id: conversation.id },
+        data: { leadId: survivorId, contactPointId },
+      });
+      continue;
+    }
+    await ctx.tx.message.updateMany({
+      where: { conversationId: conversation.id },
+      data: { conversationId: target.id },
+    });
+    await ctx.tx.conversation.update({
+      where: { id: target.id },
+      data: {
+        lastInboundAt: latest(target.lastInboundAt, conversation.lastInboundAt),
+        lastOutboundAt: latest(target.lastOutboundAt, conversation.lastOutboundAt),
+        serviceWindowExpiresAt: latest(
+          target.serviceWindowExpiresAt,
+          conversation.serviceWindowExpiresAt,
+        ),
+        profileName: target.profileName ?? conversation.profileName,
+      },
+    });
+  }
 }
 
 /** Decisões já tomadas sobre o lead mesclado valem para o sobrevivente. */
@@ -392,7 +471,13 @@ export const mergeDuplicate = defineUseCase({
       data: { leadId: survivor.id },
     });
     const contacts = await moveContactPoints(ctx, survivor, merged);
-    const permissions = await movePermissions(ctx, survivor.id, merged.id, contacts.moved);
+    const permissions = await movePermissions(
+      ctx,
+      survivor.id,
+      merged.id,
+      contacts.moved,
+      contacts.pairs,
+    );
 
     const origins = await ctx.tx.leadOrigin.findMany({
       where: { leadId: merged.id },
@@ -446,6 +531,7 @@ export const mergeDuplicate = defineUseCase({
     await ctx.tx.task.updateMany(toSurvivor);
     await ctx.tx.opportunity.updateMany(toSurvivor);
     await ctx.tx.aiGeneration.updateMany(toSurvivor);
+    await moveConversations(ctx, survivor.id, merged.id, contacts.pairs);
     await mergeContactDates(ctx, survivor.id, merged.id);
     await ctx.tx.leadNote.updateMany({
       where: { leadId: merged.id },

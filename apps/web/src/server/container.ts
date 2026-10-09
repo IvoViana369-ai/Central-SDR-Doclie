@@ -7,6 +7,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createWhatsappProvider,
   createErrorReporter,
   createLogger,
   LazyPgBossJobQueue,
@@ -56,6 +57,7 @@ export function getContainer(): WebContainer {
     },
     ai: createAiProvider(env),
     aiLimits: aiLimitsFromEnv(env),
+    whatsapp: createWhatsappProvider(env),
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,

@@ -110,15 +110,44 @@ describe('gate de contactabilidade', () => {
     expect(evaluateChannel(input, 'WHATSAPP').usableContactPointIds).toEqual(['fixo']);
   });
 
-  it('modo API exige opt-in de plataforma no WhatsApp; o modo assistido não', () => {
-    expect(evaluateChannel(base, 'WHATSAPP', 'API').reasons).toContain(
-      'Sem opt-in de plataforma (exigido para envio pela API do WhatsApp).',
-    );
-    const withOptIn: GateInput = {
+  it('modo API do WhatsApp: só números com opt-in ou com a janela aberta; o assistido não exige', () => {
+    expect(evaluateChannel(base, 'WHATSAPP').allowed).toBe(true);
+    expect(evaluateChannel(base, 'WHATSAPP', 'API').reasons).toEqual([
+      'Nenhum número com opt-in registrado nem conversa aberta pelo contato nas últimas 24 h (exigido para enviar pela API do WhatsApp).',
+    ]);
+    // Opt-in no nível do lead (Fase 2) não libera a API: a permissão é do número.
+    const leadLevel: GateInput = {
       ...base,
       channelPermissions: [{ channel: 'WHATSAPP', legalBasis: 'CONSENT', optInStatus: 'GRANTED' }],
     };
-    expect(evaluateChannel(withOptIn, 'WHATSAPP', 'API').allowed).toBe(true);
+    expect(evaluateChannel(leadLevel, 'WHATSAPP', 'API').allowed).toBe(false);
+
+    const second = { ...mobile, id: 'cel2' };
+    const perNumber: GateInput = {
+      ...base,
+      contactPoints: [mobile, { ...second, whatsappOptIn: true }],
+    };
+    expect(evaluateChannel(perNumber, 'WHATSAPP', 'API')).toMatchObject({
+      allowed: true,
+      usableContactPointIds: ['cel2'],
+    });
+    const window: GateInput = {
+      ...base,
+      contactPoints: [{ ...mobile, serviceWindowOpen: true }],
+    };
+    expect(evaluateChannel(window, 'WHATSAPP', 'API').usableContactPointIds).toEqual(['cel']);
+    // Lista Não Contatar continua valendo mesmo com opt-in.
+    const suppressed: GateInput = {
+      ...base,
+      contactPoints: [
+        {
+          ...mobile,
+          whatsappOptIn: true,
+          suppressions: [{ reason: 'OPT_OUT', scope: 'WHATSAPP', createdAt: since }],
+        },
+      ],
+    };
+    expect(evaluateChannel(suppressed, 'WHATSAPP', 'API').allowed).toBe(false);
   });
 
   it('lead arquivado não é contatado', () => {

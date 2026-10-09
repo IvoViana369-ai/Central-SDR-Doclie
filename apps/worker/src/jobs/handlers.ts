@@ -11,6 +11,7 @@ import {
   runImportPurge,
   runScoreRecomputeAll,
   runScoreRecomputeLeads,
+  runWhatsappSend,
   type CoreDeps,
 } from '@docline/core';
 import { spreadsheetReader } from '@docline/integrations';
@@ -53,5 +54,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.leadsForgottenScan.name]: async () => runForgottenScan(deps),
     [JOBS.scoreRecomputeAll.name]: async (data) =>
       runScoreRecomputeAll(deps, scoreAllJob.parse(data ?? {})),
+    [JOBS.whatsappSend.name]: async (data) => runWhatsappSend(deps, data),
   };
 }

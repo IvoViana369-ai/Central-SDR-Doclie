@@ -60,6 +60,7 @@ const deps: CoreDeps = {
     maxGenerationsPerUserPerDay: 200,
     monthlyBudgetUsd: null,
   },
+  whatsapp: null,
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

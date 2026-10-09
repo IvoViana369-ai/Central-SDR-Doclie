@@ -3,3 +3,6 @@
 // status e de mensagens recebidas, modelos, conversas e saúde do número.
 export * from './domain';
 export { FAKE_TEMPLATES, FakeWhatsappProvider } from './infra/fake-provider';
+export * from './contracts/schemas';
+export { recordWhatsappOptIn, revokeWhatsappOptIn } from './application/opt-in';
+export { retryWhatsappMessage, runWhatsappSend, sendWhatsappMessage } from './application/send';

@@ -238,7 +238,7 @@ describe('conformidade (LGPD)', () => {
       const invalid = await expectError(
         setChannelPermission(deps, manager, {
           leadId: lead.id,
-          channel: 'WHATSAPP',
+          channel: 'INSTAGRAM',
           legalBasis: 'CONSENT',
           optInStatus: 'GRANTED',
         }),
@@ -249,19 +249,35 @@ describe('conformidade (LGPD)', () => {
         'evidence',
         'optInMethod',
       ]);
+      // Fase 7: o opt-in do WhatsApp é do número (módulo whatsapp), não do lead.
+      const perNumber = await expectError(
+        setChannelPermission(deps, manager, {
+          leadId: lead.id,
+          channel: 'WHATSAPP',
+          legalBasis: 'CONSENT',
+          optInStatus: 'GRANTED',
+          optInMethod: 'FORM',
+          evidence: 'Formulário do evento X em 10/10/2026',
+        }),
+        ValidationError,
+      );
+      expect(perNumber.issues).toEqual([
+        {
+          path: 'optInStatus',
+          message: 'O opt-in do WhatsApp é registrado por número, na seção WhatsApp do lead.',
+        },
+      ]);
 
-      const apiBefore = await getLeadContactability(deps, sdr, { leadId: lead.id, mode: 'API' });
-      expect(apiBefore.channels[0]?.allowed).toBe(false);
+      const api = await getLeadContactability(deps, sdr, { leadId: lead.id, mode: 'API' });
+      expect(api.channels[0]?.allowed).toBe(false);
       await setChannelPermission(deps, manager, {
         leadId: lead.id,
-        channel: 'WHATSAPP',
+        channel: 'INSTAGRAM',
         legalBasis: 'CONSENT',
         optInStatus: 'GRANTED',
         optInMethod: 'FORM',
         evidence: 'Formulário do evento X em 10/10/2026',
       });
-      const apiAfter = await getLeadContactability(deps, sdr, { leadId: lead.id, mode: 'API' });
-      expect(apiAfter.channels[0]).toMatchObject({ channel: 'WHATSAPP', allowed: true });
       expect(
         await db.leadEvent.count({ where: { leadId: lead.id, type: 'permission.changed' } }),
       ).toBe(2);

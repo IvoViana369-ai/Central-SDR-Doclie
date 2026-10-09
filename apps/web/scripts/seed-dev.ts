@@ -18,6 +18,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createWhatsappProvider,
   createLogger,
   LazyPgBossJobQueue,
 } from '@docline/integrations';
@@ -72,6 +73,7 @@ try {
       },
       ai: createAiProvider(env),
       aiLimits: aiLimitsFromEnv(env),
+      whatsapp: createWhatsappProvider(env),
     },
     {
       count,
