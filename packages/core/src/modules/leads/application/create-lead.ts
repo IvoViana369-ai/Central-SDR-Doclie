@@ -8,6 +8,7 @@ import { firstNameOf, formatLeadCode } from '../domain/lead';
 import { refreshLeadContactState } from '../../compliance';
 import { formatName } from '../../normalization';
 import { auditLead, queueDuplicateCheck, recordLeadEvent } from '../infra/events';
+import { entryStage } from '../infra/stage-entry';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
 import {
   normalizeContactValue,
@@ -161,6 +162,7 @@ export async function insertLead(
 ): Promise<{ id: string; code: string; contactStatus: ContactStatus }> {
   const { input, fields, contacts, tagIds, ownerId } = prepared;
   const actorId = ctx.actor.kind === 'user' ? ctx.actor.id : null;
+  const stage = await entryStage(ctx.tx);
   const lead = await ctx.tx.lead.create({
     data: {
       companyName: fields.companyName ?? null,
@@ -196,8 +198,20 @@ export async function insertLead(
       lastActivityAt: ctx.now,
       createdById: actorId,
       createdAt: ctx.now,
+      pipelineId: stage.pipelineId,
+      stageId: stage.id,
+      stageEnteredAt: ctx.now,
     },
     select: { id: true, code: true },
+  });
+  await ctx.tx.leadStageHistory.create({
+    data: {
+      leadId: lead.id,
+      toStageId: stage.id,
+      changedById: actorId,
+      automationSource: options.createdVia === 'IMPORT' ? 'IMPORT' : null,
+      enteredAt: ctx.now,
+    },
   });
 
   const personIds = input.people.map(() => newId());

@@ -32,4 +32,5 @@ export * from './modules/compliance';
 export * from './modules/leads';
 export * from './modules/import';
 export * from './modules/dedup';
+export * from './modules/pipeline';
 export * from './jobs/catalog';

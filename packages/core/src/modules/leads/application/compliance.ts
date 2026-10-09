@@ -103,33 +103,57 @@ const optOutLeadSelect = {
  * leads com o mesmo telefone/e-mail e para reimportações (docs/LGPD.md §8).
  * Parar cadências e cancelar tarefas entra na Fase 5.
  */
+/**
+ * Aplica o opt-out de um lead já carregado no escopo (Lista Não Contatar,
+ * eventos e auditoria). Usado pelo opt-out em 1 clique e pela perda com
+ * motivo "Pediu para não ser contatado" no pipeline.
+ */
+export async function applyLeadOptOut(
+  ctx: UseCaseContext,
+  lead: { id: string; code: number; cnpj: string | null; cnpjHash: string | null },
+  input: {
+    scope: SuppressionScope;
+    reason: SuppressionReason;
+    contactPointId?: string | null;
+    notes?: string | null;
+  },
+) {
+  const entries = await leadSuppressions(ctx, lead, input);
+  const result = await suppressIdentifiers(ctx, entries);
+  for (const leadId of result.leadIds) {
+    await recordLeadEvent(ctx, leadId, LEAD_EVENTS.optOutRegistered, {
+      payload: {
+        scope: input.scope,
+        reason: input.reason,
+        ...(leadId !== lead.id ? { viaLeadCode: formatLeadCode(lead.code) } : {}),
+        ...(input.contactPointId ? { contactPointId: input.contactPointId } : {}),
+      },
+    });
+  }
+  await auditLead(ctx, lead.id, 'lead.optout', {
+    metadata: {
+      scope: input.scope,
+      reason: input.reason,
+      identifiers: entries.length,
+      newEntries: result.created.length,
+      affectedLeads: result.leadIds,
+    },
+  });
+  return result;
+}
+
+/** Carrega o lead no escopo com o que o opt-out precisa. */
+export function requireLeadForOptOut(ctx: UseCaseContext, leadId: string) {
+  return requireLeadInScope(ctx, leadId, optOutLeadSelect);
+}
+
 export const registerOptOut = defineUseCase({
   name: 'leads.registerOptOut',
   access: 'optout.register',
   input: registerOptOutInput,
   async run(ctx, input) {
     const lead = await requireLeadInScope(ctx, input.leadId, optOutLeadSelect);
-    const entries = await leadSuppressions(ctx, lead, input);
-    const result = await suppressIdentifiers(ctx, entries);
-    for (const leadId of result.leadIds) {
-      await recordLeadEvent(ctx, leadId, LEAD_EVENTS.optOutRegistered, {
-        payload: {
-          scope: input.scope,
-          reason: input.reason,
-          ...(leadId !== lead.id ? { viaLeadCode: formatLeadCode(lead.code) } : {}),
-          ...(input.contactPointId ? { contactPointId: input.contactPointId } : {}),
-        },
-      });
-    }
-    await auditLead(ctx, lead.id, 'lead.optout', {
-      metadata: {
-        scope: input.scope,
-        reason: input.reason,
-        identifiers: entries.length,
-        newEntries: result.created.length,
-        affectedLeads: result.leadIds,
-      },
-    });
+    const result = await applyLeadOptOut(ctx, lead, input);
     const updated = await ctx.tx.lead.findUniqueOrThrow({
       where: { id: lead.id },
       select: { contactStatus: true },

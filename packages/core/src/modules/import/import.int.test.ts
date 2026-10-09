@@ -238,6 +238,10 @@ describe('importação de planilha (M04)', () => {
     // Gamma (mesmo telefone da Alfa) foi criado e sinalizado para revisão.
     const gamma = await db.lead.findFirstOrThrow({ where: { displayName: 'Gamma Contadores' } });
     expect(gamma.createdVia).toBe('IMPORT');
+    // Entra em "Novo", com a origem da passagem registrada como importação.
+    expect(
+      await db.leadStageHistory.findFirstOrThrow({ where: { leadId: gamma.id } }),
+    ).toMatchObject({ automationSource: 'IMPORT', leftAt: null });
     const candidate = await db.duplicateCandidate.findFirstOrThrow();
     expect([candidate.leadAId, candidate.leadBId].sort()).toEqual([alfaId, gamma.id].sort());
     expect(candidate).toMatchObject({

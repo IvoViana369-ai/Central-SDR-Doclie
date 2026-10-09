@@ -4,7 +4,6 @@ import { z } from 'zod';
  * Linguagem de filtros da lista de leads (docs/ARCHITECTURE.md §9.1): grupos
  * `all`/`any` aninháveis de condições sobre uma lista fechada de campos. O
  * servidor compila para consultas do Prisma; nada vira SQL concatenado.
- * Etapa, score e duplicados entram nas Fases 3–4.
  */
 
 export const FILTER_FIELDS = [
@@ -27,6 +26,10 @@ export const FILTER_FIELDS = [
   'createdAt',
   'lastActivityAt',
   'collectedAt',
+  /** Chave da etapa do pipeline (ex.: QUALIFIED). */
+  'stage',
+  'scoreBand',
+  'score',
 ] as const;
 export type FilterField = (typeof FILTER_FIELDS)[number];
 

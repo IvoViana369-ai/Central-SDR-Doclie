@@ -26,6 +26,8 @@ export const LEAD_EVENTS = {
   originAdded: 'origin.added',
   merged: 'lead.merged',
   mergedInto: 'lead.merged_into',
+  stageChanged: 'stage.changed',
+  scoreChanged: 'score.changed',
 } as const;
 
 export type LeadEventType = (typeof LEAD_EVENTS)[keyof typeof LEAD_EVENTS];
@@ -53,4 +55,6 @@ export const LEAD_EVENT_LABELS: Record<LeadEventType, string> = {
   'origin.added': 'Encontrado em nova origem',
   'lead.merged': 'Lead mesclado com outro',
   'lead.merged_into': 'Lead mesclado em outro',
+  'stage.changed': 'Etapa alterada',
+  'score.changed': 'Score alterado',
 };

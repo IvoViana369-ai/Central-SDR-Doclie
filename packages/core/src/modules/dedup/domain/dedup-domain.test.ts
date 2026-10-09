@@ -30,6 +30,7 @@ const lead = (values: Partial<MergeableLead>): MergeableLead => ({
   websiteUrl: null,
   websiteDomain: null,
   ownerId: null,
+  stageId: null,
   description: null,
   ...values,
 });

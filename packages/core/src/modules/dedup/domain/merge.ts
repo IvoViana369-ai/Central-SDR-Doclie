@@ -18,6 +18,8 @@ export const MERGE_FIELDS = {
   },
   website: { label: 'Site', columns: ['websiteUrl', 'websiteDomain'] },
   owner: { label: 'Responsável', columns: ['ownerId'] },
+  /** A etapa muda pelo pipeline (com histórico), não por cópia de coluna. */
+  stage: { label: 'Etapa do pipeline', columns: ['stageId'] },
   description: { label: 'Observações', columns: ['description'] },
 } as const;
 

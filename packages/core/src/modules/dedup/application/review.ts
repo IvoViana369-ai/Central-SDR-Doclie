@@ -190,9 +190,11 @@ export const compareSelect = {
   createdAt: true,
   lastActivityAt: true,
   contactStatus: true,
+  stageId: true,
   segment: { select: { name: true } },
   owner: { select: { name: true } },
   originSource: { select: { name: true } },
+  stage: { select: { name: true } },
   contactPoints: {
     where: { status: { not: 'REMOVED' } },
     orderBy: [{ type: 'asc' }, { isPrimary: 'desc' }],
@@ -244,6 +246,8 @@ function displayField(lead: CompareLead, field: MergeField): string | null {
       return lead.websiteUrl;
     case 'owner':
       return lead.owner?.name ?? null;
+    case 'stage':
+      return lead.stage?.name ?? null;
     default:
       return (lead[field as 'tradeName'] as string | null) ?? null;
   }

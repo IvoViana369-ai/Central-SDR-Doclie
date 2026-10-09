@@ -21,6 +21,7 @@ import {
   type CreateLeadInput,
 } from '../leads';
 import { cnpjCheckDigits } from '../normalization';
+import { moveLeadStage } from '../pipeline';
 import {
   getDuplicate,
   ignoreDuplicate,
@@ -460,6 +461,35 @@ describe('deduplicação (M06)', () => {
       ['Sigma', 'Tau'],
     ]);
     expect((await listDuplicates(deps, manager, { confidence: 'HIGH' })).data).toHaveLength(1);
+  });
+
+  it('mesclagem: a etapa escolhida do outro lead entra pelo pipeline, com histórico', async () => {
+    const survivor = await create('Ômicron', {
+      contactPoints: [{ type: 'PHONE', value: '(88) 99812-5101' }],
+    });
+    const merged = await create('Ômicron Contábil', {
+      contactPoints: [{ type: 'PHONE', value: '(88) 99812-5101' }],
+    });
+    const qualified = await db.pipelineStage.findFirstOrThrow({ where: { key: 'QUALIFIED' } });
+    await moveLeadStage(deps, manager, { leadId: merged, stageId: qualified.id, version: 1 });
+    await runDuplicateCheck(deps, { leadIds: [merged] });
+    const [candidate] = [...(await candidates()).values()];
+
+    const detail = await getDuplicate(deps, manager, { candidateId: candidate!.id });
+    expect(detail.fields.find((f) => f.key === 'stage')).toMatchObject({ differs: true });
+    await mergeDuplicate(deps, manager, {
+      candidateId: candidate!.id,
+      survivorId: survivor,
+      choices: { stage: 'merged' },
+    });
+    const s = await db.lead.findUniqueOrThrow({
+      where: { id: survivor },
+      include: { stage: true, stageHistory: { orderBy: { enteredAt: 'asc' } } },
+    });
+    expect(s.stage?.key).toBe('QUALIFIED');
+    expect(s.stageHistory.at(-1)).toMatchObject({ automationSource: 'MERGE', leftAt: null });
+    // O mesclado sai do funil: nenhuma passagem aberta.
+    expect(await db.leadStageHistory.count({ where: { leadId: merged, leftAt: null } })).toBe(0);
   });
 
   it('anonimizar o sobrevivente apaga também os dados do lead mesclado nele', async () => {

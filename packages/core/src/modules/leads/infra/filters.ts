@@ -1,4 +1,4 @@
-import type { ContactStatus, LeadStatus, LeadType, Prisma } from '@docline/db';
+import type { ContactStatus, LeadStatus, LeadType, Prisma, ScoreBand } from '@docline/db';
 import type { Actor } from '../../../shared/actor';
 import { ValidationError, type ValidationIssue } from '../../../shared/errors';
 import { maskEmail } from '../../../shared/mask';
@@ -22,6 +22,7 @@ const CONTACT_STATUSES: ContactStatus[] = [
   'OPTED_OUT',
   'BLOCKED',
 ];
+const SCORE_BANDS: ScoreBand[] = ['COLD', 'WARM', 'HOT', 'PRIORITY'];
 const LEAD_TYPES: LeadType[] = [
   'ACCOUNTING_FIRM',
   'ACCOUNTANT',
@@ -50,6 +51,9 @@ const ALLOWED_OPS: Record<FilterField, FilterOp[]> = {
   createdAt: ['gte', 'lte', 'between'],
   lastActivityAt: ['gte', 'lte', 'between'],
   collectedAt: ['gte', 'lte', 'between'],
+  stage: ['eq', 'in'],
+  scoreBand: ['eq', 'in', 'isNull'],
+  score: ['gte', 'lte', 'between'],
 };
 
 class FilterIssue extends Error {}
@@ -112,6 +116,21 @@ function dateRange(op: FilterOp, value: unknown): Prisma.DateTimeFilter {
   const [from, to] = Array.isArray(value) && value.length === 2 ? value : [];
   if (from === undefined) throw new FilterIssue('Informe o intervalo [início, fim].');
   return { gte: asDate(from), lte: asDate(to) };
+}
+
+function asScore(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 100) {
+    throw new FilterIssue('Score de 0 a 100.');
+  }
+  return value;
+}
+
+function scoreRange(op: FilterOp, value: unknown): Prisma.IntNullableFilter {
+  if (op === 'gte') return { gte: asScore(value) };
+  if (op === 'lte') return { lte: asScore(value) };
+  const [from, to] = Array.isArray(value) && value.length === 2 ? value : [];
+  if (from === undefined) throw new FilterIssue('Informe o intervalo [mínimo, máximo].');
+  return { gte: asScore(from), lte: asScore(to) };
 }
 
 /** eq / in / isNull para um campo escalar. */
@@ -190,6 +209,14 @@ function compileCondition(c: FilterCondition, state: CompileState): Prisma.LeadW
     case 'lastActivityAt':
     case 'collectedAt':
       return { [c.field]: dateRange(c.op, c.value) };
+    case 'stage':
+      return { stage: { key: c.op === 'eq' ? asKey(c.value) : { in: asList(c.value, asKey) } } };
+    case 'scoreBand':
+      return scalar(c.op, c.value, asEnum(SCORE_BANDS), (f) => ({
+        scoreBand: f as Prisma.EnumScoreBandNullableFilter,
+      }));
+    case 'score':
+      return { score: scoreRange(c.op, c.value) };
   }
 }
 

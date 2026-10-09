@@ -13,6 +13,7 @@
     "./compliance-domain": "./src/modules/compliance/domain/index.ts",
     "./import-domain": "./src/modules/import/domain/index.ts",
     "./dedup-domain": "./src/modules/dedup/domain/index.ts",
+    "./pipeline-domain": "./src/modules/pipeline/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

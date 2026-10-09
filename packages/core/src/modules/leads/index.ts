@@ -4,6 +4,8 @@ export * from './contracts/schemas';
 export * from './domain/lead';
 export { LEAD_EVENTS, LEAD_EVENT_LABELS, type LeadEventType } from './domain/events';
 export { leadScopeWhere, requireLeadInScope } from './infra/scope';
+export { auditLead, recordLeadEvent, touchLead } from './infra/events';
+export { ENTRY_STAGE_KEY } from './infra/stage-entry';
 export {
   checkDuplicates,
   GENERIC_DOMAINS,
@@ -41,12 +43,14 @@ export {
 } from './application/reference';
 export {
   anonymizeLead,
+  applyLeadOptOut,
   getLeadContactability,
   registerOptOut,
+  requireLeadForOptOut,
   setChannelPermission,
 } from './application/compliance';
 export * from './contracts/filters';
-export { countLeads, searchLeads } from './application/search';
+export { countLeads, countSelection, searchLeads, selectionWhere } from './application/search';
 export { BULK_LIMIT, bulkLeads } from './application/bulk';
 export { EXPORT_LIMIT, EXPORTS_PER_DAY, exportLeads } from './application/export';
 export { deleteView, listSavedViews, saveView, updateView } from './application/saved-views';

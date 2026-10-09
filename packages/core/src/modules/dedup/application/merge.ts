@@ -5,6 +5,7 @@ import { defineUseCase, toJson, type UseCaseContext } from '../../../shared/use-
 import { refreshLeadContactState, suppressIdentifiers } from '../../compliance';
 import { buildLeadNames, formatLeadCode, LEAD_EVENTS, requireLeadInScope } from '../../leads';
 import { maskIdentifier } from '../../normalization';
+import { applyStageChange, stageRefSelect } from '../../pipeline';
 import { mergeDuplicateInput } from '../contracts/schemas';
 import {
   defaultMergeChoices,
@@ -244,7 +245,31 @@ export const mergeDuplicate = defineUseCase({
       ]);
     }
 
-    // 1. O mesclado sai primeiro (libera o CNPJ, que é único entre leads não mesclados).
+    // A etapa escolhida do outro lead entra pelo pipeline (com histórico), não como coluna.
+    const { stageId: chosenStageId, ...columns } = patch;
+    const stageFromMerged =
+      typeof chosenStageId === 'string' && chosenStageId !== survivor.stageId
+        ? chosenStageId
+        : null;
+
+    // 1. O mesclado sai primeiro (libera o CNPJ, que é único entre leads não mesclados)
+    // e deixa o funil: a passagem aberta dele no pipeline é encerrada.
+    const mergedOpenStage = await ctx.tx.leadStageHistory.findFirst({
+      where: { leadId: merged.id, leftAt: null },
+      select: { id: true, enteredAt: true },
+    });
+    if (mergedOpenStage) {
+      await ctx.tx.leadStageHistory.update({
+        where: { id: mergedOpenStage.id },
+        data: {
+          leftAt: ctx.now,
+          durationSeconds: Math.max(
+            0,
+            Math.round((ctx.now.getTime() - mergedOpenStage.enteredAt.getTime()) / 1000),
+          ),
+        },
+      });
+    }
     await ctx.tx.lead.update({
       where: { id: merged.id },
       data: {
@@ -261,11 +286,11 @@ export const mergeDuplicate = defineUseCase({
     });
 
     // 2. Campos escolhidos, nomes e campos extras no sobrevivente.
-    const ownerChanged = 'ownerId' in patch && patch.ownerId !== survivor.ownerId;
+    const ownerChanged = 'ownerId' in columns && columns.ownerId !== survivor.ownerId;
     await ctx.tx.lead.update({
       where: { id: survivor.id },
       data: {
-        ...(patch as Prisma.LeadUncheckedUpdateInput),
+        ...(columns as Prisma.LeadUncheckedUpdateInput),
         ...names,
         customFields:
           (mergeCustomFields(
@@ -273,7 +298,7 @@ export const mergeDuplicate = defineUseCase({
             merged.customFields,
           ) as Prisma.InputJsonValue | null) ?? undefined,
         ...(ownerChanged
-          ? { previousOwnerId: survivor.ownerId, assignedAt: patch.ownerId ? ctx.now : null }
+          ? { previousOwnerId: survivor.ownerId, assignedAt: columns.ownerId ? ctx.now : null }
           : {}),
         version: { increment: 1 },
         lastActivityAt: ctx.now,
@@ -284,12 +309,41 @@ export const mergeDuplicate = defineUseCase({
         data: {
           leadId: survivor.id,
           fromUserId: survivor.ownerId,
-          toUserId: (patch.ownerId as string | null) ?? null,
+          toUserId: (columns.ownerId as string | null) ?? null,
           strategy: 'MANUAL',
           assignedById: actorId,
           reason: `Mesclagem com ${mergedCode}`,
           assignedAt: ctx.now,
         },
+      });
+    }
+
+    if (stageFromMerged) {
+      const [from, to] = await Promise.all([
+        survivor.stageId
+          ? ctx.tx.pipelineStage.findUnique({
+              where: { id: survivor.stageId },
+              select: stageRefSelect,
+            })
+          : null,
+        ctx.tx.pipelineStage.findUniqueOrThrow({
+          where: { id: stageFromMerged },
+          select: stageRefSelect,
+        }),
+      ]);
+      await applyStageChange(ctx, {
+        lead: { id: survivor.id, version: survivor.version + 1, stageId: survivor.stageId },
+        from,
+        to,
+        changedById: actorId,
+        source: 'MERGE',
+        lossReason: merged.lossReasonId
+          ? await ctx.tx.lossReason.findUnique({
+              where: { id: merged.lossReasonId },
+              select: { id: true, key: true, name: true },
+            })
+          : null,
+        note: `Etapa de ${mergedCode} escolhida na mesclagem.`,
       });
     }
 
@@ -451,7 +505,8 @@ export const mergeDuplicate = defineUseCase({
     });
     const changes: Record<string, [unknown, unknown]> = {};
     for (const [column, value] of Object.entries(patch)) {
-      if (column === 'cnpjHash' || column === 'cnpjRoot' || column === 'websiteDomain') continue;
+      // A etapa já tem evento e auditoria próprios (stage.changed).
+      if (['cnpjHash', 'cnpjRoot', 'websiteDomain', 'stageId'].includes(column)) continue;
       const before = survivor[column as keyof FullLead];
       changes[column] =
         column === 'cnpj'
