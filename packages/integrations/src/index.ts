@@ -22,8 +22,11 @@ export {
   startPgBoss,
   type PgBossOptions,
 } from './queue/pg-boss';
+export { AnthropicAiProvider, type AnthropicAiConfig } from './ai/anthropic';
 export {
+  aiLimitsFromEnv,
   assertProvidersImplemented,
+  createAiProvider,
   createEmailProvider,
   integrationStatuses,
   type IntegrationKey,

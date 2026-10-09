@@ -1,4 +1,5 @@
 import { getTestDb } from '@docline/db/testing';
+import { FakeAiProvider } from '../modules/ai-sdr/infra/fake-provider';
 import type { Role, UserStatus } from '../modules/identity/domain/roles';
 import type { TransactionalEmail } from '../ports/email';
 import type { EnqueueOptions } from '../ports/job-queue';
@@ -18,6 +19,8 @@ export function createTestDeps(options: { now?: Date } = {}) {
   const sent: TransactionalEmail[] = [];
   /** Jobs enfileirados (os testes executam os handlers diretamente). */
   const enqueued: { name: string; data: object; options?: EnqueueOptions }[] = [];
+  /** IA falsa (determinística): os testes leem os pedidos recebidos. */
+  const ai = new FakeAiProvider();
   const noop = () => undefined;
   const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
   const deps: CoreDeps = {
@@ -40,6 +43,13 @@ export function createTestDeps(options: { now?: Date } = {}) {
       },
     },
     importLimits: { maxBytes: 10 * 1024 * 1024, maxRows: 50_000 },
+    ai,
+    aiLimits: {
+      effortGeneration: 'medium',
+      effortClassification: 'low',
+      maxGenerationsPerUserPerDay: 200,
+      monthlyBudgetUsd: null,
+    },
   };
 
   let counter = 0;
@@ -58,5 +68,5 @@ export function createTestDeps(options: { now?: Date } = {}) {
     return { user, actor };
   }
 
-  return { db, deps, sent, enqueued, createActor };
+  return { db, deps, sent, enqueued, ai, createActor };
 }

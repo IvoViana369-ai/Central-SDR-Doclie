@@ -19,7 +19,13 @@ import {
   ValidationError,
 } from '@docline/core';
 import { createDbClient } from '@docline/db';
-import { createEmailProvider, createLogger, LazyPgBossJobQueue } from '@docline/integrations';
+import {
+  aiLimitsFromEnv,
+  createAiProvider,
+  createEmailProvider,
+  createLogger,
+  LazyPgBossJobQueue,
+} from '@docline/integrations';
 import { hashPassword } from 'better-auth/crypto';
 
 const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
@@ -64,6 +70,8 @@ try {
         maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
         maxRows: env.IMPORT_MAX_ROWS,
       },
+      ai: createAiProvider(env),
+      aiLimits: aiLimitsFromEnv(env),
     },
     systemActor('cli:admin:create'),
     { email: values.email, name: values.name, role: values.role as never },

@@ -1,6 +1,7 @@
 import { closeTestDb, getTestDb, resetTestData } from '@docline/db/testing';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actor } from '../../shared/actor';
+import { FakeAiProvider } from '../ai-sdr';
 import { fixedClock } from '../../shared/clock';
 import {
   BusinessRuleError,
@@ -52,6 +53,13 @@ const deps: CoreDeps = {
   identifiers: createIdentifierHasher('pepper-de-teste-com-pelo-menos-32-caracteres'),
   jobs: { enqueue: async () => null },
   importLimits: { maxBytes: 10 * 1024 * 1024, maxRows: 50_000 },
+  ai: new FakeAiProvider(),
+  aiLimits: {
+    effortGeneration: 'medium',
+    effortClassification: 'low',
+    maxGenerationsPerUserPerDay: 200,
+    monthlyBudgetUsd: null,
+  },
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

@@ -17,6 +17,7 @@ export {
   checkAccess,
   defineUseCase,
   type Access,
+  type AiLimits,
   type AuditEntry,
   type CoreDeps,
   type RequestMeta,
@@ -25,6 +26,7 @@ export {
 } from './shared/use-case';
 export type * from './ports';
 export { SpreadsheetError } from './ports/spreadsheet';
+export { AiProviderError } from './ports/ai';
 export * from './modules/identity';
 export * from './modules/audit';
 export * from './modules/normalization';
@@ -41,4 +43,5 @@ export * from './modules/messaging';
 export * from './modules/cadence';
 export * from './modules/notifications';
 export * from './modules/opportunities';
+export * from './modules/ai-sdr';
 export * from './jobs/catalog';

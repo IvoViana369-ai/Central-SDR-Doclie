@@ -1,6 +1,7 @@
 import type { DbClient, DbTransaction, Prisma } from '@docline/db';
 import type { z } from 'zod';
 import { roleHasPermission, type Permission } from '../modules/identity/domain/permissions';
+import type { AiEffort, AiProvider } from '../ports/ai';
 import type { EmailProvider } from '../ports/email';
 import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
@@ -25,6 +26,18 @@ export interface CoreDeps {
   jobs: JobQueue;
   /** Limites de importação (IMPORT_MAX_FILE_MB e IMPORT_MAX_ROWS). */
   importLimits: { maxBytes: number; maxRows: number };
+  /** IA de prospecção (Fase 6): provedor e controles de custo. */
+  ai: AiProvider;
+  aiLimits: AiLimits;
+}
+
+/** Controles de custo da IA (AI_* no ambiente; docs/AI-SDR.md §15). */
+export interface AiLimits {
+  effortGeneration: AiEffort;
+  effortClassification: AiEffort;
+  maxGenerationsPerUserPerDay: number;
+  /** Orçamento mensal em US$; null = sem limite. */
+  monthlyBudgetUsd: number | null;
 }
 
 /** Metadados da requisição, gravados na auditoria. */

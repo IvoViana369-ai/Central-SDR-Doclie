@@ -12,6 +12,8 @@ import {
 import { backfillLeadStages, createDbClient } from '@docline/db';
 import {
   assertProvidersImplemented,
+  aiLimitsFromEnv,
+  createAiProvider,
   createEmailProvider,
   createErrorReporter,
   createLogger,
@@ -71,6 +73,8 @@ const deps: CoreDeps = {
     maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
     maxRows: env.IMPORT_MAX_ROWS,
   },
+  ai: createAiProvider(env),
+  aiLimits: aiLimitsFromEnv(env),
 };
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------

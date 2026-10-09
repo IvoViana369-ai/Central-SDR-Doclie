@@ -1,5 +1,12 @@
 import type { ServerEnv } from '@docline/config';
-import type { EmailProvider, Logger } from '@docline/core';
+import {
+  FakeAiProvider,
+  type AiLimits,
+  type AiProvider,
+  type EmailProvider,
+  type Logger,
+} from '@docline/core';
+import { AnthropicAiProvider } from './ai/anthropic';
 import { ConsoleEmailProvider } from './email/console';
 import { FileEmailProvider } from './email/file';
 import { ResendEmailProvider } from './email/resend';
@@ -21,6 +28,33 @@ export function createEmailProvider(env: ServerEnv, logger: Logger): EmailProvid
     case 'resend':
       return new ResendEmailProvider(env.RESEND_API_KEY!, env.EMAIL_FROM);
   }
+}
+
+/**
+ * IA (docs/AI-SDR.md §4): `fake` é o padrão até a Docline aprovar o envio de
+ * dados ao provedor (transferência internacional, LGPD art. 33). A chave vem
+ * só do ambiente (AI_API_KEY), validada na subida.
+ */
+export function createAiProvider(env: ServerEnv): AiProvider {
+  switch (env.AI_PROVIDER) {
+    case 'fake':
+      return new FakeAiProvider();
+    case 'anthropic':
+      return new AnthropicAiProvider({
+        apiKey: env.AI_API_KEY!,
+        model: env.AI_MODEL,
+        classificationModel: env.AI_MODEL_CLASSIFICATION || env.AI_MODEL,
+      });
+  }
+}
+
+export function aiLimitsFromEnv(env: ServerEnv): AiLimits {
+  return {
+    effortGeneration: env.AI_EFFORT_GENERATION,
+    effortClassification: env.AI_EFFORT_CLASSIFICATION,
+    maxGenerationsPerUserPerDay: env.AI_MAX_GENERATIONS_PER_USER_PER_DAY,
+    monthlyBudgetUsd: env.AI_MONTHLY_BUDGET_USD ?? null,
+  };
 }
 
 export type IntegrationKey =
@@ -45,6 +79,7 @@ const IMPLEMENTED = new Set([
   'smtp',
   'resend',
   'sentry',
+  'anthropic',
 ]);
 
 export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {

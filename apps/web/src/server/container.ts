@@ -4,6 +4,8 @@ import { createIdentifierHasher, systemClock, type CoreDeps } from '@docline/cor
 import { getDb } from '@docline/db';
 import {
   assertProvidersImplemented,
+  aiLimitsFromEnv,
+  createAiProvider,
   createEmailProvider,
   createErrorReporter,
   createLogger,
@@ -52,6 +54,8 @@ export function getContainer(): WebContainer {
       maxBytes: env.IMPORT_MAX_FILE_MB * 1024 * 1024,
       maxRows: env.IMPORT_MAX_ROWS,
     },
+    ai: createAiProvider(env),
+    aiLimits: aiLimitsFromEnv(env),
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,
