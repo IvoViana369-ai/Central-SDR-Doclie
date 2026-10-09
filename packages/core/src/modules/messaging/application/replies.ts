@@ -24,7 +24,7 @@ import { recomputeLeadScores } from '../../scoring';
 import { loadContactRules, loadLeadCalendar } from '../../settings';
 import { closeReplyTasks, createTaskRecord } from '../../tasks';
 import { classifyReplyInput, recordReplyInput } from '../contracts/schemas';
-import { REPLY_CLASSIFICATION_LABELS } from '../domain/labels';
+import { type REPLY_CHANNELS, REPLY_CLASSIFICATION_LABELS } from '../domain/labels';
 import { detectOptOut, type OptOutDetection } from '../domain/opt-out';
 import { describeMessage, messageSelect } from './outbound';
 
@@ -148,11 +148,121 @@ async function applyClassification(
   }
 }
 
+/** Lead com o que o registro de uma resposta precisa. */
+export interface ReplyLead {
+  id: string;
+  ownerId: string | null;
+  municipalityCode: number | null;
+  stateUf: string | null;
+}
+
+/** Resposta recebida, colada pelo SDR (LOGGED) ou chegada pela API do WhatsApp (API). */
+export interface InboundReply {
+  channel: (typeof REPLY_CHANNELS)[number];
+  contactPointId: string | null;
+  /** Texto recebido (mídia sem legenda chega com um rótulo, ex.: "[Áudio]"). */
+  body: string;
+  receivedAt: Date;
+  mode: 'LOGGED' | 'API';
+  provider?: string | null;
+  providerMessageId?: string | null;
+  conversationId?: string | null;
+  /** Classificação escolhida pela pessoa (o webhook nunca escolhe). */
+  classification?: ReplyClassification | null;
+  outOfOfficeUntil?: Date | null;
+}
+
 /**
- * Resposta recebida (F5-10; MVP M13 e M14): o SDR cola o texto. Primeiro as
- * regras de opt-out (resposta certa vira opt-out na hora); depois a
- * classificação escolhida, se houver. A cadência para (ou pausa, se
- * "ausente") e o lead vai para "Respondeu".
+ * Registra uma resposta e aplica as regras (docs/SDR-FLOW.md §7): primeiro o
+ * opt-out (resposta certa vira opt-out na hora); depois a classificação
+ * escolhida, se houver. A cadência para (ou pausa, se "ausente") e o lead vai
+ * para "Respondeu". Usado pelo "Registrar resposta" e pelo webhook do WhatsApp.
+ */
+export async function applyInboundReply(ctx: UseCaseContext, lead: ReplyLead, reply: InboundReply) {
+  const rules = await loadContactRules(ctx.tx);
+  const detection: OptOutDetection = detectOptOut(reply.body, rules.optOutKeywords);
+  // Opt-out certo prevalece sobre qualquer classificação: o titular pediu.
+  const classification: ReplyClassification | null =
+    detection.level === 'CERTAIN' ? 'OPT_OUT' : (reply.classification ?? null);
+  const source = detection.level === 'CERTAIN' ? 'RULE' : classification ? 'HUMAN' : null;
+
+  const message = await ctx.tx.message.create({
+    data: {
+      leadId: lead.id,
+      contactPointId: reply.contactPointId,
+      conversationId: reply.conversationId ?? null,
+      channel: reply.channel,
+      direction: 'INBOUND',
+      mode: reply.mode,
+      body: reply.body,
+      status: 'RECEIVED',
+      receivedAt: reply.receivedAt,
+      provider: reply.provider ?? null,
+      providerMessageId: reply.providerMessageId ?? null,
+      optOutMatch: detection.match,
+      classification,
+      classificationSource: source,
+      classifiedById: source === 'HUMAN' && ctx.actor.kind === 'user' ? ctx.actor.id : null,
+      classifiedAt: classification ? ctx.now : null,
+      createdById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+    },
+    select: messageSelect,
+  });
+  await recordInboundContact(ctx.tx, lead.id, reply.receivedAt);
+  await ctx.tx.leadEvent.create({
+    data: {
+      leadId: lead.id,
+      type: LEAD_EVENTS.messageReceived,
+      occurredAt: reply.receivedAt,
+      actorType: ctx.actor.kind === 'user' ? 'USER' : 'AUTOMATION',
+      actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+      subjectType: 'message',
+      subjectId: message.id,
+      channel: reply.channel,
+      payload: toJson({ classification, optOut: detection.level, mode: reply.mode }),
+    },
+  });
+
+  // Cadência: "ausente" pausa; qualquer outra resposta encerra (se a cadência pedir).
+  if (classification !== 'OUT_OF_OFFICE' && classification !== 'OPT_OUT') {
+    const enrollment = await findOngoingEnrollment(ctx.tx, lead.id);
+    if (enrollment?.cadence.stopOnReply) {
+      await stopLeadEnrollment(ctx.tx, lead.id, 'REPLIED', ctx.now, engagementActorOf(ctx.actor));
+    }
+  }
+  if (classification !== 'NOT_INTERESTED' && classification !== 'OPT_OUT') {
+    await moveLeadToStageKey(ctx, lead.id, 'REPLIED', {
+      source: 'INBOUND',
+      onlyFrom: PRE_REPLY_STAGE_KEYS,
+    });
+  }
+
+  if (classification) {
+    await applyClassification(ctx, lead, message, classification, reply.outOfOfficeUntil ?? null);
+  } else {
+    // Sem classificação: a pessoa decide. Possível opt-out aparece em destaque.
+    await ensureTask(
+      ctx,
+      lead,
+      'REPLY_NEEDED',
+      detection.level === 'POSSIBLE'
+        ? `Possível pedido de opt-out ("${detection.match}"): classifique antes de responder`
+        : 'Classificar e responder',
+      ctx.now,
+    );
+  }
+  // "Já respondeu" e "Mostrou interesse" são critérios do score.
+  await recomputeLeadScores(ctx.tx, [lead.id], 'reply', ctx.now);
+  await auditLead(ctx, lead.id, 'reply.record', {
+    subjectId: message.id,
+    metadata: { channel: reply.channel, mode: reply.mode, classification, optOut: detection.level },
+  });
+  return { messageId: message.id, classification, optOut: detection };
+}
+
+/**
+ * Resposta recebida (F5-10; MVP M13 e M14): o SDR cola o texto e, se quiser,
+ * já classifica.
  */
 export const recordReply = defineUseCase({
   name: 'messaging.recordReply',
@@ -174,90 +284,23 @@ export const recordReply = defineUseCase({
       });
       if (!cp) throw new NotFoundError('Contato não encontrado neste lead.');
     }
-
-    const rules = await loadContactRules(ctx.tx);
-    const detection: OptOutDetection = detectOptOut(input.body, rules.optOutKeywords);
-    // Opt-out certo prevalece sobre qualquer classificação: o titular pediu.
-    const classification: ReplyClassification | null =
-      detection.level === 'CERTAIN' ? 'OPT_OUT' : (input.classification ?? null);
-    const source = detection.level === 'CERTAIN' ? 'RULE' : classification ? 'HUMAN' : null;
-
-    const message = await ctx.tx.message.create({
-      data: {
-        leadId: lead.id,
-        contactPointId: input.contactPointId ?? null,
-        channel: input.channel,
-        direction: 'INBOUND',
-        mode: 'LOGGED',
-        body: input.body,
-        status: 'RECEIVED',
-        receivedAt,
-        optOutMatch: detection.match,
-        classification,
-        classificationSource: source,
-        classifiedById: source === 'HUMAN' && ctx.actor.kind === 'user' ? ctx.actor.id : null,
-        classifiedAt: classification ? ctx.now : null,
-        createdById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
-      },
-      select: messageSelect,
-    });
-    await recordInboundContact(ctx.tx, lead.id, receivedAt);
-    await ctx.tx.leadEvent.create({
-      data: {
-        leadId: lead.id,
-        type: LEAD_EVENTS.messageReceived,
-        occurredAt: receivedAt,
-        actorType: ctx.actor.kind === 'user' ? 'USER' : 'AUTOMATION',
-        actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
-        subjectType: 'message',
-        subjectId: message.id,
-        channel: input.channel,
-        payload: toJson({ classification, optOut: detection.level }),
-      },
-    });
-
-    // Cadência: "ausente" pausa; qualquer outra resposta encerra (se a cadência pedir).
-    if (classification !== 'OUT_OF_OFFICE' && classification !== 'OPT_OUT') {
-      const enrollment = await findOngoingEnrollment(ctx.tx, lead.id);
-      if (enrollment?.cadence.stopOnReply) {
-        await stopLeadEnrollment(ctx.tx, lead.id, 'REPLIED', ctx.now, engagementActorOf(ctx.actor));
-      }
-    }
-    if (classification !== 'NOT_INTERESTED' && classification !== 'OPT_OUT') {
-      await moveLeadToStageKey(ctx, lead.id, 'REPLIED', {
-        source: 'INBOUND',
-        onlyFrom: PRE_REPLY_STAGE_KEYS,
-      });
-    }
-
-    if (classification) {
-      await applyClassification(ctx, lead, message, classification, input.outOfOfficeUntil ?? null);
-    } else {
-      // Sem classificação: a pessoa decide. Possível opt-out aparece em destaque.
-      await ensureTask(
-        ctx,
-        lead,
-        'REPLY_NEEDED',
-        detection.level === 'POSSIBLE'
-          ? `Possível pedido de opt-out ("${detection.match}"): classifique antes de responder`
-          : 'Classificar e responder',
-        ctx.now,
-      );
-    }
-    // "Já respondeu" e "Mostrou interesse" são critérios do score.
-    await recomputeLeadScores(ctx.tx, [lead.id], 'reply', ctx.now);
-    await auditLead(ctx, lead.id, 'reply.record', {
-      subjectId: message.id,
-      metadata: { channel: input.channel, classification, optOut: detection.level },
+    const result = await applyInboundReply(ctx, lead, {
+      channel: input.channel,
+      contactPointId: input.contactPointId ?? null,
+      body: input.body,
+      receivedAt,
+      mode: 'LOGGED',
+      classification: input.classification ?? null,
+      outOfOfficeUntil: input.outOfOfficeUntil ?? null,
     });
     return {
       message: describeMessage(
         await ctx.tx.message.findUniqueOrThrow({
-          where: { id: message.id },
+          where: { id: result.messageId },
           select: messageSelect,
         }),
       ),
-      optOut: detection,
+      optOut: result.optOut,
     };
   },
 });

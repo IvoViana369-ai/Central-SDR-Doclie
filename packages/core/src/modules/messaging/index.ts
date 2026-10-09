@@ -13,5 +13,11 @@ export {
   prepareAssistedMessage,
   recordOutboundSent,
 } from './application/outbound';
-export { classifyReply, recordReply } from './application/replies';
+export {
+  applyInboundReply,
+  classifyReply,
+  recordReply,
+  type InboundReply,
+  type ReplyLead,
+} from './application/replies';
 export { listMessages } from './application/list';

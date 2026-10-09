@@ -389,6 +389,22 @@ async function scrubLead(
       status: 'ANONYMIZED',
     },
   });
+  // WhatsApp (Fase 7): conversas (wa_id, nome do perfil), payloads de webhook e
+  // mensagens de "número sem lead" que citam os telefones do lead.
+  const phones = await ctx.tx.contactPoint.findMany({
+    where: { leadId, type: 'PHONE' },
+    select: { valueHash: true, valueNormalized: true },
+  });
+  if (phones.length > 0) {
+    await ctx.tx.webhookEvent.deleteMany({
+      where: { contactHashes: { hasSome: phones.map((p) => p.valueHash) } },
+    });
+    await ctx.tx.inboundUnmatched.deleteMany({
+      where: { phoneE164: { in: phones.map((p) => p.valueNormalized) } },
+    });
+  }
+  await ctx.tx.inboundUnmatched.deleteMany({ where: { resolvedLeadId: leadId } });
+  await ctx.tx.conversation.deleteMany({ where: { leadId } });
   const points = await ctx.tx.contactPoint.findMany({ where: { leadId }, select: { id: true } });
   for (const cp of points) {
     await ctx.tx.contactPoint.update({
@@ -418,7 +434,10 @@ async function scrubLead(
   await ctx.tx.contactPermission.updateMany({ where: { leadId }, data: { evidence: null } });
   await ctx.tx.leadAssignment.updateMany({ where: { leadId }, data: { reason: null } });
   // Operação comercial (Fase 5): textos das mensagens, anotações e checklist.
-  await ctx.tx.message.updateMany({ where: { leadId }, data: { body: null, optOutMatch: null } });
+  await ctx.tx.message.updateMany({
+    where: { leadId },
+    data: { body: null, optOutMatch: null, templateParams: Prisma.DbNull },
+  });
   await ctx.tx.activity.updateMany({ where: { leadId }, data: { notes: null } });
   await ctx.tx.task.updateMany({
     where: { leadId },

@@ -120,6 +120,48 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 120,
   },
+  /**
+   * Processa um webhook do WhatsApp guardado na inbox (dados: `{ eventId }`):
+   * status, respostas, modelos e qualidade. Itens são idempotentes, então a
+   * nova tentativa reprocessa sem duplicar.
+   */
+  whatsappWebhook: {
+    name: 'whatsapp.webhook',
+    retryLimit: 3,
+    retryDelaySeconds: 60,
+    expireInSeconds: 300,
+  },
+  /** Sugestão automática de classificação de uma resposta recebida (F7-07; `{ messageId }`). */
+  whatsappSuggestClassification: {
+    name: 'whatsapp.suggest-classification',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 180,
+  },
+  /** Sincroniza os modelos da conta na Meta (diário, 03:41 em Fortaleza). */
+  whatsappSyncTemplates: {
+    name: 'whatsapp.sync-templates',
+    cron: '41 6 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 300,
+  },
+  /** Qualidade, limite e situação do número na Meta (de hora em hora). */
+  whatsappHealthCheck: {
+    name: 'whatsapp.health-check',
+    cron: '23 * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 120,
+  },
+  /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
+  webhooksPurge: {
+    name: 'webhooks.purge',
+    cron: '47 4 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 600,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

@@ -11,7 +11,12 @@ import {
   runImportPurge,
   runScoreRecomputeAll,
   runScoreRecomputeLeads,
+  runWebhooksPurge,
+  runWhatsappHealthCheck,
   runWhatsappSend,
+  runWhatsappSuggestClassification,
+  runWhatsappTemplateSync,
+  runWhatsappWebhook,
   type CoreDeps,
 } from '@docline/core';
 import { spreadsheetReader } from '@docline/integrations';
@@ -55,5 +60,11 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.scoreRecomputeAll.name]: async (data) =>
       runScoreRecomputeAll(deps, scoreAllJob.parse(data ?? {})),
     [JOBS.whatsappSend.name]: async (data) => runWhatsappSend(deps, data),
+    [JOBS.whatsappWebhook.name]: async (data) => runWhatsappWebhook(deps, data),
+    [JOBS.whatsappSuggestClassification.name]: async (data) =>
+      runWhatsappSuggestClassification(deps, data),
+    [JOBS.whatsappSyncTemplates.name]: async () => runWhatsappTemplateSync(deps),
+    [JOBS.whatsappHealthCheck.name]: async () => runWhatsappHealthCheck(deps),
+    [JOBS.webhooksPurge.name]: async () => runWebhooksPurge(deps),
   };
 }

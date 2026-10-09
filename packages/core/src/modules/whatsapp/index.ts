@@ -6,3 +6,21 @@ export { FAKE_TEMPLATES, FakeWhatsappProvider } from './infra/fake-provider';
 export * from './contracts/schemas';
 export { recordWhatsappOptIn, revokeWhatsappOptIn } from './application/opt-in';
 export { retryWhatsappMessage, runWhatsappSend, sendWhatsappMessage } from './application/send';
+export {
+  checkWhatsappHealth,
+  dismissUnmatchedInbound,
+  getWhatsappSettings,
+  linkUnmatchedInbound,
+  listUnmatchedInbound,
+  runWhatsappHealthCheck,
+  runWhatsappSuggestClassification,
+  runWhatsappTemplateSync,
+  syncWhatsappTemplates,
+  updateWhatsappSettings,
+  updateWhatsappTemplate,
+} from './application/admin';
+export {
+  receiveWhatsappWebhook,
+  runWebhooksPurge,
+  runWhatsappWebhook,
+} from './application/webhooks';
