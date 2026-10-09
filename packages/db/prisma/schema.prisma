@@ -100,6 +100,12 @@ model User {
   opportunitiesAsSdr Opportunity[]       @relation("OpportunitySdr")
   opportunitiesSales Opportunity[]       @relation("OpportunitySalesOwner")
   notifications      Notification[]      @relation("NotificationUser")
+  messagesApproved   Message[]           @relation("MessageApprovedBy")
+
+  aiGenerationsRequested AiGeneration[]    @relation("AiGenerationRequestedBy")
+  aiGenerationsApproved  AiGeneration[]    @relation("AiGenerationApprovedBy")
+  aiKnowledgeApproved    AiKnowledgeItem[] @relation("AiKnowledgeApprovedBy")
+  approachesCreated      Approach[]        @relation("ApproachCreator")
 
   @@index([role, status])
   @@index([teamId])
@@ -569,6 +575,7 @@ model Lead {
   enrollments   CadenceEnrollment[]
   opportunities Opportunity[]
   notifications Notification[]
+  aiGenerations AiGeneration[]
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -1770,6 +1777,12 @@ model Message {
   classificationConfidence Decimal?              @map("classification_confidence") @db.Decimal(4, 3)
   classifiedById           String?               @map("classified_by_id") @db.Uuid
   classifiedAt             DateTime?             @map("classified_at") @db.Timestamptz(3)
+  /// Rascunho da IA que originou o envio (Fase 6) e abordagem usada (atribuição).
+  aiGenerationId           String?               @unique @map("ai_generation_id") @db.Uuid
+  approachId               String?               @map("approach_id") @db.Uuid
+  /// Quem aprovou o texto antes do envio assistido.
+  approvedById             String?               @map("approved_by_id") @db.Uuid
+  approvedAt               DateTime?             @map("approved_at") @db.Timestamptz(3)
   /// Expressão de opt-out encontrada no texto recebido (regra determinística).
   optOutMatch              String?               @map("opt_out_match")
   provider                 String?
@@ -1779,19 +1792,26 @@ model Message {
   createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead         Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  contactPoint ContactPoint?      @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
-  task         Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  enrollment   CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  cadenceStep  CadenceStep?       @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
-  sentBy       User?              @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
-  classifiedBy User?              @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
+  lead              Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint      ContactPoint?      @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  task              Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  enrollment        CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  cadenceStep       CadenceStep?       @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
+  sentBy            User?              @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  classifiedBy      User?              @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
+  aiGeneration      AiGeneration?      @relation("MessageFromGeneration", fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  approach          Approach?          @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  approvedBy        User?              @relation("MessageApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  /// Sugestões de classificação da IA para esta resposta recebida.
+  aiClassifications AiGeneration[]     @relation("ReplyClassificationSource")
 
   @@unique([provider, providerMessageId])
   @@index([leadId, createdAt(sort: Desc)])
   @@index([sentById, status])
   /// Limite diário de primeiros contatos por SDR.
   @@index([sentById, sentAt], map: "messages_first_contact_idx", where: raw("is_first_contact"))
+  /// Taxa de resposta por abordagem (analytics).
+  @@index([approachId, sentAt])
   @@map("messages")
 }
 
@@ -1990,4 +2010,133 @@ model Notification {
 
   @@index([userId, readAt, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+// ─── Fase 6: IA de prospecção (docs/AI-SDR.md) ─────────────────────────────
+
+/// O que a IA gerou: os 8 tipos de mensagem e a sugestão de classificação de resposta.
+enum AiGenerationKind {
+  FIRST_CONTACT
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  FOLLOW_UP_3
+  INTERESTED_REPLY
+  OBJECTION_REPLY
+  SCHEDULING
+  REACTIVATION
+  REPLY_CLASSIFICATION
+
+  @@map("ai_generation_kind")
+}
+
+/// Ciclo do rascunho (docs/AI-SDR.md §10). Autoaprovação não existe.
+enum AiGenerationStatus {
+  GENERATED
+  EDITED
+  APPROVED
+  DISCARDED
+  SENT
+  FAILED
+  BLOCKED
+
+  @@map("ai_generation_status")
+}
+
+/// Abordagem comparável em analytics (ex.: "parceria para escritórios"), com a orientação para a IA.
+model Approach {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  key         String   @unique
+  name        String
+  description String?
+  /// O que se espera comprovar com a abordagem (análise e testes A/B).
+  hypothesis  String?
+  /// Orientação de ângulo e argumento para a IA (sem fatos: fatos vêm da base de conhecimento).
+  guidance    String?
+  active      Boolean  @default(true)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   User?          @relation("ApproachCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  generations AiGeneration[]
+  messages    Message[]
+
+  @@map("approaches")
+}
+
+/// Fato aprovado sobre a Docline que a IA pode citar (a única fonte de afirmações sobre a empresa).
+model AiKnowledgeItem {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  key          String    @unique
+  title        String
+  content      String
+  active       Boolean   @default(true)
+  /// Sobe a cada alteração de conteúdo; a geração registra as versões usadas.
+  version      Int       @default(1)
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime? @map("approved_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  approvedBy User? @relation("AiKnowledgeApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@map("ai_knowledge_items")
+}
+
+/// Cada chamada à IA, com contexto enviado, saída, edição humana, custo e desfecho (docs/AI-SDR.md §11).
+model AiGeneration {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  leadId            String             @map("lead_id") @db.Uuid
+  requestedById     String?            @map("requested_by_id") @db.Uuid
+  kind              AiGenerationKind
+  channel           Channel?
+  approachId        String?            @map("approach_id") @db.Uuid
+  /// Resposta recebida que foi classificada (só em REPLY_CLASSIFICATION).
+  sourceMessageId   String?            @map("source_message_id") @db.Uuid
+  promptId          String             @map("prompt_id")
+  promptVersion     Int                @map("prompt_version")
+  provider          String
+  model             String
+  /// Esforço, limite de tokens e fallback usados.
+  params            Json
+  /// Contexto minimizado efetivamente enviado (whitelist do ContextBuilder).
+  inputSnapshot     Json               @map("input_snapshot")
+  /// Saída estruturada completa, validada pelo schema.
+  output            Json?
+  textGenerated     String?            @map("text_generated")
+  textFinal         String?            @map("text_final")
+  /// Quanto o humano alterou o rascunho (0 = nada, 1 = tudo).
+  editDistanceRatio Decimal?           @map("edit_distance_ratio") @db.Decimal(4, 3)
+  guardrailFlags    Json               @default("[]") @map("guardrail_flags")
+  status            AiGenerationStatus
+  discardReason     String?            @map("discard_reason")
+  rating            Int?
+  feedback          String?
+  inputTokens       Int?               @map("input_tokens")
+  outputTokens      Int?               @map("output_tokens")
+  cachedInputTokens Int?               @map("cached_input_tokens")
+  costEstimateUsd   Decimal?           @map("cost_estimate_usd") @db.Decimal(10, 6)
+  latencyMs         Int?               @map("latency_ms")
+  stopReason        String?            @map("stop_reason")
+  /// Código do erro do provedor ou do guardrail que bloqueou (FAILED/BLOCKED).
+  errorCode         String?            @map("error_code")
+  approvedById      String?            @map("approved_by_id") @db.Uuid
+  approvedAt        DateTime?          @map("approved_at") @db.Timestamptz(3)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  requestedBy   User?     @relation("AiGenerationRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedBy    User?     @relation("AiGenerationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approach      Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  sourceMessage Message?  @relation("ReplyClassificationSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  message       Message?  @relation("MessageFromGeneration")
+
+  @@index([leadId, createdAt(sort: Desc)])
+  /// Cota diária por pessoa.
+  @@index([requestedById, createdAt])
+  /// Orçamento do mês e painel de custo.
+  @@index([createdAt])
+  @@index([sourceMessageId])
+  @@map("ai_generations")
 }

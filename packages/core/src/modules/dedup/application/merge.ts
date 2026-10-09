@@ -417,23 +417,35 @@ export const mergeDuplicate = defineUseCase({
       skipDuplicates: true,
     });
 
-    const [notes, events, assignments, requests, messages, activities, tasks, opportunities] =
-      await Promise.all([
-        ctx.tx.leadNote.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.leadEvent.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.leadAssignment.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.dataSubjectRequest.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.message.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.activity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.task.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-        ctx.tx.opportunity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-      ]);
-    // Histórico comercial (Fase 5): mensagens, atividades, tarefas (já fechadas) e oportunidades.
+    const [
+      notes,
+      events,
+      assignments,
+      requests,
+      messages,
+      activities,
+      tasks,
+      opportunities,
+      aiGenerations,
+    ] = await Promise.all([
+      ctx.tx.leadNote.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.leadEvent.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.leadAssignment.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.dataSubjectRequest.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.message.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.activity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.task.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.opportunity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.aiGeneration.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+    ]);
+    // Histórico comercial (Fases 5–6): mensagens, atividades, tarefas (já fechadas),
+    // oportunidades e gerações da IA.
     const toSurvivor = { where: { leadId: merged.id }, data: { leadId: survivor.id } };
     await ctx.tx.message.updateMany(toSurvivor);
     await ctx.tx.activity.updateMany(toSurvivor);
     await ctx.tx.task.updateMany(toSurvivor);
     await ctx.tx.opportunity.updateMany(toSurvivor);
+    await ctx.tx.aiGeneration.updateMany(toSurvivor);
     await mergeContactDates(ctx, survivor.id, merged.id);
     await ctx.tx.leadNote.updateMany({
       where: { leadId: merged.id },
@@ -497,6 +509,7 @@ export const mergeDuplicate = defineUseCase({
       activities: activities.map((a) => a.id),
       tasks: tasks.map((t) => t.id),
       opportunities: opportunities.map((o) => o.id),
+      aiGenerations: aiGenerations.map((g) => g.id),
     };
     const record = await ctx.tx.leadMerge.create({
       data: {

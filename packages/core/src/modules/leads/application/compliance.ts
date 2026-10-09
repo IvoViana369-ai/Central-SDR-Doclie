@@ -388,6 +388,18 @@ async function scrubLead(
     where: { leadId },
     data: { title: ANONYMIZED_TASK_TITLE, description: null, outcome: null },
   });
+  // IA (Fase 6): contexto enviado, saída e textos citam o lead e, às vezes, pessoas.
+  await ctx.tx.aiGeneration.updateMany({
+    where: { leadId },
+    data: {
+      inputSnapshot: { anonymized: true },
+      output: Prisma.DbNull,
+      textGenerated: null,
+      textFinal: null,
+      feedback: null,
+      discardReason: null,
+    },
+  });
   // Avisos citam o nome do lead no título.
   await ctx.tx.notification.updateMany({
     where: { leadId },
