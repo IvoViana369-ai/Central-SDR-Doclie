@@ -39,4 +39,6 @@ export * from './modules/engagement';
 export * from './modules/tasks';
 export * from './modules/messaging';
 export * from './modules/cadence';
+export * from './modules/notifications';
+export * from './modules/opportunities';
 export * from './jobs/catalog';

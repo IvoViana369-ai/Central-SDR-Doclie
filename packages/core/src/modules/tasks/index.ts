@@ -18,3 +18,5 @@ export {
   rescheduleTask,
 } from './application/tasks';
 export { logActivity } from './application/activities';
+export { getMyQueue, type QueueItem } from './application/queue';
+export { runForgottenScan, runOverdueScan } from './application/jobs';

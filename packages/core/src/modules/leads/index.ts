@@ -31,7 +31,7 @@ export {
 } from './application/contact-points';
 export { addNote, removeNote, setNotePinned } from './application/notes';
 export { addLeadTag, createTag, listTags, removeLeadTag, updateTag } from './application/tags';
-export { assignLead, claimLead } from './application/assignment';
+export { assignLead, changeOwner, claimLead, pullLeadsFromPool } from './application/assignment';
 export { archiveLead, unarchiveLead } from './application/archive';
 export { listLeadHistory, listLeadTimeline } from './application/timeline';
 export {

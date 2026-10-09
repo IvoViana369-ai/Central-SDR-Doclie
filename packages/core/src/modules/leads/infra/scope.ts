@@ -11,7 +11,7 @@ import { auditData, type UseCaseContext } from '../../../shared/use-case';
  *   todos os leads (decisão registrada no SECURITY.md §4.1).
  * - SDR: os seus + o pool não atribuído (ativo) dos seus territórios. Sem
  *   território configurado, não há pool: só os leads atribuídos a ele.
- * - COMERCIAL: os atribuídos a ele.
+ * - COMERCIAL: os atribuídos a ele e os transferidos a ele (oportunidade).
  * - Processos internos (worker, CLI): todos.
  */
 export async function leadScopeWhere(
@@ -24,7 +24,10 @@ export async function leadScopeWhere(
     case 'MANAGER':
       return {};
     case 'SALES':
-      return { ownerId: actor.id };
+      // Os seus e os transferidos a ele (oportunidade da Fase 5).
+      return {
+        OR: [{ ownerId: actor.id }, { opportunities: { some: { salesOwnerId: actor.id } } }],
+      };
     case 'SDR': {
       const territories = await tx.userTerritory.findMany({
         where: { userId: actor.id },

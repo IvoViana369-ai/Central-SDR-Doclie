@@ -93,6 +93,22 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 600,
   },
+  /** Avisa tarefas atrasadas e transferências sem aceite no prazo (F5-11). */
+  tasksOverdueScan: {
+    name: 'tasks.overdue-scan',
+    cron: '7 * * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 300,
+    expireInSeconds: 600,
+  },
+  /** Avisa cada responsável dos seus leads esquecidos (diário, 07:20 em Fortaleza). */
+  leadsForgottenScan: {
+    name: 'leads.forgotten-scan',
+    cron: '20 10 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 900,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

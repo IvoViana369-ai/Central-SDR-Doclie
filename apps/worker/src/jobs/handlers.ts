@@ -2,6 +2,8 @@ import {
   JOBS,
   runCadenceTick,
   runDuplicateCheck,
+  runForgottenScan,
+  runOverdueScan,
   runDuplicateScan,
   runImportCommit,
   runImportParse,
@@ -47,6 +49,8 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.scoreRecomputeLeads.name]: async (data) =>
       runScoreRecomputeLeads(deps, scoreLeadsJob.parse(data)),
     [JOBS.cadenceTick.name]: async () => runCadenceTick(deps),
+    [JOBS.tasksOverdueScan.name]: async () => runOverdueScan(deps),
+    [JOBS.leadsForgottenScan.name]: async () => runForgottenScan(deps),
     [JOBS.scoreRecomputeAll.name]: async (data) =>
       runScoreRecomputeAll(deps, scoreAllJob.parse(data ?? {})),
   };
