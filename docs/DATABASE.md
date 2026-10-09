@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 7
+### 4.11 Implementação até a Fase 8
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -480,12 +480,19 @@ Diferenças em relação às seções acima:
 - **`inbound_unmatched`** (nova): mensagem recebida de um número que não está em nenhum lead ativo, ou que está em mais de um (`candidate_lead_ids`). Nunca vira lead sozinha: uma pessoa vincula ou descarta.
 - **`integration_connections`:** sem `credentials_encrypted`; os tokens ficam só no ambiente. `config` guarda dados não secretos (número exibido, nome verificado, qualidade, limite de mensagens).
 
-**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts` e `whatsapp-schema.int.test.ts`):
+**Fase 8 (Instagram):** reaproveita `conversations`, `messages`, `webhook_events` e `inbound_unmatched` (canal `INSTAGRAM`), mais:
+
+- **`instagram_profiles`** (nova): métricas públicas do perfil profissional do lead pelo Business Discovery: `followers_count`, `media_count`, `last_post_at` (critério "Instagram ativo" do score), `status` (`FOUND`, `NOT_FOUND` quando o @ não existe ou não é conta profissional, `ERROR`), `checked_at` e o `handle` consultado. Uma por contato (`contact_point_id` único, apagada com o contato), sem `lead_id`: na mesclagem, vai junto com o contato. Nada de mídias, legendas ou biografia.
+- **`social_comments`** (nova): comentário de um **lead** numa publicação da Docline (`external_comment_id` único por provedor), com o IGSID e o @ do autor, a publicação, o texto (dado pessoal) e a data. `private_reply_message_id` (único) aponta a resposta privada, que a Meta aceita uma vez por comentário e até 7 dias depois dele. Comentários de quem não é lead não viram linha.
+- **`conversations`** e **`inbound_unmatched`:** ganham `handle` (o @ de quem escreveu no Instagram). No Instagram, `external_thread_id` é o IGSID (id de quem escreveu, por conta da empresa).
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts`, `whatsapp-schema.int.test.ts` e `instagram-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
 - `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
 - Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição, oportunidade aberta por lead, envio ativo por rascunho da IA e opt-in por número e canal.
-- Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)` e `inbound_unmatched (provider, provider_message_id)`.
+- Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)`, `inbound_unmatched (provider, provider_message_id)` e `social_comments (provider, external_comment_id)`.
+- Uma consulta de perfil por contato (`instagram_profiles.contact_point_id`) e uma resposta privada por comentário (`social_comments.private_reply_message_id`).
 
 ---
 

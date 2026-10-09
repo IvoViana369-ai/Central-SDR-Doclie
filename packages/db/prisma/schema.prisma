@@ -543,43 +543,45 @@ model Lead {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  segment       Segment?             @relation(fields: [segmentId], references: [id], onDelete: SetNull)
-  municipality  Municipality?        @relation(fields: [municipalityCode], references: [ibgeCode])
-  state         State?               @relation(fields: [stateUf], references: [uf])
-  originSource  LeadSource           @relation(fields: [originSourceId], references: [id])
-  owner         User?                @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  createdBy     User?                @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  people        LeadPerson[]
-  contactPoints ContactPoint[]
-  origins       LeadOrigin[]
-  tags          LeadTag[]
-  notes         LeadNote[]
-  assignments   LeadAssignment[]
-  events        LeadEvent[]
-  permissions   ContactPermission[]
-  suppressions  SuppressionEntry[]
-  dsrs          DataSubjectRequest[]
-  mergedInto    Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  absorbed      Lead[]               @relation("LeadMergedInto")
-  candidatesA   DuplicateCandidate[] @relation("CandidateA")
-  candidatesB   DuplicateCandidate[] @relation("CandidateB")
-  merges        LeadMerge[]          @relation("MergeSurvivor")
-  mergedAway    LeadMerge[]          @relation("MergeMerged")
-  pipeline      Pipeline?            @relation(fields: [pipelineId], references: [id])
-  stage         PipelineStage?       @relation(fields: [stageId], references: [id])
-  lossReason    LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
-  scoreModel    ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
-  stageHistory  LeadStageHistory[]
-  scoreHistory  LeadScoreHistory[]
-  tasks         Task[]
-  activities    Activity[]
-  messages      Message[]
-  enrollments   CadenceEnrollment[]
-  opportunities Opportunity[]
-  notifications Notification[]
-  aiGenerations AiGeneration[]
-  conversations Conversation[]
-  inboundLinked InboundUnmatched[]   @relation("InboundUnmatchedLead")
+  segment        Segment?             @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  municipality   Municipality?        @relation(fields: [municipalityCode], references: [ibgeCode])
+  state          State?               @relation(fields: [stateUf], references: [uf])
+  originSource   LeadSource           @relation(fields: [originSourceId], references: [id])
+  owner          User?                @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy      User?                @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  people         LeadPerson[]
+  contactPoints  ContactPoint[]
+  origins        LeadOrigin[]
+  tags           LeadTag[]
+  notes          LeadNote[]
+  assignments    LeadAssignment[]
+  events         LeadEvent[]
+  permissions    ContactPermission[]
+  suppressions   SuppressionEntry[]
+  dsrs           DataSubjectRequest[]
+  mergedInto     Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  absorbed       Lead[]               @relation("LeadMergedInto")
+  candidatesA    DuplicateCandidate[] @relation("CandidateA")
+  candidatesB    DuplicateCandidate[] @relation("CandidateB")
+  merges         LeadMerge[]          @relation("MergeSurvivor")
+  mergedAway     LeadMerge[]          @relation("MergeMerged")
+  pipeline       Pipeline?            @relation(fields: [pipelineId], references: [id])
+  stage          PipelineStage?       @relation(fields: [stageId], references: [id])
+  lossReason     LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+  scoreModel     ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
+  stageHistory   LeadStageHistory[]
+  scoreHistory   LeadScoreHistory[]
+  tasks          Task[]
+  activities     Activity[]
+  messages       Message[]
+  enrollments    CadenceEnrollment[]
+  opportunities  Opportunity[]
+  notifications  Notification[]
+  aiGenerations  AiGeneration[]
+  conversations  Conversation[]
+  inboundLinked  InboundUnmatched[]   @relation("InboundUnmatchedLead")
+  /// Fase 8: comentários do lead nas publicações da Docline no Instagram.
+  socialComments SocialComment[]
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -698,13 +700,16 @@ model ContactPoint {
   createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead          Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  person        LeadPerson?         @relation(fields: [personId], references: [id], onDelete: SetNull)
-  source        LeadSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  permissions   ContactPermission[]
-  messages      Message[]
-  activities    Activity[]
-  conversations Conversation[]
+  lead             Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  person           LeadPerson?         @relation(fields: [personId], references: [id], onDelete: SetNull)
+  source           LeadSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  permissions      ContactPermission[]
+  messages         Message[]
+  activities       Activity[]
+  conversations    Conversation[]
+  /// Fase 8: consulta do perfil (só em contatos do tipo INSTAGRAM).
+  instagramProfile InstagramProfile?
+  socialComments   SocialComment[]
 
   @@unique([leadId, type, valueNormalized])
   @@unique([leadId, type], map: "contact_points_primary_key", where: raw("is_primary AND status = 'ACTIVE'"))
@@ -1836,6 +1841,8 @@ model Message {
   statusEvents      MessageStatusEvent[]
   /// Opt-ins comprovados por esta mensagem.
   optInEvidenceFor  ContactPermission[]  @relation("PermissionEvidence")
+  /// Fase 8: comentário respondido em particular por esta mensagem.
+  privateReplyFor   SocialComment?       @relation("CommentPrivateReply")
 
   @@unique([provider, providerMessageId])
   /// Um envio em andamento ou feito por rascunho da IA (cancelados não contam).
@@ -2244,6 +2251,8 @@ model Conversation {
   externalThreadId       String    @map("external_thread_id")
   /// Nome do perfil informado pela Meta (dado pessoal; apagado na anonimização).
   profileName            String?   @map("profile_name")
+  /// No Instagram, o @ de quem escreveu (o `externalThreadId` é o IGSID).
+  handle                 String?
   lastInboundAt          DateTime? @map("last_inbound_at") @db.Timestamptz(3)
   lastOutboundAt         DateTime? @map("last_outbound_at") @db.Timestamptz(3)
   serviceWindowExpiresAt DateTime? @map("service_window_expires_at") @db.Timestamptz(3)
@@ -2303,8 +2312,9 @@ model WebhookEvent {
   processedAt     DateTime?          @map("processed_at") @db.Timestamptz(3)
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  statusEvents MessageStatusEvent[]
-  unmatched    InboundUnmatched[]
+  statusEvents   MessageStatusEvent[]
+  unmatched      InboundUnmatched[]
+  socialComments SocialComment[]
 
   @@unique([provider, externalEventId])
   @@index([status, receivedAt])
@@ -2331,6 +2341,8 @@ model InboundUnmatched {
   /// Identificador do contato no canal (no WhatsApp, o `wa_id`) e o telefone em E.164.
   externalThreadId  String                 @map("external_thread_id")
   phoneE164         String?                @map("phone_e164")
+  /// No Instagram, o @ de quem escreveu (o `externalThreadId` é o IGSID).
+  handle            String?
   profileName       String?                @map("profile_name")
   /// Tipo da mensagem na Meta (text, image, button…) e o texto, quando há.
   messageKind       String                 @map("message_kind")
@@ -2377,4 +2389,77 @@ model IntegrationConnection {
   updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("integration_connections")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 8: Instagram (docs/INTEGRATIONS.md §7.2, docs/DATABASE.md §4.12)
+// -----------------------------------------------------------------------------
+
+/// Resultado da consulta de um perfil pelo Business Discovery.
+enum InstagramProfileStatus {
+  /// Conta profissional encontrada (métricas preenchidas).
+  FOUND
+  /// O @ não existe ou não é conta profissional (a API só mostra essas).
+  NOT_FOUND
+  /// A consulta falhou; nova tentativa no próximo ciclo.
+  ERROR
+
+  @@map("instagram_profile_status")
+}
+
+/// Métricas públicas do perfil profissional do lead no Instagram (F8-04). Só o
+/// que o score usa e a ficha mostra: nada de mídias, legendas ou biografia.
+/// Pertence ao contato (na mesclagem, vai junto com ele para o lead que fica).
+model InstagramProfile {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  contactPointId String                 @unique @map("contact_point_id") @db.Uuid
+  /// @ consultado (sem @): se o contato mudar, a consulta vale de novo.
+  handle         String
+  status         InstagramProfileStatus
+  followersCount Int?                   @map("followers_count")
+  mediaCount     Int?                   @map("media_count")
+  lastPostAt     DateTime?              @map("last_post_at") @db.Timestamptz(3)
+  checkedAt      DateTime               @map("checked_at") @db.Timestamptz(3)
+  errorCode      String?                @map("error_code")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  contactPoint ContactPoint @relation(fields: [contactPointId], references: [id], onDelete: Cascade)
+
+  @@index([checkedAt])
+  @@map("instagram_profiles")
+}
+
+/// Comentário de um lead numa publicação da Docline (F8-02). Comentários de
+/// quem não é lead não são guardados (só o payload bruto, por 90 dias).
+model SocialComment {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  leadId                String   @map("lead_id") @db.Uuid
+  contactPointId        String?  @map("contact_point_id") @db.Uuid
+  channel               Channel
+  provider              String
+  externalCommentId     String   @map("external_comment_id")
+  /// IGSID de quem comentou e o @ (dados pessoais; apagados na anonimização).
+  externalUserId        String   @map("external_user_id")
+  authorHandle          String   @map("author_handle")
+  /// Publicação comentada (id na Meta e onde foi publicada: FEED, REELS…).
+  mediaId               String   @map("media_id")
+  mediaProductType      String?  @map("media_product_type")
+  /// Resposta a outro comentário.
+  parentCommentId       String?  @map("parent_comment_id")
+  body                  String?
+  commentedAt           DateTime @map("commented_at") @db.Timestamptz(3)
+  /// Resposta privada (uma por comentário, até 7 dias depois dele).
+  privateReplyMessageId String?  @unique @map("private_reply_message_id") @db.Uuid
+  webhookEventId        String?  @map("webhook_event_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lead                Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint        ContactPoint? @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  privateReplyMessage Message?      @relation("CommentPrivateReply", fields: [privateReplyMessageId], references: [id], onDelete: SetNull)
+  webhookEvent        WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalCommentId])
+  @@index([leadId, commentedAt(sort: Desc)])
+  @@map("social_comments")
 }
