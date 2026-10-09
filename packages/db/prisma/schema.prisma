@@ -1778,7 +1778,7 @@ model Message {
   classifiedById           String?               @map("classified_by_id") @db.Uuid
   classifiedAt             DateTime?             @map("classified_at") @db.Timestamptz(3)
   /// Rascunho da IA que originou o envio (Fase 6) e abordagem usada (atribuição).
-  aiGenerationId           String?               @unique @map("ai_generation_id") @db.Uuid
+  aiGenerationId           String?               @map("ai_generation_id") @db.Uuid
   approachId               String?               @map("approach_id") @db.Uuid
   /// Quem aprovou o texto antes do envio assistido.
   approvedById             String?               @map("approved_by_id") @db.Uuid
@@ -1806,6 +1806,8 @@ model Message {
   aiClassifications AiGeneration[]     @relation("ReplyClassificationSource")
 
   @@unique([provider, providerMessageId])
+  /// Um envio em andamento ou feito por rascunho da IA (cancelados não contam).
+  @@unique([aiGenerationId], map: "messages_ai_generation_active_key", where: raw("status <> 'CANCELED'"))
   @@index([leadId, createdAt(sort: Desc)])
   @@index([sentById, status])
   /// Limite diário de primeiros contatos por SDR.
@@ -2130,7 +2132,7 @@ model AiGeneration {
   approvedBy    User?     @relation("AiGenerationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   approach      Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
   sourceMessage Message?  @relation("ReplyClassificationSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
-  message       Message?  @relation("MessageFromGeneration")
+  messages      Message[] @relation("MessageFromGeneration")
 
   @@index([leadId, createdAt(sort: Desc)])
   /// Cota diária por pessoa.

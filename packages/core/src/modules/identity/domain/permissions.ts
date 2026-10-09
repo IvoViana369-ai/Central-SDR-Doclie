@@ -15,6 +15,8 @@ export const PERMISSIONS = [
   'audit.read',
   'settings.manage',
   'integration.manage',
+  /** Relatórios da equipe, exportação de relatórios e custos da IA. */
+  'report.read',
   // Leads
   'lead.read',
   'lead.create',
@@ -50,6 +52,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   MANAGER: new Set<Permission>([
     ...LEAD_BASICS,
     'user.read',
+    'report.read',
     'lead.import',
     'lead.assign',
     'lead.bulk',

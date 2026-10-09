@@ -38,7 +38,7 @@ describe('schema da IA (garantias no banco)', () => {
   beforeEach(() => resetTestData(db));
   afterAll(() => closeTestDb());
 
-  it('uma mensagem por rascunho; abordagem removida não apaga o histórico', async () => {
+  it('um envio ativo por rascunho; abordagem removida não apaga o histórico', async () => {
     const lead = await createLead('Escritório IA');
     const approach = await db.approach.create({ data: { key: 'PARCERIA', name: 'Parceria' } });
     const draft = await generation(lead.id, { approachId: approach.id });
@@ -53,18 +53,22 @@ describe('schema da IA (garantias no banco)', () => {
       aiGenerationId: draft.id,
       approachId: approach.id,
     };
-    await db.message.create({ data: message });
-    // O mesmo rascunho não vira duas mensagens.
+    const first = await db.message.create({ data: message });
+    // O mesmo rascunho não vira dois envios ao mesmo tempo…
     await expect(db.message.create({ data: message })).rejects.toThrow();
+    // …mas, cancelado o primeiro, pode ser preparado de novo.
+    await db.message.update({ where: { id: first.id }, data: { status: 'CANCELED' } });
+    await db.message.create({ data: message });
 
     await db.approach.delete({ where: { id: approach.id } });
     expect(await db.aiGeneration.findUniqueOrThrow({ where: { id: draft.id } })).toMatchObject({
       approachId: null,
     });
-    expect(await db.message.findFirstOrThrow({ where: { leadId: lead.id } })).toMatchObject({
-      approachId: null,
-      aiGenerationId: draft.id,
-    });
+    const messages = await db.message.findMany({ where: { leadId: lead.id } });
+    expect(messages.map((m) => [m.approachId, m.aiGenerationId])).toEqual([
+      [null, draft.id],
+      [null, draft.id],
+    ]);
   });
 
   it('sugestão de classificação aponta a resposta; chaves únicas na base de conhecimento', async () => {

@@ -13,6 +13,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'audit.read': ['ADMIN'],
   'settings.manage': ['ADMIN'],
   'integration.manage': ['ADMIN'],
+  'report.read': ['ADMIN', 'MANAGER'],
   'lead.read': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
   'lead.create': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
   'lead.update': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],

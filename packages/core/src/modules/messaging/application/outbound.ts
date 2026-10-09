@@ -38,6 +38,8 @@ export const messageSelect = {
   classification: true,
   classificationSource: true,
   optOutMatch: true,
+  aiGenerationId: true,
+  approachId: true,
   contactPoint: { select: { id: true, type: true, valueNormalized: true } },
   sentBy: { select: { id: true, name: true } },
 } satisfies Prisma.MessageSelect;
@@ -201,6 +203,26 @@ export const prepareAssistedMessage = defineUseCase({
           },
         });
 
+    // Rascunho da IA: só o aprovado, com o texto aprovado (docs/AI-SDR.md §10).
+    const generation = input.aiGenerationId
+      ? await ctx.tx.aiGeneration.findFirst({
+          where: { id: input.aiGenerationId, leadId: lead.id },
+          select: {
+            id: true,
+            status: true,
+            kind: true,
+            textFinal: true,
+            approachId: true,
+            approvedById: true,
+            approvedAt: true,
+          },
+        })
+      : null;
+    if (input.aiGenerationId && (generation?.status !== 'APPROVED' || !generation.textFinal)) {
+      throw new BusinessRuleError('O rascunho da IA precisa estar aprovado para ser enviado.');
+    }
+    const body = generation?.textFinal ?? input.body;
+
     // Um envio pendente por lead e canal: preparar de novo substitui o anterior.
     await ctx.tx.message.updateMany({
       where: {
@@ -211,6 +233,14 @@ export const prepareAssistedMessage = defineUseCase({
       },
       data: { status: 'CANCELED', canceledAt: ctx.now },
     });
+    if (
+      generation &&
+      (await ctx.tx.message.count({
+        where: { aiGenerationId: generation.id, status: { not: 'CANCELED' } },
+      })) > 0
+    ) {
+      throw new BusinessRuleError('Este rascunho já tem um envio feito ou em andamento.');
+    }
     const message = await ctx.tx.message.create({
       data: {
         leadId: lead.id,
@@ -218,9 +248,16 @@ export const prepareAssistedMessage = defineUseCase({
         channel: input.channel,
         direction: 'OUTBOUND',
         mode: 'ASSISTED',
-        messageType: task?.messageType ?? input.messageType,
-        body: input.body,
+        messageType:
+          task?.messageType ??
+          (generation && generation.kind !== 'REPLY_CLASSIFICATION' ? generation.kind : null) ??
+          input.messageType,
+        body,
         status: 'PENDING_CONFIRMATION',
+        aiGenerationId: generation?.id ?? null,
+        approachId: generation?.approachId ?? null,
+        approvedById: generation?.approvedById ?? null,
+        approvedAt: generation?.approvedAt ?? null,
         taskId: task?.id ?? null,
         enrollmentId: task?.enrollmentId ?? null,
         cadenceStepId: task?.cadenceStepId ?? null,
@@ -230,7 +267,7 @@ export const prepareAssistedMessage = defineUseCase({
     });
     return {
       message: describeMessage(message),
-      link: assistedLink(input.channel, contactPoint.valueNormalized, input.body),
+      link: assistedLink(input.channel, contactPoint.valueNormalized, body),
     };
   },
 });
@@ -260,6 +297,12 @@ export const confirmAssistedMessage = defineUseCase({
         isFirstContact: lead.firstContactAt === null,
       },
     });
+    if (message.aiGenerationId) {
+      await ctx.tx.aiGeneration.update({
+        where: { id: message.aiGenerationId },
+        data: { status: 'SENT' },
+      });
+    }
     await afterSent(ctx, message, sentAt, message.taskId);
     return describeMessage(
       await ctx.tx.message.findUniqueOrThrow({ where: { id: message.id }, select: messageSelect }),

@@ -74,6 +74,12 @@ export class RateLimitError extends DomainError {
   readonly status = 429;
 }
 
+/** Serviço externo indisponível ou com falha (ex.: provedor de IA). */
+export class ExternalServiceError extends DomainError {
+  readonly code = 'EXTERNAL_SERVICE';
+  readonly status = 503;
+}
+
 export function isDomainError(error: unknown): error is DomainError {
   return error instanceof DomainError;
 }

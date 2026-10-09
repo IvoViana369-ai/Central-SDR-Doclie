@@ -237,6 +237,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'audit.read': 'Ver auditoria',
   'settings.manage': 'Configurações',
   'integration.manage': 'Integrações',
+  'report.read': 'Relatórios e custos da IA',
   'lead.read': 'Ver leads',
   'lead.create': 'Criar leads',
   'lead.update': 'Editar leads',

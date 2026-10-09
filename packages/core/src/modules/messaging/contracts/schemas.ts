@@ -24,6 +24,8 @@ export const prepareMessageInput = z.object({
   messageType: z.enum(MESSAGE_TYPES).default('OTHER'),
   /** Tarefa que este envio cumpre (ex.: passo da cadência). */
   taskId: id.nullish(),
+  /** Rascunho da IA aprovado: o texto enviado é o aprovado (Fase 6). */
+  aiGenerationId: id.nullish(),
 });
 
 export const messageIdInput = z.object({ messageId: id });

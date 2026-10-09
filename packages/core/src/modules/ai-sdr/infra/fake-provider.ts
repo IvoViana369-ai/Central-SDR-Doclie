@@ -166,9 +166,16 @@ const MARKS: [string, AiErrorCode, string][] = [
 
 export class FakeAiProvider implements AiProvider {
   readonly name = 'fake';
-  readonly models = { generation: FAKE_MODEL, classification: FAKE_MODEL };
+  readonly models: { generation: string; classification: string };
   /** Pedidos recebidos (inspeção nos testes). */
   readonly requests: AiStructuredRequest<unknown>[] = [];
+  private readonly model: string;
+
+  /** `model`: nome informado como atendente (testes de custo usam um modelo com preço). */
+  constructor(options: { model?: string } = {}) {
+    this.model = options.model ?? FAKE_MODEL;
+    this.models = { generation: this.model, classification: this.model };
+  }
 
   async generateStructured<T>(request: AiStructuredRequest<T>): Promise<AiStructuredResult<T>> {
     this.requests.push(request as AiStructuredRequest<unknown>);
@@ -185,7 +192,7 @@ export class FakeAiProvider implements AiProvider {
     const parsed = request.schema.safeParse(output);
     if (!parsed.success) {
       throw new AiProviderError('INVALID_OUTPUT', 'A saída da IA não seguiu o formato esperado.', {
-        model: FAKE_MODEL,
+        model: this.model,
       });
     }
     return {
@@ -196,7 +203,7 @@ export class FakeAiProvider implements AiProvider {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
-      model: FAKE_MODEL,
+      model: this.model,
       latencyMs: 1,
       stopReason: 'end_turn',
       fallbackUsed: false,
