@@ -1,5 +1,6 @@
 import { getTestDb } from '@docline/db/testing';
 import { FakeAiProvider } from '../modules/ai-sdr/infra/fake-provider';
+import { FakeInstagramProvider } from '../modules/instagram/infra/fake-provider';
 import { FakeWhatsappProvider } from '../modules/whatsapp/infra/fake-provider';
 import type { Role, UserStatus } from '../modules/identity/domain/roles';
 import type { TransactionalEmail } from '../ports/email';
@@ -24,6 +25,8 @@ export function createTestDeps(options: { now?: Date } = {}) {
   const ai = new FakeAiProvider();
   /** WhatsApp simulado: os testes leem o que foi "enviado". */
   const whatsapp = new FakeWhatsappProvider();
+  /** Instagram simulado, no relógio dos testes (Business Discovery determinístico). */
+  const instagram = new FakeInstagramProvider(() => clock.now());
   const noop = () => undefined;
   const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
   const deps: CoreDeps = {
@@ -54,6 +57,7 @@ export function createTestDeps(options: { now?: Date } = {}) {
       monthlyBudgetUsd: null,
     },
     whatsapp,
+    instagram,
   };
 
   let counter = 0;
@@ -72,5 +76,5 @@ export function createTestDeps(options: { now?: Date } = {}) {
     return { user, actor };
   }
 
-  return { db, deps, sent, enqueued, ai, whatsapp, createActor };
+  return { db, deps, sent, enqueued, ai, whatsapp, instagram, createActor };
 }

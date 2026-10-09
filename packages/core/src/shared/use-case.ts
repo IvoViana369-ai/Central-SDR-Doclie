@@ -5,6 +5,7 @@ import type { AiEffort, AiProvider } from '../ports/ai';
 import type { EmailProvider } from '../ports/email';
 import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
+import type { InstagramProvider } from '../ports/instagram';
 import type { WhatsappProvider } from '../ports/whatsapp';
 import type { Actor } from './actor';
 import type { Clock } from './clock';
@@ -32,6 +33,8 @@ export interface CoreDeps {
   aiLimits: AiLimits;
   /** WhatsApp pela API (Fase 7); `null` no modo assistido (só `wa.me`). */
   whatsapp: WhatsappProvider | null;
+  /** Instagram pela API (Fase 8); `null` no modo assistido (copiar e abrir o perfil). */
+  instagram: InstagramProvider | null;
 }
 
 /** Controles de custo da IA (AI_* no ambiente; docs/AI-SDR.md §15). */

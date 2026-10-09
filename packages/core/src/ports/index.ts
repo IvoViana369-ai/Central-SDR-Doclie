@@ -29,3 +29,11 @@ export type {
   WhatsappTemplateOutbound,
   WhatsappTextOutbound,
 } from './whatsapp';
+export type {
+  InstagramAccountInfo,
+  InstagramDiscovery,
+  InstagramProvider,
+  InstagramSendOutcome,
+  InstagramSendResult,
+  InstagramUserProfile,
+} from './instagram';

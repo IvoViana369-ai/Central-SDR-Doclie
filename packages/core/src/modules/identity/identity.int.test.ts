@@ -61,6 +61,7 @@ const deps: CoreDeps = {
     monthlyBudgetUsd: null,
   },
   whatsapp: null,
+  instagram: null,
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

@@ -234,6 +234,7 @@ const deps: CoreDeps = {
     monthlyBudgetUsd: null,
   },
   whatsapp: null,
+  instagram: null,
 };
 
 try {
