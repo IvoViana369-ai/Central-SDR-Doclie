@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas das Fases 1 a 4 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-4)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 a 5 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-5)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 4
+### 4.11 Implementação até a Fase 5
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -447,11 +447,24 @@ Diferenças em relação às seções acima:
 - **Recálculo do score:** os critérios ficam no código (`modules/scoring/domain/criteria.ts`); o modelo no banco escolhe critérios, parâmetros e pesos. Mudar um lead (contatos, cidade, tipo, tags) recalcula na mesma transação; ações em massa, cidades prioritárias e a ativação de um modelo recalculam no worker (`score.recompute-lead` e `score.recompute-all`). `lead_score_history` recebe uma linha só quando o score ou a faixa mudam; o primeiro cálculo não gera evento `score.changed` na timeline.
 - **Configuração inicial** (`seed/sales-config.ts`): só cria o que falta, então renomear, reordenar ou recolorir etapas não é desfeito no próximo deploy. Os leads sem etapa vão para "Novo" com a primeira linha do histórico (`backfillLeadStages`, também chamada na subida do worker).
 
-**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts` e `pipeline-scoring-schema.int.test.ts`):
+**Fase 5 (operação do SDR):** `tasks`, `activities`, `messages`, `cadences`, `cadence_steps`, `cadence_enrollments` e `opportunities`, como nas seções acima, mais:
+
+- **`notifications`** (nova): avisos no app (sino do cabeçalho). `user_id`, `type` (ex.: `handoff.created`, `task.overdue`), `title`, `body`, `lead_id`, `link`, `read_at`.
+- **`leads`:** ganha `first_contact_at`, `last_contact_at` (último contato de saída), `first_reply_at`, `last_inbound_at` e `next_action_at` (vencimento da próxima tarefa aberta).
+- **`tasks`:** sem `priority_score`; a prioridade da Minha Fila é calculada na leitura, para não ficar desatualizada. Ganha `message_type` e `channel` (copiados do passo da cadência), `overdue_notified_at` (o aviso de atraso sai uma vez) e `created_by_id`.
+- **`activities`:** `task_id` (tarefa concluída com o registro) e `contact_point_id`.
+- **`messages`:** `is_first_contact` (limite diário de primeiros contatos por SDR), `task_id`, `canceled_at`, `classified_at` e `opt_out_match` (expressão de opt-out encontrada no texto recebido). `conversation_id`, `template_id`, `whatsapp_template_id`, `ai_generation_id`, `approach_id` e `campaign_id` entram com as tabelas dessas fases (6, 7 e 10). `body` é dado pessoal e é apagado na anonimização.
+- **`cadences`:** `key` estável (`DEFAULT`) e um único `is_default` (único parcial). A janela (`send_window_start`/`end`) é texto `HH:MM` na hora local do lead.
+- **`cadence_enrollments`:** `last_step_executed_at` e `paused_until` (resposta "fora do escritório"). `current_step_position` nulo significa "todos os passos executados", e então `next_step_due_at` é o prazo para "Sem resposta". `campaign_id` entra na Fase 10. O único parcial vale para `ACTIVE` e `PAUSED`: uma inscrição em andamento por lead.
+- **`opportunities`:** `accept_due_at` (prazo de aceite pelo comercial), `sla_alerted_at`, `conversion_type` (`PARTNER`, `CUSTOMER`) e `notes`. Uma oportunidade `OPEN` por lead (único parcial).
+- **Modelos de mensagem e abordagens** (`message_templates`, `approaches`) ficam para a Fase 6, junto com a IA; na Fase 5 o SDR escreve o texto do contato assistido.
+- **Regras de contato** (janela, limites de frequência, palavras de opt-out, dias para "esquecido", SLAs) ficam em `app_settings`; sem linha gravada, valem os padrões do código.
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts` e `sdr-operation-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
 - `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
-- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead e modelo de score ativo.
+- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição e oportunidade aberta por lead.
 
 ---
 

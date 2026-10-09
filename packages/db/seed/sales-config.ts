@@ -2,8 +2,9 @@ import type { DbClient } from '../src/client';
 import { backfillLeadStages } from '../src/pipeline-backfill';
 
 /**
- * Configuração comercial inicial (Fase 4): pipeline padrão com as 17 etapas,
- * motivos de perda e o modelo de score v1 (docs/DATABASE.md §8.1, §8.2 e §8.4).
+ * Configuração comercial inicial: pipeline padrão com as 17 etapas, motivos de
+ * perda e o modelo de score v1 (Fase 4), e a cadência padrão (Fase 5)
+ * (docs/DATABASE.md §8.1 a §8.4).
  * Idempotente e conservadora: só cria o que falta. O ADMIN pode renomear,
  * reordenar e recolorir etapas e publicar novas versões do score; o seed nunca
  * desfaz essas escolhas.
@@ -217,10 +218,25 @@ export const DEFAULT_SCORE_RULES = [
   { criterionKey: 'showed_interest', params: {}, points: 30, active: true },
 ] as const;
 
+export const DEFAULT_CADENCE_KEY = 'DEFAULT';
+
+/**
+ * Cadência padrão (§8.3): D0 primeiro contato → D2, D5 e D10 follow-ups →
+ * 3 dias sem resposta → "Sem resposta". Cada passo vira uma tarefa de contato
+ * assistido; nada é enviado sem ação humana.
+ */
+export const DEFAULT_CADENCE_STEPS = [
+  { dayOffset: 0, messageType: 'FIRST_CONTACT', targetStageKey: 'FIRST_CONTACT' },
+  { dayOffset: 2, messageType: 'FOLLOW_UP_1', targetStageKey: 'FOLLOW_UP_1' },
+  { dayOffset: 5, messageType: 'FOLLOW_UP_2', targetStageKey: 'FOLLOW_UP_2' },
+  { dayOffset: 10, messageType: 'FOLLOW_UP_3', targetStageKey: 'FOLLOW_UP_3' },
+] as const;
+
 export interface SalesConfigSeedResult {
   stages: number;
   lossReasons: number;
   scoringModelCreated: boolean;
+  cadenceCreated: boolean;
   leadsPlacedInPipeline: number;
 }
 
@@ -279,11 +295,41 @@ export async function seedSalesConfig(db: DbClient): Promise<SalesConfigSeedResu
     scoringModelCreated = true;
   }
 
+  // A cadência padrão só nasce uma vez; depois é do ADMIN.
+  let cadenceCreated = false;
+  if (!(await db.cadence.findUnique({ where: { key: DEFAULT_CADENCE_KEY } }))) {
+    await db.cadence.create({
+      data: {
+        key: DEFAULT_CADENCE_KEY,
+        name: 'Padrão — Contabilidade',
+        description: 'Primeiro contato e três follow-ups em dias úteis, na janela de 08h às 18h.',
+        isDefault: true,
+        stopOnReply: true,
+        useBusinessDays: true,
+        sendWindowStart: '08:00',
+        sendWindowEnd: '18:00',
+        noResponseAfterDays: 3,
+        steps: {
+          createMany: {
+            data: DEFAULT_CADENCE_STEPS.map((step, i) => ({
+              ...step,
+              position: i + 1,
+              channel: 'WHATSAPP' as const,
+              action: 'ASSISTED_MESSAGE' as const,
+            })),
+          },
+        },
+      },
+    });
+    cadenceCreated = true;
+  }
+
   const leadsPlacedInPipeline = await backfillLeadStages(db);
   return {
     stages: PIPELINE_STAGES.length,
     lossReasons: LOSS_REASONS.length,
     scoringModelCreated,
+    cadenceCreated,
     leadsPlacedInPipeline,
   };
 }

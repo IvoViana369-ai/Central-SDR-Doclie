@@ -485,10 +485,15 @@ describe('deduplicação (M06)', () => {
     });
     const s = await db.lead.findUniqueOrThrow({
       where: { id: survivor },
-      include: { stage: true, stageHistory: { orderBy: { enteredAt: 'asc' } } },
+      include: { stage: true, stageHistory: true },
     });
     expect(s.stage?.key).toBe('QUALIFIED');
-    expect(s.stageHistory.at(-1)).toMatchObject({ automationSource: 'MERGE', leftAt: null });
+    // O relógio do teste é fixo: as passagens têm o mesmo horário, então a
+    // conferência é pela passagem aberta, não pela ordem.
+    expect(s.stageHistory.filter((h) => h.leftAt === null)).toEqual([
+      expect.objectContaining({ automationSource: 'MERGE', toStageId: s.stageId }),
+    ]);
+    expect(s.stageHistory).toHaveLength(2);
     // O mesclado sai do funil: nenhuma passagem aberta.
     expect(await db.leadStageHistory.count({ where: { leadId: merged, leftAt: null } })).toBe(0);
   });

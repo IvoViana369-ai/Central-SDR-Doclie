@@ -20,6 +20,7 @@ try {
   console.log(
     `Comercial: ${sales.stages} etapas, ${sales.lossReasons} motivos de perda` +
       `${sales.scoringModelCreated ? ', modelo de score v1 criado' : ''}` +
+      `${sales.cadenceCreated ? ', cadência padrão criada' : ''}` +
       `${sales.leadsPlacedInPipeline ? `, ${sales.leadsPlacedInPipeline} leads colocados em "Novo"` : ''}.`,
   );
 } finally {
