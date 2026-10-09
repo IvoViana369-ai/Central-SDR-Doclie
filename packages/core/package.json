@@ -17,6 +17,7 @@
     "./scoring-domain": "./src/modules/scoring/domain/index.ts",
     "./settings-domain": "./src/modules/settings/domain/index.ts",
     "./tasks-domain": "./src/modules/tasks/domain/index.ts",
+    "./ai-domain": "./src/modules/ai-sdr/domain/index.ts",
     "./engagement-domain": "./src/modules/engagement/domain/index.ts",
     "./cadence-domain": "./src/modules/cadence/domain/index.ts",
     "./messaging-domain": "./src/modules/messaging/domain/index.ts",
