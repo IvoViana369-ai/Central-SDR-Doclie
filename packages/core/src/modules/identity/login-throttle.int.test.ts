@@ -11,7 +11,7 @@ import {
 } from '.';
 
 const { db, deps, sent, createActor } = createTestDeps();
-const SECRET = 'segredo-de-teste-com-pelo-menos-32-caracteres';
+const SECRET = 'segredo-de-teste-com-pelo-menos-32-caracteres'; // gitleaks:allow (fictício)
 const EMAIL = 'vitima@docline.example';
 const meta = { ip: '203.0.113.10', requestId: 'req-test' };
 

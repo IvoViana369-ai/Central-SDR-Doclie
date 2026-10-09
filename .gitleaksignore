@@ -1,3 +1,5 @@
 # Falsos positivos revisados (gitleaks). Um por linha: commit:arquivo:regra:linha.
 # Lista de senhas COMUNS recusadas pela política de senha (não são credenciais):
 a05aca4fe71fe02fbd5ad3714bf5ada934c61c64:packages/core/src/modules/identity/domain/password-policy.ts:generic-api-key:16
+# Chave fictícia do teste de integração do cookie de dispositivo (só existe no teste):
+2ec98bb455f43d7165ee310c30a6fbc4e886f54a:packages/core/src/modules/identity/login-throttle.int.test.ts:generic-api-key:14
