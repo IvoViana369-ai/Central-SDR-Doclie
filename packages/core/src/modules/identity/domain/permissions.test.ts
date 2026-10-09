@@ -21,6 +21,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'lead.bulk': ['ADMIN', 'MANAGER'],
   'lead.export': ['ADMIN', 'MANAGER'],
   'lead.anonymize': ['ADMIN'],
+  'tag.manage': ['ADMIN', 'MANAGER'],
   'duplicate.decide': ['ADMIN', 'MANAGER'],
   'ai.generate': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
   'optout.register': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],

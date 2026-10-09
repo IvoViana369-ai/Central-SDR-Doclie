@@ -47,6 +47,8 @@ export default defineConfig({
       EMAIL_OUTBOX_FILE: OUTBOX_FILE,
       BETTER_AUTH_SECRET:
         process.env.BETTER_AUTH_SECRET ?? 'e2e-secret-com-pelo-menos-32-caracteres!!',
+      SUPPRESSION_HASH_PEPPER:
+        process.env.SUPPRESSION_HASH_PEPPER ?? 'e2e-pepper-com-pelo-menos-32-caracteres!!',
       LOG_LEVEL: 'warn',
     },
   },

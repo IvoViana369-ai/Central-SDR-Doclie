@@ -57,7 +57,8 @@ export class NotFoundError extends DomainError {
 }
 
 export class ConflictError extends DomainError {
-  readonly code = 'CONFLICT';
+  /** Subclasses podem especializar o código (ex.: POSSIBLE_DUPLICATE). */
+  readonly code: string = 'CONFLICT';
   readonly status = 409;
 }
 

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { getServerEnv } from '@docline/config';
 import {
+  createIdentifierHasher,
   inviteUser,
   isDomainError,
   systemActor,
@@ -51,6 +52,7 @@ try {
       logger,
       email: createEmailProvider(env, logger),
       passwordHasher: { hash: hashPassword },
+      identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
       appUrl: env.APP_URL,
     },
     systemActor('cli:admin:create'),

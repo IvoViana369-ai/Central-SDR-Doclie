@@ -26,4 +26,6 @@ export type * from './ports';
 export * from './modules/identity';
 export * from './modules/audit';
 export * from './modules/normalization';
+export * from './modules/compliance';
+export * from './modules/leads';
 export * from './jobs/catalog';

@@ -8,6 +8,7 @@ const KEY32 = Buffer.alloc(32, 7).toString('base64');
 const minimal = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
   BETTER_AUTH_SECRET: SECRET,
+  SUPPRESSION_HASH_PEPPER: SECRET,
 };
 
 function problemsOf(source: Record<string, string | undefined>): string[] {
@@ -58,6 +59,7 @@ describe('parseServerEnv', () => {
     const problems = problemsOf({});
     expect(problems).toContain('DATABASE_URL: obrigatória');
     expect(problems).toContain('BETTER_AUTH_SECRET: obrigatória');
+    expect(problems).toContain('SUPPRESSION_HASH_PEPPER: obrigatória');
   });
 
   it('rejeita segredo curto sem expor o valor na mensagem', () => {
@@ -109,7 +111,6 @@ describe('parseServerEnv', () => {
     expect(problems).toEqual(
       expect.arrayContaining([
         'ENCRYPTION_KEY: obrigatória quando APP_ENV=production',
-        'SUPPRESSION_HASH_PEPPER: obrigatória quando APP_ENV=production',
         'APP_URL: deve usar https fora do ambiente local',
         'EMAIL_PROVIDER: console não envia e-mails; use smtp ou resend em produção',
       ]),
@@ -124,7 +125,6 @@ describe('parseServerEnv', () => {
         APP_ENV: 'staging',
         APP_URL: 'https://staging.example.com',
         ENCRYPTION_KEY: KEY32,
-        SUPPRESSION_HASH_PEPPER: SECRET,
         EMAIL_PROVIDER: 'file',
       }),
     ).toEqual(['EMAIL_PROVIDER: file é apenas para desenvolvimento e testes']);
@@ -136,7 +136,6 @@ describe('parseServerEnv', () => {
       APP_ENV: 'production',
       APP_URL: 'https://sdr.example.com',
       ENCRYPTION_KEY: KEY32,
-      SUPPRESSION_HASH_PEPPER: SECRET,
       EMAIL_PROVIDER: 'smtp',
       SMTP_URL: 'smtp://user:pass@smtp.example.com:587',
     });

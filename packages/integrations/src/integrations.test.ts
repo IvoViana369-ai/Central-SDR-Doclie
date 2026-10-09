@@ -12,6 +12,7 @@ import { assertProvidersImplemented, createEmailProvider, integrationStatuses } 
 const baseEnv = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
   BETTER_AUTH_SECRET: 'x'.repeat(40),
+  SUPPRESSION_HASH_PEPPER: 'y'.repeat(40),
 };
 const email = {
   to: 'ana@example.com',

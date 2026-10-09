@@ -24,6 +24,7 @@ export const PERMISSIONS = [
   'lead.bulk',
   'lead.export',
   'lead.anonymize',
+  'tag.manage',
   'duplicate.decide',
   // Contato e conformidade
   'ai.generate',
@@ -52,6 +53,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'lead.assign',
     'lead.bulk',
     'lead.export',
+    'tag.manage',
     'duplicate.decide',
     'permission.update',
   ]),

@@ -5,6 +5,7 @@ import type { EmailProvider } from '../ports/email';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { Actor } from './actor';
 import type { Clock } from './clock';
+import type { IdentifierHasher } from './identifier-hash';
 import { ForbiddenError, UnauthenticatedError, ValidationError } from './errors';
 import type { Logger } from './logger';
 
@@ -15,6 +16,8 @@ export interface CoreDeps {
   logger: Logger;
   email: EmailProvider;
   passwordHasher: PasswordHasher;
+  /** HMAC de telefones, e-mails, Instagram e CNPJs (Lista Não Contatar). */
+  identifiers: IdentifierHasher;
   /** URL pública da aplicação, usada em links de e-mail. */
   appUrl: string;
 }

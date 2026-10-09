@@ -79,7 +79,9 @@ export const serverEnvShape = {
   BETTER_AUTH_SECRET: secret(32),
   BETTER_AUTH_URL: optional(z.url()),
   ENCRYPTION_KEY: optional(base64Key32),
-  SUPPRESSION_HASH_PEPPER: optional(secret(32)),
+  // Obrigatória em todos os ambientes: sem ela, contatos não são cruzados com a
+  // Lista Não Contatar (docs/LGPD.md §8).
+  SUPPRESSION_HASH_PEPPER: secret(32),
 
   // Seleção de provedores
   WHATSAPP_PROVIDER: withDefault(z.enum(['assisted', 'fake', 'meta_cloud']), 'assisted'),
@@ -195,7 +197,7 @@ export const serverEnvSchema = z.object(serverEnvShape).superRefine((env, ctx) =
 
   const deployed = env.APP_ENV === 'production' || env.APP_ENV === 'staging';
   if (deployed) {
-    requireAll(`APP_ENV=${env.APP_ENV}`, ['ENCRYPTION_KEY', 'SUPPRESSION_HASH_PEPPER']);
+    requireAll(`APP_ENV=${env.APP_ENV}`, ['ENCRYPTION_KEY']);
     if (!env.APP_URL.startsWith('https://')) {
       ctx.addIssue({
         code: 'custom',

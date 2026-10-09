@@ -1,6 +1,6 @@
 import 'server-only';
 import { getServerEnv, type ServerEnv } from '@docline/config';
-import { systemClock, type CoreDeps } from '@docline/core';
+import { createIdentifierHasher, systemClock, type CoreDeps } from '@docline/core';
 import { getDb } from '@docline/db';
 import {
   assertProvidersImplemented,
@@ -35,6 +35,7 @@ export function getContainer(): WebContainer {
     email: createEmailProvider(env, logger),
     // Mesmo algoritmo do Better Auth, para senhas definidas por convite.
     passwordHasher: { hash: hashPassword },
+    identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
     appUrl: env.APP_URL,
   };
   globalForContainer.__doclineWeb = { env, logger, deps };

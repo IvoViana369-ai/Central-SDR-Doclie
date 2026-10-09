@@ -78,6 +78,13 @@
 | SDR | Leads atribuídos a ele + pool não atribuído do seu território + leads que transferiu (somente leitura) |
 | COMERCIAL | Leads/oportunidades transferidos a ele |
 
+**Como está implementado (Fase 2)** — `leadScopeWhere` em `packages/core/src/modules/leads/infra/scope.ts`, aplicado em toda leitura e escrita de lead:
+
+- **GESTOR vê todos os leads** enquanto não houver gestão de equipes (hoje não há tela para criar equipes). Quando houver, o escopo por equipe entra como configuração.
+- **Pool do SDR** = leads ativos e sem responsável nas UFs ou cidades dos seus territórios (`user_territories`, definidos pelo ADMIN na tela Equipe). **Sem território, não há pool**: o SDR vê só os leads atribuídos a ele. Ao "puxar do pool", o lead passa a ser dele (atribuição `CLAIM`, com proteção contra dois SDRs puxarem o mesmo lead).
+- "Leads que transferiu (somente leitura)" entra com a transferência ao Comercial (Fase 5).
+- **Fora do escopo, o lead parece não existir** (404, sem revelar que existe) e a tentativa é registrada como `access.denied` na auditoria, gravada fora da transação para sobreviver ao rollback. Na verificação de duplicidade, um lead fora do escopo aparece só com o código, para evitar o cadastro duplicado sem expor os dados.
+
 ### 4.2 Matriz de permissões (inicial)
 
 | Ação | ADMIN | GESTOR | SDR | COMERCIAL |
@@ -87,6 +94,7 @@
 | Importar planilhas | ✅ | ✅ | ⚙️ (configurável) | ❌ |
 | Atribuir/redistribuir leads | ✅ | ✅ | ❌ (só "puxar do pool") | ❌ |
 | Ações em massa | ✅ | ✅ | ⚙️ (nos próprios leads) | ❌ |
+| Criar e editar tags (aplicar tags existentes: todos) | ✅ | ✅ | ❌ | ❌ |
 | Decidir duplicados (mesclar) | ✅ | ✅ | ⚙️ | ❌ |
 | Gerar e aprovar mensagens com IA | ✅ | ✅ | ✅ | ✅ |
 | Registrar opt-out | ✅ | ✅ | ✅ | ✅ |

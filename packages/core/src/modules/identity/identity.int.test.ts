@@ -11,6 +11,7 @@ import {
   ValidationError,
 } from '../../shared/errors';
 import type { Logger } from '../../shared/logger';
+import { createIdentifierHasher } from '../../shared/identifier-hash';
 import { hashToken } from '../../shared/tokens';
 import type { CoreDeps } from '../../shared/use-case';
 import type { TransactionalEmail } from '../../ports/email';
@@ -47,6 +48,7 @@ const deps: CoreDeps = {
     },
   },
   passwordHasher: { hash: async (password) => `hashed:${password}` },
+  identifiers: createIdentifierHasher('pepper-de-teste-com-pelo-menos-32-caracteres'),
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';
