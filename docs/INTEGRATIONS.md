@@ -1,6 +1,6 @@
 # Integrações — Docline SDR
 
-> **Status:** desenho da Fase 0, com as notas **Implementação** das fases já entregues: IA (Fase 6, [§10](#10-ia)) e WhatsApp Cloud API (Fase 7, [§6.2](#6-whatsapp)). **Nenhuma integração externa real é implementada antes da fase indicada**, e as reais ficam desligadas por padrão.
+> **Status:** desenho da Fase 0, com as notas **Implementação** das fases já entregues: IA (Fase 6, [§10](#10-ia)), WhatsApp Cloud API (Fase 7, [§6.2](#6-whatsapp)) e Instagram API (Fase 8, [§7.2](#7-instagram)). **Nenhuma integração externa real é implementada antes da fase indicada**, e as reais ficam desligadas por padrão.
 > Políticas de plataformas (Meta, Google) mudam com frequência: cada seção marcada com ⚠️ deve ser **revalidada na documentação oficial** antes da fase correspondente.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [AI-SDR](./AI-SDR.md)
 
@@ -40,13 +40,15 @@
 
 ## 2. Estrutura
 
-Situação na Fase 7 (o que ainda não existe aparece como planejado):
+Situação na Fase 8 (o que ainda não existe aparece como planejado):
 
 ```
 packages/integrations/src/
 ├── whatsapp/
 │   ├── meta-cloud.ts    # WhatsApp Cloud API pela Graph API oficial (Fase 7)
 │   └── signature.ts     # X-Hub-Signature-256 e verificação do endpoint do webhook
+├── instagram/
+│   └── meta-graph.ts    # Instagram API com Facebook Login, pela Graph API oficial (Fase 8)
 ├── ai/anthropic.ts      # SDK oficial da Anthropic (Fase 6)
 ├── email/{console,file,smtp,resend}.ts
 ├── queue/pg-boss.ts
@@ -54,10 +56,10 @@ packages/integrations/src/
 ├── observability/{logger,error-reporter}.ts
 └── registry.ts          # resolve adaptadores conforme o ambiente
 
-planejado: instagram/ (Fase 8) · google/places (Fase 9) · enrichment/ (Fase 9) · crm/ (Fase 12)
+planejado: google/places (Fase 9) · enrichment/ (Fase 9) · crm/ (Fase 12)
 ```
 
-Os **provedores falsos** (WhatsApp, IA) ficam no core (`packages/core/src/modules/*/infra/fake-*.ts`), porque testes, CI e E2E usam o mesmo código. O **modo assistido** do WhatsApp não passa por adaptador: é o link `wa.me` montado no módulo de mensagens.
+Os **provedores falsos** (WhatsApp, Instagram, IA) ficam no core (`packages/core/src/modules/*/infra/fake-*.ts`), porque testes, CI e E2E usam o mesmo código. O **modo assistido** não passa por adaptador: é o link `wa.me` ou o link do perfil do Instagram, montados no módulo de mensagens. A assinatura do webhook (`whatsapp/signature.ts`) serve aos dois canais da Meta.
 
 ---
 
@@ -107,7 +109,9 @@ interface JobQueue {
 
 Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de SDK de terceiros atravessa a porta.
 
-> **Implementado na Fase 7:** em vez da `MessagingProvider` genérica, a porta `WhatsappProvider` (`packages/core/src/ports/whatsapp.ts`) com `send(outbound)` (texto ou modelo, sempre com a nossa referência), `listTemplates()` e `getPhoneHealth()`. Falhas viram `WhatsappProviderError` com o desfecho (`NOT_SENT` ou `UNKNOWN`), o código e se é passageira. A leitura do webhook (formato da Meta) fica no core, não no adaptador (ADR 023). O Instagram (Fase 8) terá a sua porta, aproveitando o que for comum.
+> **Implementado na Fase 7:** em vez da `MessagingProvider` genérica, a porta `WhatsappProvider` (`packages/core/src/ports/whatsapp.ts`) com `send(outbound)` (texto ou modelo, sempre com a nossa referência), `listTemplates()` e `getPhoneHealth()`. Falhas viram `WhatsappProviderError` com o desfecho (`NOT_SENT` ou `UNKNOWN`), o código e se é passageira. A leitura do webhook (formato da Meta) fica no core, não no adaptador (ADR 023).
+>
+> **Implementado na Fase 8:** a porta `InstagramProvider` (`packages/core/src/ports/instagram.ts`), separada da do WhatsApp porque as regras são outras (ADR 025): `sendText` (só a quem escreveu, em 24 h), `sendPrivateReply` (uma por comentário, em 7 dias), `getUserProfile` (o @ de quem escreveu), `discover` (Business Discovery) e `getAccount`. Falhas viram `InstagramProviderError`, com o mesmo desfecho `NOT_SENT`/`UNKNOWN` do WhatsApp. O webhook também é lido no core (`parseInstagramWebhook`).
 
 ---
 
@@ -116,7 +120,7 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 | Variável | Valores | Padrão dev | Padrão prod (inicial) |
 |---|---|---|---|
 | `WHATSAPP_PROVIDER` | `assisted`, `fake`, `meta_cloud` | `assisted` (`fake` para homologar a API sem a Meta) | `assisted` → `meta_cloud` depois do [§16.1](#161-ativar-o-whatsapp-pela-api-cloud-api) |
-| `INSTAGRAM_PROVIDER` | `assisted`, `fake`, `meta_graph` | `assisted` | `assisted` → `meta_graph` (Fase 8) |
+| `INSTAGRAM_PROVIDER` | `assisted`, `fake`, `meta_graph` | `assisted` (`fake` para homologar a API sem a Meta) | `assisted` → `meta_graph` depois do [§16.2](#162-ativar-o-instagram-pela-api) |
 | `PLACES_PROVIDER` | `disabled`, `fake`, `google_places` | `fake` | `disabled` até validação jurídica |
 | `COMPANY_REGISTRY_PROVIDER` | `disabled`, `fake`, `receita_open_data`, `brasilapi` | `fake` | `disabled` → Fase 9 |
 | `AI_PROVIDER` | `fake`, `anthropic` | `fake` | `fake` até a decisão da Docline sobre a transferência internacional; depois `anthropic` |
@@ -126,6 +130,8 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 O `registry.ts` valida as variáveis na inicialização (schema Zod) e **falha ao subir** se um provedor real estiver configurado sem as credenciais necessárias. Em ambiente não produtivo, adaptadores de envio real recusam operar sem `ALLOW_REAL_SENDS=true` explícito.
 
 Com `WHATSAPP_PROVIDER=meta_cloud` são obrigatórias: `META_APP_SECRET`, `META_ACCESS_TOKEN` (token de *System User*), `META_GRAPH_API_VERSION` (ex.: `v26.0`), `META_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_BUSINESS_ACCOUNT_ID` e `WHATSAPP_PHONE_NUMBER_ID`. Com `fake`, só `META_APP_SECRET` e `META_WEBHOOK_VERIFY_TOKEN` de teste (para o webhook e o simulador). Todas só em variáveis de ambiente; nunca no código nem no Git.
+
+Com `INSTAGRAM_PROVIDER=meta_graph` são obrigatórias: `META_APP_SECRET`, `META_GRAPH_API_VERSION`, `META_WEBHOOK_VERIFY_TOKEN` (as mesmas do app da Meta usado pelo WhatsApp), `INSTAGRAM_BUSINESS_ACCOUNT_ID` (id da conta profissional), `FACEBOOK_PAGE_ID` (Página ligada a ela) e `INSTAGRAM_PAGE_ACCESS_TOKEN` (token da Página, de longa duração). Com `fake`, só os dois segredos de teste do webhook.
 
 ---
 
@@ -217,6 +223,21 @@ Guardar o `handle`; botão "Copiar mensagem e abrir perfil" (`https://instagram.
 | **Business Discovery** | Consulta de dados públicos básicos de outras contas profissionais (seguidores, número de posts, mídias recentes) | Critério "Instagram ativo" (data do último post); enriquecimento |
 
 Requer conta profissional da Docline, app Meta, **App Review** das permissões necessárias e conformidade com os Termos da Plataforma Meta (inclusive limites de armazenamento e exclusão de dados obtidos pela API).
+
+> **Implementação (Fase 8).** Desligada por padrão (`INSTAGRAM_PROVIDER=assisted`); ligar segue o [§16.2](#162-ativar-o-instagram-pela-api). Variante **com Facebook Login** (conta profissional ligada a uma Página), a única com Business Discovery.
+>
+> - **Adaptador** `packages/integrations/src/instagram/meta-graph.ts`: `fetch` direto na Graph API, versão fixada em `META_GRAPH_API_VERSION`, tempo limite de 15 s, sem nova tentativa. Envia por `POST /{page-id}/messages` com o token da Página; fora de produção recusa enviar sem `ALLOW_REAL_SENDS=true`. Testado contra um servidor local que imita a Graph API.
+> - **Provedor simulado** (`INSTAGRAM_PROVIDER=fake`): nada sai do servidor; marcas no texto simulam erros (`[fake:janela-fechada]`, `[fake:indisponivel]`, `[fake:limite]`, `[fake:incerto]`); o IGSID simulado sai do @ (`fake-igsid-<@>`); Business Discovery determinístico pelo @. Mensagens, comentários, ecos e "visto" chegam pelo webhook real, assinados pelo simulador: `pnpm instagram:simulate mensagem --de @perfil --texto "Tenho interesse"`, `comentario`, `eco` e `visto`. Recusa rodar com `meta_graph`.
+> - **Só responder, nunca iniciar** (ADR 025): texto livre só em até 24 h da última mensagem do contato (o gate do modo API exige a janela aberta naquele @); resposta privada a um comentário do lead, **uma por comentário, até 7 dias**, com o gate do contato assistido (Lista Não Contatar, base legal, horário e intervalo). A tag `human_agent` (até 7 dias) **não** é usada. O primeiro contato continua assistido, pelo app.
+> - **Envio** (job `instagram.send`): o mesmo desenho do WhatsApp (ADR 022) — fila e job na mesma transação, prazos da Meta e gate conferidos de novo no job, chamada fora da transação, desfecho com atualização condicional, **nenhum reenvio automático**, resultado incerto só repetido depois de 10 minutos e com confirmação. Texto até 1.000 bytes (UTF-8).
+> - **Webhook** `/api/webhooks/instagram`: mesma verificação do endpoint e da assinatura do WhatsApp (o app da Meta é o mesmo). Lidos: `messages` (mensagem recebida, eco do que a conta enviou, "visto", postback) e `comments`. Mensagens apagadas, de teste e de outras contas são ignoradas.
+> - **Mensagens recebidas** (F8-02): casadas pela conversa já existente (IGSID) ou pelo @ cadastrado no lead; o @ de quem escreve pela primeira vez vem do perfil na Meta (consultado no worker, fora da transação). Viram resposta do lead com as regras da Fase 5 (cadência, opt-out por palavra, etapa, tarefa) e a sugestão de classificação da IA. Quem não é lead (ou tem o @ em mais de um lead) vai para "Quem não é lead" em Conversas; **nenhum lead é criado sozinho**.
+> - **Ecos:** confirmam envios da API (inclusive os de resultado incerto, pelo texto e pelo destinatário em até 48 h), guardam o id da Meta no contato assistido já confirmado e registram no histórico o que a equipe respondeu direto pelo app numa conversa conhecida. Eco de conversa desconhecida (primeiro contato pelo app) é ignorado.
+> - **Comentários** nas publicações da Docline: guardados **só de leads já cadastrados** (o @ em um único lead), com aviso ao responsável; o texto fica só no comentário (a timeline registra o evento sem o texto). Comentário não é resposta à cadência; pedido de opt-out num comentário público é sinalizado para uma pessoa conferir. De quem não é lead, nada é gravado.
+> - **Business Discovery** (F8-04, job `instagram.discovery` de hora em hora): consulta os @ dos leads ativos — exceto opt-out e bloqueados — com teto por rodada (padrão 50/h) e validade de 30 dias (falha volta no dia seguinte); cada @ é consultado uma vez mesmo se estiver em mais de um lead. Guarda **só** seguidores, número de publicações e a data da última publicação; nada de legendas, mídias ou comentários. Limite da Meta interrompe a rodada; token recusado marca a integração em erro. O critério "Instagram ativo" do score usa a última publicação do @ atual e continua **inativo no seed** até o ADMIN ligá-lo.
+> - **Conta:** job diário `instagram.account-check` e o botão em Configurações → Instagram conferem o token e a conta; erro de permissão avisa os administradores uma vez.
+>
+> **Conferido em 2026-10-09** (documentação da Meta): Instagram API com Facebook Login; envio por `/{page-id}/messages`; janela de 24 h para texto; resposta privada com `recipient: {comment_id}`, uma por comentário, em até 7 dias; User Profile API (`name`, `username`) só para quem escreveu; Business Discovery com `business_discovery.username(...)` (seguidores, número de mídias, mídias); limite de 1.000 bytes por mensagem; webhooks `messages` (com `is_echo`, `is_deleted`, `is_self`, `read`) e `comments`. Permissões: `instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments`, `pages_manage_metadata`, `pages_show_list`, `pages_read_engagement`, `pages_messaging` e `business_management`. **Revalidar antes de ligar** e a cada troca de versão.
 
 ---
 
@@ -326,6 +347,8 @@ sequenceDiagram
 Regras: responder rápido (o processamento é assíncrono); idempotência por `(provider, external_event_id)`; assinatura inválida → `401` e registro de segurança; payloads brutos purgados após 90 dias.
 
 > **Implementação (Fase 7, WhatsApp).** A Meta não manda um id por entrega, então `external_event_id` é o **SHA-256 do corpo**: a mesma entrega repetida não é gravada duas vezes. O job `whatsapp.webhook` processa os itens um a um, cada um idempotente (status por `(mensagem, status)`, recebidas por `provider_message_id`); falha de um item não perde os outros e o job tenta de novo até 3 vezes. Cada evento guarda HMACs dos números citados (`contact_hashes`), para que a anonimização de um titular apague também os payloads brutos dele. O job `webhooks.purge` apaga payloads e mensagens de números sem lead com mais de 90 dias.
+>
+> **Instagram (Fase 8):** a mesma inbox (job `instagram.webhook`), com as linhas em `webhook_events.provider = instagram:<provedor>`. Os `contact_hashes` levam o HMAC do @ de quem comentou e do IGSID (`igsid:<id>`), para a anonimização achar também os payloads de quem só tinha o IGSID registrado. A mesma purga de 90 dias vale para o Instagram.
 
 ---
 
@@ -388,3 +411,26 @@ Ninguém liga sozinho: depende da Docline e do jurídico. Até lá, o modo assis
 5. Produção: repetir 1 a 3, começar com poucos leads com opt-in, acompanhar qualidade e custo por uma semana antes de ampliar.
 
 **Para pausar rápido:** voltar `WHATSAPP_PROVIDER=assisted` no web e no worker. Mensagens na fila viram falha conhecida ("envios reais desligados"); nada é reenviado sozinho quando a API volta.
+
+### 16.2 Ativar o Instagram pela API
+
+Também depende da Docline e do jurídico. Até lá, o contato pelo Instagram continua assistido (copiar o texto e abrir o perfil).
+
+**Pré-requisitos (Docline):**
+
+- [ ] Conta do Instagram da Docline **profissional** (empresa ou criador) ligada a uma **Página do Facebook**; acesso à Página pelo Business Manager.
+- [ ] App Meta (pode ser o mesmo do WhatsApp) com os produtos Instagram e Messenger; **App Review aprovado** para `instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments`, `pages_manage_metadata`, `pages_show_list`, `pages_read_engagement`, `pages_messaging` e `business_management`, com a descrição do uso (responder quem escreveu e quem comentou; métricas públicas para priorizar). O App Review pede vídeo de demonstração: o modo `fake` em staging serve para gravá-lo.
+- [ ] Na conta do Instagram: Configurações → Mensagens → **Permitir acesso às mensagens** (exigido pela Meta para a API ler e responder).
+- [ ] Parecer jurídico sobre respostas pela API, comentários e métricas públicas de perfis (Business Discovery) — [LGPD](./LGPD.md).
+- [ ] 2FA obrigatório para ADMIN/GESTOR ativo (já implementado, `TWO_FACTOR_ENFORCEMENT=required`).
+
+**Configuração (staging primeiro):**
+
+1. Gerar o **token da Página** de longa duração (usuário do sistema com acesso à Página) e anotar `INSTAGRAM_BUSINESS_ACCOUNT_ID` e `FACEBOOK_PAGE_ID`.
+2. Definir no ambiente (Render → *Environment*, nunca no Git), no **web** e no **worker**: `INSTAGRAM_PROVIDER=meta_graph`, `INSTAGRAM_PAGE_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `FACEBOOK_PAGE_ID` e, se ainda não houver pelo WhatsApp, `META_APP_SECRET`, `META_GRAPH_API_VERSION` e `META_WEBHOOK_VERIFY_TOKEN`. Em staging, `ALLOW_REAL_SENDS=true` só durante o teste, com perfis da equipe.
+3. No app Meta → Webhooks → objeto **Instagram**: URL de callback `https://<domínio>/api/webhooks/instagram`, o mesmo verify token; assinar **`messages`** e **`comments`**. Inscrever a Página no app (`POST /{page-id}/subscribed_apps`).
+4. Configurações → Instagram: **Verificar agora** (a conta aparece como ativa); revisar a consulta de perfis (teto por hora e validade).
+5. Teste de ponta a ponta com um perfil da equipe: mandar DM para a Docline (entra no lead que tem o @, ou em "Quem não é lead"), responder pela ficha, comentar numa publicação e responder em particular, conferir "Lida" e a sugestão de classificação; "Atualizar métricas" na ficha.
+6. Depois de uma semana de consulta de perfis, o ADMIN decide se liga o critério "Instagram ativo" em Configurações → Score (nova versão do modelo).
+
+**Para pausar rápido:** voltar `INSTAGRAM_PROVIDER=assisted` no web e no worker (a rota do webhook passa a responder 404 e a consulta de perfis para). Mensagens na fila viram falha conhecida; nada é reenviado sozinho.

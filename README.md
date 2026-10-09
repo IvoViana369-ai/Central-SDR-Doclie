@@ -2,7 +2,7 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 a 7 concluídas — MVP e WhatsApp oficial prontos no código.**
+> **Status: Fases 1 a 8 concluídas — MVP, WhatsApp e Instagram oficiais prontos no código.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
 > - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
@@ -10,10 +10,11 @@ Central operacional de prospecção B2B da **Docline Tecnologia**, começando pe
 > - **Fase 5 (fila e follow-ups):** Minha Fila SDR com prioridade e ações rápidas; cadência D0/D2/D5/D10 configurável, em dias úteis e com parada automática; contato assistido (`wa.me`, Instagram, e-mail, `tel:`) com confirmação de envio; registro de respostas com detecção de opt-out; limites de horário e de frequência; transferência ao Comercial com checklist; avisos no app.
 > - **Fase 6 (IA e fechamento do MVP):** "Gerar com IA" no contato assistido, com avisos, edição, aprovação humana e envio assistido; guardrails e cotas; sugestão de classificação de respostas; base de conhecimento, abordagens e custos da IA; avaliação offline com rubrica; dashboard e relatórios com exportação; teste de desempenho com 100 mil leads. A IA real fica desligada (`AI_PROVIDER=fake`) até a decisão da Docline.
 > - **Fase 7 (WhatsApp oficial):** envio pela WhatsApp Cloud API (modelos aprovados e texto livre na janela de 24 h), status de entrega e leitura e respostas por webhook assinado, opt-in por número com evidência, tela Conversas com os números sem lead, modelos ligados às abordagens, saúde do número e custo estimado. Sem reenvio automático e sem criar leads sozinho. A API fica desligada (`WHATSAPP_PROVIDER=assisted`) até a conta da Meta e o parecer jurídico; para homologar, `fake` + `pnpm whatsapp:simulate`.
+> - **Fase 8 (Instagram oficial):** mensagens e comentários da conta da Docline por webhook assinado, resposta pela API só a quem escreveu (24 h) e resposta privada a comentários (uma por comentário, até 7 dias), ecos do que a equipe respondeu pelo app, "Quem não é lead" em Conversas e métricas públicas dos perfis (Business Discovery) para o critério "Instagram ativo" do score. O primeiro contato continua assistido. Desligada (`INSTAGRAM_PROVIDER=assisted`) até o App Review da Meta e o parecer jurídico; para homologar, `fake` + `pnpm instagram:simulate`.
 >
 > **Pendências para o piloto:** staging na Render (conta e credenciais da Docline), DSN do Sentry, validação jurídica, transferência internacional e decisão sobre ligar a IA. O caminho até o go-live está em [docs/GO-LIVE.md](docs/GO-LIVE.md).
 >
-> **Próximo:** UAT e go-live do piloto no modo assistido; ativação do WhatsApp pela API (marco M5); depois, Fase 8 (Instagram). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próximo:** UAT e go-live do piloto no modo assistido; ativação do WhatsApp e do Instagram pela API (marcos M5 e M5b); depois, Fase 9 (dados abertos do CNPJ e prospecção). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -65,7 +66,7 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | Frontend | Next.js (App Router) + Tailwind + componentes próprios sobre Radix; responsivo, tema claro/escuro | Next.js 16.3, React 19.3, Tailwind 4 |
 | Autenticação | Better Auth (e-mail/senha, sem cadastro público) + RBAC próprio (Administrador, Gestor, SDR, Comercial) | Better Auth 1.7 |
 | IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória | Fase 6 |
-| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API (Graph API direta, versão fixada) na Fase 7, só com opt-in ou janela aberta | Fases 5–7 |
+| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API (Graph API direta, versão fixada) na Fase 7, só com opt-in ou janela aberta; Instagram API (Facebook Login) na Fase 8, só respondendo a quem escreveu ou comentou | Fases 5–8 |
 | Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta; Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
 | Qualidade | ESLint (com regras de fronteira entre módulos), Prettier, Vitest (unitários + integração com Postgres real), Playwright (E2E) | ESLint 10, Vitest 5, Playwright 1.63 |
 | Deploy | Imagem Docker única (web e worker) na **Render, região Virginia** (decisão de 2026-10-08) | `Dockerfile`, `render.yaml` |
@@ -167,6 +168,7 @@ pnpm dev
 | `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
 | `pnpm ai:eval` | Avaliação offline da IA com o conjunto fictício (provedor falso por padrão; real só com `--yes`) — [AI-SDR §14](docs/AI-SDR.md#14-avaliação-de-qualidade) |
 | `pnpm whatsapp:simulate` | Simula webhooks da Meta contra o servidor local (`resposta --de … --texto …`, `status --status delivered`); só com `WHATSAPP_PROVIDER=fake` — [INTEGRATIONS §6.2](docs/INTEGRATIONS.md#6-whatsapp) |
+| `pnpm instagram:simulate` | Simula webhooks do Instagram contra o servidor local (`mensagem --de @perfil --texto …`, `comentario`, `eco`, `visto`); só com `INSTAGRAM_PROVIDER=fake` — [INTEGRATIONS §7.2](docs/INTEGRATIONS.md#7-instagram) |
 | `pnpm perf:100k` | Teste de desempenho com 100 mil leads fictícios num banco próprio (`DATABASE_URL_PERF`, nome terminado em `_perf`, recriado do zero) — [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-escalabilidade) |
 
 Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TEST` e se recusam a rodar se o nome não terminar em `_test`.

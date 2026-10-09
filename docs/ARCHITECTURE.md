@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 6 implementadas (MVP) e Fase 7 (WhatsApp Cloud API) · **Última revisão:** 2026-10-09
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API) e Fase 8 (Instagram API) · **Última revisão:** 2026-10-09
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -235,6 +235,7 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `cadence` | Cadências configuráveis, inscrição, avanço, parada automática | cadences, cadence_steps, cadence_enrollments | 5 |
 | `messaging` | Mensagens assistidas e registradas, respostas e classificação | messages | 5 |
 | `whatsapp` | Envio pela Cloud API (texto na janela, modelo com opt-in), webhooks (status, respostas), conversas, modelos, números sem lead, saúde do número | conversations, whatsapp_templates, message_status_events, webhook_events, inbound_unmatched, integration_connections | 7 |
+| `instagram` | Respostas pela API (texto em 24 h, resposta privada a comentário em 7 dias), webhooks (mensagens, ecos, "visto", comentários), quem não é lead, conta conectada, métricas públicas dos perfis (Business Discovery) para o score | conversations, social_comments, instagram_profiles, webhook_events, inbound_unmatched, integration_connections | 8 |
 | `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
 | `prospecting` | Buscas em fontes autorizadas, aprovação de novos leads | prospecting_searches, prospecting_results, registry_companies | 9 |
@@ -390,6 +391,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 > **Fase 5:** `GET /queue` (Minha Fila; `?userId=` para gestor e ADMIN); `POST /tasks`, `PATCH /tasks/{id}` (reagendar) e `POST /tasks/{id}/complete|cancel|skip` (pular passo de cadência); `GET /leads/{id}/tasks`; `POST /leads/{id}/activities`; `POST /leads/{id}/messages/assisted` (prepara o envio assistido e devolve o link), `POST /leads/{id}/messages/logged` (envio feito fora do sistema), `GET /leads/{id}/messages`, **`GET /messages?view=pending|sent|replies|unclassified`** e `POST /messages/{id}/confirm|cancel|classify`; `POST /leads/{id}/replies` (resposta recebida, com a detecção de opt-out); `GET/POST /leads/{id}/cadence` e `POST /leads/{id}/cadence/pause|resume|stop`; `GET/POST /cadences` (`?all=1` inclui as inativas), `PUT /cadences/{id}` e **`POST /cadences/{id}/default`**; `POST /leads/{id}/handoff`, `GET /leads/{id}/opportunities`, **`GET /opportunities`** e `POST /opportunities/{id}/accept|won|lost`; **`GET /sales-owners`**; **`GET /notifications`** e **`POST /notifications/read`**; `GET/PUT /settings/contact-rules`; **`POST /leads/pull`** (puxar do pool do território). As rotas seguem o recurso do lead em vez de `/enrollments/{id}` e `/messages/inbound`, porque cada lead tem no máximo uma inscrição em andamento e a resposta sempre pertence a um lead. Ficam para a Fase 6: `/message-templates`, `/approaches` e `/ai/*`.
 >
 > **Fase 7 (WhatsApp Cloud API):** `GET /leads/{id}/whatsapp` (números com opt-in e janela, gate do modo API, conversa e modelos liberados), `POST /leads/{id}/whatsapp/messages` (`kind: text` na janela ou `kind: template` com opt-in; responde `202`, o worker envia), `POST /leads/{id}/whatsapp/opt-in` e `/opt-in/revoke`, `POST /messages/{id}/retry`, `GET /conversations?filter=attention|open|all`, `GET /whatsapp/templates`, `POST /whatsapp/templates/sync`, `PATCH /whatsapp/templates/{id}`, `GET /whatsapp/unmatched` e `POST /whatsapp/unmatched/{id}/link|retry|dismiss`, `GET /whatsapp/overview`, `POST /whatsapp/health/check` e `GET/PUT /whatsapp/settings`. O webhook fica fora da v1: `GET/POST /api/webhooks/whatsapp`, sem sessão e sem checagem de origem, autenticado pela assinatura da Meta (`X-Hub-Signature-256`); responde `404` no modo assistido. Não implementadas: `/message-templates` (os modelos são os aprovados da Meta) e `/integrations/{provider}/test` (a verificação do número cobre).
+
+> **Fase 8 (Instagram API):** `GET /leads/{id}/instagram` (@ com métricas públicas, janela, gate, mensagens e comentários), `POST /leads/{id}/instagram/messages` (`202`, só com a janela de 24 h aberta), `POST /leads/{id}/instagram/refresh` (métricas, no máximo uma vez por hora), `POST /instagram/comments/{id}/private-reply` (`202`), `POST /instagram/messages/{id}/retry`, `GET /instagram/conversations`, `GET /instagram/unmatched` e `POST /instagram/unmatched/{id}/link|retry|dismiss`, `GET /instagram/overview`, `POST /instagram/account/check` e `GET/PUT /instagram/settings`. Webhook fora da v1: `GET/POST /api/webhooks/instagram`, com a mesma assinatura da Meta; `404` no modo assistido.
 >
 > **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
 
@@ -492,7 +495,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET/POST/PATCH /data-subject-requests` | Solicitações de titulares (LGPD art. 18) | MVP (registro manual) |
 | `POST /leads/{id}/anonymize` | Anonimização (ADMIN) | MVP |
 | `GET/POST /api/webhooks/whatsapp` | Verificação e eventos da Meta | 7 |
-| `GET/POST /api/webhooks/instagram` | Eventos do Instagram | 8 |
+| `GET/POST /api/webhooks/instagram` | Verificação e eventos da Meta (mensagens, ecos, "visto", comentários) | 8 |
 
 **Analytics, prospecção, campanhas, integrações**
 
@@ -533,7 +536,12 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `whatsapp.suggest-classification` | Resposta recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação (F7-07); nunca classifica sozinha | 7 |
 | `whatsapp.sync-templates` | Diário (06:41 UTC) e manual | Sincroniza os modelos da conta na Meta | 7 |
 | `whatsapp.health-check` | De hora em hora (minuto 23) e por webhook de qualidade/conta | Qualidade, limite e situação do número; piora avisa os ADMINs | 7 |
-| `webhooks.purge` | Diário (04:47 UTC) | Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias | 7 |
+| `webhooks.purge` | Diário (04:47 UTC) | Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias (WhatsApp e Instagram) | 7 |
+| `instagram.send` | Resposta pedida pela pessoa (na mesma transação da mensagem `QUEUED`) | Confere os prazos da Meta e o gate de novo, chama a API fora da transação e grava o desfecho. **Sem nova tentativa automática** (ADR-022) | 8 |
+| `instagram.webhook` | Webhook gravado na inbox | Consulta o @ de quem escreve pela primeira vez (fora da transação) e processa item a item (mensagens, ecos, "visto", comentários); até 3 novas tentativas | 8 |
+| `instagram.suggest-classification` | Mensagem recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação; nunca classifica sozinha | 8 |
+| `instagram.account-check` | Diário (07:13 UTC) | Confere o token e a conta profissional; erro de permissão avisa os ADMINs | 8 |
+| `instagram.discovery` | De hora em hora (minuto 17) | Business Discovery dos @ dos leads, com teto por rodada; recalcula o score (ADR-026) | 8 |
 | `registry.ingest` | Mensal | Ingestão filtrada dos dados abertos do CNPJ | 9 |
 | `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
 
@@ -581,7 +589,7 @@ central-sdr-docline/
 │   ├── integrations/
 │   │   └── src/
 │   │       ├── whatsapp/             # meta-cloud.ts (Graph API) e signature.ts (webhooks); o simulado fica no core
-│   │       ├── instagram/{assisted,meta-graph,fake}/
+│   │       ├── instagram/            # meta-graph.ts (Graph API com Facebook Login); o simulado fica no core
 │   │       ├── google/{places,fake}/
 │   │       ├── enrichment/{receita-open-data,brasilapi,ibge,fake}/
 │   │       ├── ai/{anthropic,fake}/
@@ -696,6 +704,7 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | IA (volume de MVP: alguns milhares de gerações/mês) | dezenas de US$/mês (ver [AI-SDR §15](./AI-SDR.md#15-custos-e-controles)) |
 | Sentry, e-mail transacional | planos gratuitos no início |
 | WhatsApp Cloud API (Fase 7) | cobrança por mensagem conforme categoria e país (tabela vigente da Meta) |
+| Instagram API (Fase 8) | sem cobrança por mensagem; limites de chamadas por conta (o teto da consulta de perfis deixa folga) |
 | Google Places (Fase 9) | pago por uso, por SKU e campos solicitados; usar *field masks* e cotas |
 
 ---
@@ -728,6 +737,8 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 022 | **Envio pela API sem reenvio automático**: tentativa marcada antes da chamada, desfecho gravado com atualização condicional e nosso id em `biz_opaque_callback_data` (Fase 7) | A Cloud API não tem chave de idempotência; repetir uma chamada de resultado incerto pode mandar a mesma mensagem duas vezes (pior que não mandar, para quem prospecta) | Retentativas automáticas do pg-boss | Falha conhecida vira "Tentar de novo" para a pessoa; resultado incerto só é repetido depois de 10 minutos sem status e com confirmação; o webhook de status corrige uma falha incerta |
 | 023 | **Cloud API direta pela Graph API oficial com `fetch`**, versão fixada em `META_GRAPH_API_VERSION`; leitura do webhook (formato da Meta) no core; inbox de webhooks idempotente pelo SHA-256 do corpo (Fase 7) | A Meta não mantém SDK oficial para Node; a Cloud API direta é a opção de menor custo; o provedor simulado fala o mesmo formato de webhook, então a mesma leitura serve aos dois | BSP (Twilio, 360dialog…), possível pela porta; SDK de terceiros | Atualizar a versão da Graph API é uma mudança planejada, com os testes do adaptador; um BSP exigiria adaptador e leitura de webhook próprios |
 | 024 | **2FA obrigatória para ADMIN/GESTOR aplicada na borda web** (páginas por `getPageContext` e API v1 por `apiHandler`), com a regra pura `twoFactorGate` no core e `TWO_FACTOR_ENFORCEMENT` (`required` em staging e produção; `reminder` só em dev/test) (0.7.1) | A situação da 2FA vem da sessão do Better Auth, que só existe na borda; jobs e o sistema não têm 2FA; a suíte E2E precisa entrar como ADMIN sem um código novo a cada login | Bloqueio no core (cada caso de uso) ou no `proxy.ts` (consulta à sessão em toda requisição) | Página nova deve usar `getPageContext` (as de "em breve" não leem dados); uma rota da API v1 fora do `apiHandler` não teria o bloqueio; o E2E sobe um segundo servidor com `required` |
+| 025 | **Instagram só responde**: porta própria (`InstagramProvider`), texto só com a janela de 24 h aberta naquele @ e resposta privada a comentário (uma por comentário, até 7 dias) pelo gate do contato assistido; o primeiro contato continua pelo app; ecos conciliam envios e registram respostas dadas pelo app; comentários só de leads já cadastrados (Fase 8) | A API da Meta não permite iniciar conversa; as regras (janela, resposta privada, eco, perfil por IGSID) são diferentes das do WhatsApp; guardar comentários de quem não é lead seria tratar dados sem finalidade | Porta única de mensageria para os dois canais; tag `human_agent` (até 7 dias); guardar todos os comentários | Mesmo desenho de envio do WhatsApp (ADR-022) e mesma inbox de webhooks; o IGSID vira o `external_thread_id` da conversa; a lista de quem não é lead é a do WhatsApp com o canal; comentário não para a cadência |
+| 026 | **Business Discovery mínimo**: job de hora em hora com teto configurável, seleção em SQL (nunca consultados ou com o @ trocado primeiro, depois os vencidos), cada @ consultado uma vez, só seguidores, número de publicações e data da última; o score usa a última publicação conhecida do @ atual; leads com opt-out ou bloqueados não são consultados (Fase 8) | Os limites de chamadas da Meta são por conta e compartilhados com as mensagens; o critério "Instagram ativo" só precisa da data; minimização (LGPD) | Consultar na criação do lead; guardar mídias e legendas; consulta sem teto | Métricas de um @ antigo não valem; falha não apaga o que se sabia; o critério continua inativo no seed até o ADMIN ligar |
 
 ---
 

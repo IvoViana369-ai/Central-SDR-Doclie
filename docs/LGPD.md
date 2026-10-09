@@ -1,6 +1,6 @@
 # LGPD e Governança de Dados — Docline SDR
 
-> **Status:** Fase 0, com as notas de implementação das Fases 2 a 7 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
+> **Status:** Fase 0, com as notas de implementação das Fases 2 a 8 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
 > Relacionados: [SECURITY](./SECURITY.md) · [SDR-FLOW §9](./SDR-FLOW.md#9-contactabilidade-estados-independentes) · [INTEGRATIONS](./INTEGRATIONS.md) · [DATABASE §4.9](./DATABASE.md#49-conformidade)
 
 ## Sumário
@@ -54,7 +54,7 @@ Os princípios do art. 6º da LGPD orientam decisões de produto:
 | Papel | Quem | Observação |
 |---|---|---|
 | Controladora | Docline Tecnologia | Decide finalidades e meios |
-| Operadores | Hospedagem (ex.: Render), provedor de IA, provedor de e-mail, Meta (WhatsApp Cloud API), Sentry | Contratos/DPAs revisados; papel exato conforme termos de cada fornecedor |
+| Operadores | Hospedagem (ex.: Render), provedor de IA, provedor de e-mail, Meta (WhatsApp Cloud API e Instagram API), Sentry | Contratos/DPAs revisados; papel exato conforme termos de cada fornecedor |
 | Encarregado (DPO) | A indicar pela Docline | Verificar se a Docline se enquadra na dispensa para agentes de pequeno porte (Resolução CD/ANPD nº 2/2022); mesmo dispensada, manter canal de atendimento ao titular |
 | Usuários internos | ADMIN, GESTOR, SDR, COMERCIAL | Acesso por perfil, treinados nas regras de contato |
 
@@ -133,6 +133,16 @@ Consequências:
 > - **Opt-out derruba o opt-in:** registrar opt-out (no lead, no canal ou no número) revoga os opt-ins de WhatsApp afetados. O erro 131050 da Meta (o contato pediu ao WhatsApp para não receber marketing da empresa) põe o número na Lista Não Contatar do WhatsApp e revoga o opt-in, sem precisar de uma pessoa. "Sair" e as demais palavras de opt-out nas respostas recebidas pela API valem como nas registradas à mão (§8).
 > - **Números desconhecidos não viram leads.** Mensagem de número que não está em nenhum lead (ou está em mais de um) fica em "Números sem lead" para ADMIN/GESTOR decidirem; é apagada em 90 dias se ninguém decidir.
 > - **IA:** a resposta recebida ganha uma **sugestão** de classificação (pode ser desligada em Configurações → WhatsApp); nada é aplicado sem uma pessoa. Com `AI_PROVIDER=fake`, nada sai do sistema.
+
+### 6.1 Instagram pela API (Fase 8)
+
+> **Implementação (Fase 8).** Também nasce **desligada** (`INSTAGRAM_PROVIDER=assisted`); ligar depende do item 12 da [§20](#20-itens-para-validação-jurídica) e do checklist de ativação ([INTEGRATIONS §16.2](./INTEGRATIONS.md#162-ativar-o-instagram-pela-api)).
+>
+> - **Só responde a quem procurou a Docline:** texto até 24 h depois da última mensagem do contato e uma resposta privada por comentário, até 7 dias. O primeiro contato continua assistido, 1 a 1. A Lista Não Contatar, a base legal, o horário e o intervalo valem como nos demais canais.
+> - **Mensagens recebidas** viram resposta do lead (opt-out por palavra aplicado na hora, como na §8). De quem não é lead, ficam 90 dias na lista "Quem não é lead" para uma pessoa decidir; **nenhum lead é criado sozinho**.
+> - **Comentários** nas publicações da Docline são guardados **só quando o @ é de um lead já cadastrado** (finalidade: dar seguimento a quem demonstrou interesse); de quem não é lead, nada é gravado. Um pedido de opt-out num comentário público é sinalizado para uma pessoa conferir e registrar.
+> - **Métricas públicas do perfil** (Business Discovery, da Meta): só de contas profissionais e só três números (seguidores, publicações, data da última), para o critério "Instagram ativo" do score — que continua desligado até o ADMIN ligar. Leads com opt-out ou bloqueados não são consultados; perfis pessoais não aparecem nessa consulta.
+> - **Identificadores:** o IGSID (id do contato na conta da Docline) e o @ ficam na conversa; os payloads de webhook guardam só os HMACs do @ e do IGSID no índice.
 
 ---
 
@@ -219,7 +229,9 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 | Arquivos de importação | Não armazenados | — |
 | Resultados de prospecção (`prospecting_results`) | 30 dias | Excluir |
 | Payloads de webhook | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
-| Mensagens de números sem lead (`inbound_unmatched`) | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
+| Mensagens de números sem lead (`inbound_unmatched`) | 90 dias | Excluir (job `webhooks.purge`, Fase 7; Instagram incluído na Fase 8) |
+| Comentários de leads no Instagram da Docline (`social_comments`) | Enquanto o lead existir (proposta, a validar) | Excluir na anonimização |
+| Métricas públicas do Instagram (`instagram_profiles`) | Substituídas a cada consulta (30 dias) | Excluir na anonimização ou com o contato |
 | Contexto enviado à IA (`input_snapshot`) | 12 meses | Anonimizar |
 | Mensagens | 5 anos (proposta, a validar) | Anonimizar conteúdo |
 | Auditoria | 5 anos (proposta, a validar) | Excluir |
@@ -243,6 +255,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
   Depois, a cadência é encerrada e as tarefas abertas são canceladas. A timeline e a auditoria guardam só tipos, datas, canais e classificações, sem texto livre, e por isso não precisam de limpeza depois.
 - **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
 - **WhatsApp (Fase 7):** a anonimização também apaga as conversas (número do WhatsApp e nome do perfil), as variáveis dos modelos enviados, os payloads brutos de webhook que citam qualquer telefone do lead (achados pelo HMAC do número, sem guardar o número em claro no índice) e as mensagens de "número sem lead" desses telefones ou já vinculadas ao lead. Mesclar dois leads leva as conversas e o opt-in do mesmo número para o sobrevivente; revogado em qualquer dos dois prevalece.
+- **Instagram (Fase 8):** a anonimização apaga também as conversas (IGSID, @ e nome do perfil), os comentários do lead, as métricas públicas dos @ dele, os payloads de webhook que citam o @ ou o IGSID (achados pelos HMACs) e as mensagens de "quem não é lead" com esse @ ou IGSID. Mesclar leva as conversas e os comentários para o sobrevivente.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
 ---
@@ -284,6 +297,8 @@ Hospedagem fora do Brasil (ex.: Render nos EUA/Europa), provedor de IA, Sentry e
 ---
 
 > **Meta (Fase 7).** Com a Cloud API, os números e o texto das mensagens passam pela Meta, que atua como **operadora** para a WhatsApp Business Platform (confirmar o papel nos termos vigentes) e trata dados fora do Brasil. Antes de ligar a API: incluir a Meta no registro de operações e no aviso de privacidade, e o jurídico avaliar os termos de dados da plataforma e as cláusulas-padrão. No modo assistido, o envio sai do app do WhatsApp da própria equipe, sem passar pelo sistema.
+>
+> **Meta (Fase 8).** Com a Instagram API, o @, o IGSID, o texto das mensagens e dos comentários e as métricas públicas passam pela Meta (Plataforma Meta, termos de dados próprios). Os mesmos passos antes de ligar: registro de operações, aviso de privacidade e avaliação dos Termos da Plataforma Meta, inclusive os limites de armazenamento e exclusão de dados obtidos pela API.
 
 > **Implementação (Fase 6).** A IA nasce **desligada** (`AI_PROVIDER=fake`): os rascunhos vêm de um modelo fixo e nenhum dado de lead sai do sistema. Ligar o provedor real é decisão da Docline, depois das cláusulas-padrão com o fornecedor e da avaliação offline com dados fictícios (AI-SDR §14.1). O que foi enviado a cada geração fica em `ai_generations.input_snapshot`; a purga automática pelos prazos da §12 ainda não está implementada (hoje vale a anonimização).
 
@@ -349,7 +364,8 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 **Fases 7–9**
 - [x] Opt-in WhatsApp com evidência antes de qualquer envio via API (Fase 7): por número, com evidência conferida ou descrita, auditado; opt-out e o erro 131050 revogam.
 - [x] Payloads de webhook e mensagens de números sem lead com purga em 90 dias; anonimização cobre conversas e payloads (Fase 7).
-- [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API).
+- [x] Instagram só responde a quem procurou a Docline; comentários só de leads; métricas públicas mínimas; anonimização e purga cobrem conversas, comentários, métricas e payloads (Fase 8).
+- [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API do WhatsApp ou do Instagram).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.
 
 ---
@@ -367,3 +383,4 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 11. **WhatsApp pela API (Fase 7):** quais métodos de opt-in a Docline aceitará e que evidência basta para cada um; se a "relação comercial existente" vale como opt-in; o texto dos modelos de prospecção (categoria Marketing).
 9. Necessidade de encarregado (ou dispensa) e canal de atendimento.
 10. Aviso de privacidade cobrindo a prospecção.
+12. **Instagram pela API (Fase 8):** uso das métricas públicas de perfis profissionais (Business Discovery) para priorizar leads; guarda de comentários de leads nas publicações da Docline e o prazo; tratamento de pedidos de opt-out feitos em comentários públicos.

@@ -1,6 +1,6 @@
 # SDR AI — IA de Prospecção
 
-> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). Insights na Fase 11.
+> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). **Fase 8:** o mesmo para as mensagens recebidas pelo Instagram. Insights na Fase 11.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SDR-FLOW](./SDR-FLOW.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md)
 
 ## Sumário
@@ -298,7 +298,7 @@ Isso permite responder:
 3. Confiança baixa, ou qualquer indício de opt-out, vai para decisão humana; a cadência fica pausada.
 4. O humano pode corrigir; a correção fica registrada (`classification_source = HUMAN`) e alimenta a avaliação.
 
-> **Implementação (Fase 7, F7-07).** Cada resposta com texto que chega pelo webhook do WhatsApp (e casa com um lead) enfileira o job `whatsapp.suggest-classification`, que pede a mesma sugestão da Fase 6 em nome do sistema. A sugestão fica pronta na mensagem (ficha e Mensagens) para a pessoa usar ou trocar; **nada é classificado sozinho**. As regras determinísticas de opt-out rodam antes, na chegada da resposta. Conta no orçamento mensal da IA (não na cota diária de ninguém); se o orçamento acabou ou a IA falhou, a resposta fica sem sugestão e nada mais muda. Resposta já classificada pela regra de opt-out não vai para a IA. Pode ser desligada em Configurações → WhatsApp ("Sugerir a classificação com a IA assim que uma resposta chegar"). Com `AI_PROVIDER=fake`, a sugestão vem do provedor de demonstração e nada sai do sistema.
+> **Implementação (Fase 7, F7-07).** Cada resposta com texto que chega pelo webhook do WhatsApp (e casa com um lead) enfileira o job `whatsapp.suggest-classification`, que pede a mesma sugestão da Fase 6 em nome do sistema. A sugestão fica pronta na mensagem (ficha e Mensagens) para a pessoa usar ou trocar; **nada é classificado sozinho**. As regras determinísticas de opt-out rodam antes, na chegada da resposta. Conta no orçamento mensal da IA (não na cota diária de ninguém); se o orçamento acabou ou a IA falhou, a resposta fica sem sugestão e nada mais muda. Resposta já classificada pela regra de opt-out não vai para a IA. Pode ser desligada em Configurações → WhatsApp ("Sugerir a classificação com a IA assim que uma resposta chegar"). **Fase 8:** as mensagens recebidas pelo Instagram usam o job `instagram.suggest-classification`, com as mesmas regras, desligável em Configurações → Instagram. A API do Instagram aceita o `aiGenerationId` aprovado como resposta dentro da janela de 24 h (até 1.000 bytes). Com `AI_PROVIDER=fake`, a sugestão vem do provedor de demonstração e nada sai do sistema.
 
 Saída:
 

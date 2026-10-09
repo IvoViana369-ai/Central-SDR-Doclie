@@ -68,7 +68,7 @@ Cada etapa gera eventos em `lead_events` (timeline) e, quando altera dados, em `
 | 9 | **Fila de prospecção** | Sistema | Lead em `AWAITING_OUTREACH` aparece em "Minha Fila" ordenado por prioridade | `task.created` | Tarefa de primeiro contato |
 | 10 | **Contato** | SDR | Modo assistido: abre WhatsApp/Instagram com o texto, envia e confirma. Fase 7: envio via API quando houver opt-in | `message.sent` | `FIRST_CONTACT` + inscrição na cadência |
 | 11 | **Follow-up** | Sistema + SDR | Cadência gera tarefas D2/D5/D10; SDR gera e aprova cada mensagem | `cadence.step_due`, `message.sent` | FU1 → FU2 → FU3 → `NO_RESPONSE` |
-| 12 | **Resposta** | SDR/sistema | Registro manual (MVP) ou webhook (Fase 7). **Cadência para automaticamente** | `message.received`, `cadence.stopped` | `REPLIED` |
+| 12 | **Resposta** | SDR/sistema | Registro manual (MVP) ou webhook (WhatsApp na Fase 7, Instagram na Fase 8). **Cadência para automaticamente** | `message.received`, `cadence.stopped` | `REPLIED` |
 | 13 | **Qualificação da resposta** | SDR (+ sugestão de IA) | Classifica: interessado, dúvida, objeção, sem interesse, opt-out… | `reply.classified` | `INTERESTED`, `NOT_INTERESTED`, Lista Não Contatar… |
 | 14 | **Oportunidade** | SDR | Reunião marcada / checklist de qualificação completo | `stage.changed` | `MEETING` → `OPPORTUNITY` |
 | 15 | **Transferência** | SDR → Comercial | Cria `opportunity` com qualificação, notifica o comercial | `handoff.created` | Dono passa a ser o comercial |
@@ -267,6 +267,13 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 > - **Conversas:** "Aguardando resposta" (o contato escreveu por último), "Janela aberta" e "Todas", no escopo de cada pessoa; ADMIN/GESTOR veem também "Números sem lead".
 > - O modo assistido (`wa.me`) continua disponível ao lado, inclusive para quem não tem opt-in.
 
+> **Implementação (Fase 8, Instagram pela API):** com `INSTAGRAM_PROVIDER=meta_graph` (ou `fake` na homologação), a ficha ganha a seção **Instagram** e Conversas ganha o canal Instagram.
+> - **Primeiro contato continua assistido** (copiar o texto e abrir o perfil): a API só **responde**.
+> - **Na ficha:** os @ do lead com as métricas públicas (seguidores, publicações, última publicação; "Atualizar métricas"), a conversa com os status, os **comentários** do lead nas publicações da Docline e a resposta. Quando o contato escreveu nas últimas 24 h, aparece "Responder pelo Instagram" (até 1.000 bytes); fora disso, a ficha explica por quê.
+> - **Comentário:** "Responder em particular" manda uma mensagem no Direct de quem comentou, **uma vez por comentário e até 7 dias depois**. Passa pelo gate do contato assistido (Lista Não Contatar, base legal, horário e intervalo). Comentário não para a cadência; o responsável recebe um aviso.
+> - **Respondido pelo app:** o que a equipe responde direto no Instagram, numa conversa que o sistema conhece, entra no histórico do lead (pelo eco da Meta). Contato assistido confirmado com o mesmo texto só ganha o id da Meta, sem duplicar.
+> - **Conversas → Instagram:** "Aguardando resposta", "Janela aberta" e "Todas"; ADMIN/GESTOR veem "Quem não é lead" (vincular a um lead com o @, procurar de novo depois de cadastrar, descartar).
+
 ---
 
 ## 7. Resposta do lead e classificação
@@ -288,6 +295,8 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 3. Confiança baixa ou possível opt-out → **humano decide**. Na dúvida sobre opt-out, a cadência é **pausada** até a decisão.
 
 > **Implementação (Fase 7):** a resposta que chega pelo webhook do WhatsApp tem o mesmo tratamento da registrada à mão (abaixo): opt-out certo vai para a Lista Não Contatar, possível opt-out vira tarefa, a cadência é encerrada e a tarefa "Classificar e responder" é criada. Além disso, a IA deixa uma **sugestão** de classificação pronta na mensagem (F7-07; desligável em Configurações → WhatsApp), que a pessoa aceita ou troca. Mensagem de número sem lead não mexe em lead nenhum até alguém vincular.
+
+> **Implementação (Fase 8):** a mensagem que chega pelo Instagram tem exatamente o mesmo tratamento (Lista Não Contatar no opt-out certo, cadência encerrada, tarefa, sugestão da IA desligável em Configurações → Instagram). Comentários não são respostas: ficam na ficha e geram aviso; um comentário com cara de pedido de opt-out é sinalizado para a pessoa conferir e registrar.
 
 > **Implementação (Fase 5):**
 > - Sem IA ainda (Fase 6): a classificação é manual, escolhida ao registrar a resposta ou depois, na ficha ou em Mensagens.

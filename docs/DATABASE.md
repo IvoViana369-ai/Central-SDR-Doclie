@@ -485,6 +485,7 @@ Diferenças em relação às seções acima:
 - **`instagram_profiles`** (nova): métricas públicas do perfil profissional do lead pelo Business Discovery: `followers_count`, `media_count`, `last_post_at` (critério "Instagram ativo" do score), `status` (`FOUND`, `NOT_FOUND` quando o @ não existe ou não é conta profissional, `ERROR`), `checked_at` e o `handle` consultado. Uma por contato (`contact_point_id` único, apagada com o contato), sem `lead_id`: na mesclagem, vai junto com o contato. Nada de mídias, legendas ou biografia.
 - **`social_comments`** (nova): comentário de um **lead** numa publicação da Docline (`external_comment_id` único por provedor), com o IGSID e o @ do autor, a publicação, o texto (dado pessoal) e a data. `private_reply_message_id` (único) aponta a resposta privada, que a Meta aceita uma vez por comentário e até 7 dias depois dele. Comentários de quem não é lead não viram linha.
 - **`conversations`** e **`inbound_unmatched`:** ganham `handle` (o @ de quem escreveu no Instagram). No Instagram, `external_thread_id` é o IGSID (id de quem escreveu, por conta da empresa).
+- **`webhook_events`:** linhas do Instagram com `provider = instagram:<provedor>`; `contact_hashes` leva o HMAC do @ e do IGSID (`igsid:<id>`). **`integration_connections`:** a conta do Instagram fica em `instagram:<provedor>`, separada do WhatsApp.
 
 **Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts`, `whatsapp-schema.int.test.ts` e `instagram-schema.int.test.ts`):
 
@@ -596,7 +597,7 @@ Diferenças em relação às seções acima:
 | `has_website` | — | +10 | |
 | `google_reviews_gte` | `{min: 1}` | +10 | ⚠️ **inativo** até validação jurídica (Google) |
 | `google_reviews_gte` | `{min: 21}` ("mais de 20") | +10 | ⚠️ **inativo** até validação jurídica (Google) |
-| `instagram_active` | `{max_days_since_post: 30}` | +10 | Depende da Fase 8 (Business Discovery) ou de marcação manual |
+| `instagram_active` | `{max_days_since_post: 30}` | +10 | ⚠️ **inativo** no seed; usa a última publicação do @ atual do lead em `instagram_profiles` (Business Discovery, Fase 8). O ADMIN liga depois de ligar a consulta de perfis |
 | `in_priority_city` | — | +15 | Tabela `priority_cities` |
 | `replied_before` | — | +20 | Já houve mensagem `INBOUND` |
 | `showed_interest` | — | +30 | Classificação `INTERESTED` alguma vez |

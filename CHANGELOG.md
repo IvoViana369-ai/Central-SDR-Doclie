@@ -4,6 +4,29 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.8.0] — Fase 8: Instagram — 2026-10-09
+
+Mensagens e comentários da conta profissional da Docline pela Instagram API oficial da Meta (com Facebook Login), **só para responder** a quem escreveu ou comentou; o primeiro contato continua assistido. **A API fica desligada por padrão** (`INSTAGRAM_PROVIDER=assisted`); a ativação segue [INTEGRATIONS §16.2](docs/INTEGRATIONS.md#162-ativar-o-instagram-pela-api) e o marco M5b do [GO-LIVE](docs/GO-LIVE.md#12-instagram-pela-api-marco-m5b). F8-01 a F8-04 entregues. Aceite coberto pela jornada E2E `fase8.spec.ts` e pelas suítes do Instagram. Totais: 407 testes unitários, 200 de integração e 46 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `instagram_profiles` (métricas públicas por contato), `social_comments` (comentários de leads, com a resposta privada única) e `handle` em `conversations` e `inbound_unmatched`.
+- **Adaptador da Instagram API (F8-01):** Graph API com `fetch`, versão fixada, token da Página; envio por `/{page-id}/messages`, resposta privada, perfil de quem escreveu, Business Discovery e conta; envio real desligado fora de produção; testado contra um servidor local que imita a Graph API. Variáveis `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `FACEBOOK_PAGE_ID` e `INSTAGRAM_PAGE_ACCESS_TOKEN`. Verificação diária da conta (`instagram.account-check`) e o botão em **Configurações → Instagram**; roteiro do App Review no INTEGRATIONS §16.2.
+- **Webhooks (F8-02):** `/api/webhooks/instagram` com a mesma verificação e assinatura do WhatsApp; job `instagram.webhook`. Mensagem recebida vira resposta do lead (cadência, opt-out por palavra, etapa, tarefa, aviso e sugestão da IA); o @ de quem escreve pela primeira vez vem do perfil na Meta; quem não é lead (ou tem o @ em mais de um lead) vai para **Conversas → Instagram → "Quem não é lead"**, sem criar lead. Ecos confirmam envios da API (inclusive de resultado incerto), guardam o id da Meta no contato assistido e registram o que a equipe respondeu pelo app; "visto" marca como lida.
+- **Comentários (F8-02):** só de leads já cadastrados, com aviso ao responsável e evento na timeline (sem o texto); pedido de opt-out num comentário público é sinalizado para uma pessoa conferir.
+- **Respostas (F8-03):** texto só em até 24 h da última mensagem do contato (gate do modo API) e **resposta privada** a comentário (uma por comentário, até 7 dias, com o gate do contato assistido); fila e job `instagram.send` no desenho do WhatsApp, sem reenvio automático; "Tentar de novo" recusa quando o prazo da Meta já venceu; até 1.000 bytes.
+- **Business Discovery (F8-04):** job `instagram.discovery` de hora em hora, com teto por rodada e validade configuráveis; cada @ consultado uma vez; só seguidores, número de publicações e data da última; leads com opt-out ou bloqueados de fora; "Atualizar métricas" na ficha (uma vez por hora). O critério **"Instagram ativo"** do score passa a funcionar e continua inativo no seed até o ADMIN ligar.
+- **Telas:** seção Instagram na ficha (@ com métricas, conversa, comentários, resposta com contador de bytes), seletor de canal em **Conversas** e **Configurações → Instagram** (conta, mês, consulta de perfis e automação).
+- **Simulador para homologação:** `pnpm instagram:simulate` (`mensagem`, `comentario`, `eco`, `visto`), só com `INSTAGRAM_PROVIDER=fake`.
+- **API v1:** `/leads/{id}/instagram` (+ `messages`, `refresh`), `/instagram/comments/{id}/private-reply`, `/instagram/messages/{id}/retry`, `/instagram/conversations`, `/instagram/unmatched` (+ `link`, `retry`, `dismiss`), `/instagram/overview`, `/instagram/account/check` e `/instagram/settings`.
+
+### Alterado
+
+- **Gate de contactabilidade:** no modo API, o Instagram só libera o @ com conversa aberta pelo contato nas últimas 24 h; a janela passou a ser lida da conversa do próprio contato (telefone no WhatsApp, @ no Instagram).
+- **Mensagens de quem não é lead:** a lista e o descarte servem aos dois canais (`channel`); vincular e "procurar de novo" do WhatsApp recusam mensagens do Instagram, e vice-versa.
+- **Anonimização** apaga também conversas, comentários e métricas do Instagram, os payloads que citam o @ ou o IGSID e as mensagens de "quem não é lead" do titular. **Mesclagem** leva conversas e comentários para o sobrevivente.
+- **Documentação:** INTEGRATIONS (§2, §3, §4, §7.2, §13, §16.2), ARCHITECTURE (módulo, endpoints, jobs e ADRs 025 e 026), SECURITY, LGPD (§6.1, retenção, anonimização, item 12 para o jurídico), SDR-FLOW, AI-SDR, DATABASE, ROADMAP (marco M5b), GO-LIVE (§12, roteiro I1–I7), README e render.yaml.
+
 ## [0.7.1] — 2FA obrigatória para ADMIN e GESTOR — 2026-10-09
 
 Fecha a pendência de segurança prometida para antes da Fase 7 ([SECURITY §3](docs/SECURITY.md#3-autenticação), ADR 024). Totais: 388 testes unitários, 188 de integração e 42 jornadas E2E.

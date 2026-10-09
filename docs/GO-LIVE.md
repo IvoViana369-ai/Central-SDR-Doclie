@@ -1,9 +1,9 @@
 # Roteiro de UAT, treinamento e go-live do piloto
 
-> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) · **Última revisão:** 2026-10-09
+> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b) · **Última revisão:** 2026-10-09
 > Relacionados: [MVP §11](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) · [ROADMAP](./ROADMAP.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md) · [AI-SDR](./AI-SDR.md)
 
-O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. A Fase 7 (WhatsApp pela API) também está pronta, mas **o piloto começa no modo assistido**: a API é ligada depois, no marco M5 ([§11](#11-whatsapp-pela-api-marco-m5)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
+O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As Fases 7 e 8 (WhatsApp e Instagram pela API) também estão prontas, mas **o piloto começa no modo assistido**: as APIs são ligadas depois, nos marcos M5 ([§11](#11-whatsapp-pela-api-marco-m5)) e M5b ([§12](#12-instagram-pela-api-marco-m5b)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
 
 **Regra de ouro:** dados reais só entram em **produção**, depois da validação jurídica. Staging e UAT usam apenas dados fictícios (`pnpm db:seed:dev`).
 
@@ -205,3 +205,23 @@ O piloto roda no **modo assistido** (`WHATSAPP_PROVIDER=assisted`): o SDR envia 
 | W7 | GESTOR | Simular uma mensagem de um número que não está na base | Aparece em Conversas → "Números sem lead"; nenhum lead criado; vincular ou descartar |
 
 **Primeira semana com a API:** poucos leads com opt-in; acompanhar todo dia a qualidade do número e o custo do mês (Configurações → WhatsApp), as falhas na ficha e os avisos aos ADMINs. Queda de qualidade: pausar envios de modelo e revisar textos e público. Para voltar ao assistido: `WHATSAPP_PROVIDER=assisted` no web e no worker (nada é reenviado sozinho quando a API volta).
+
+## 12. Instagram pela API (marco M5b)
+
+No piloto, o Instagram também é **assistido** (`INSTAGRAM_PROVIDER=assisted`): o SDR copia o texto, abre o perfil e envia pelo app. A API serve para **responder**: a quem escreveu para a Docline (até 24 h) e, em particular, a quem comentou numa publicação (uma vez, até 7 dias). O primeiro contato continua sendo humano, pelo app.
+
+**Go/no-go (M5b):** conta profissional da Docline ligada a uma Página, **App Review** aprovado para as permissões, "Permitir acesso às mensagens" ligado na conta, parecer jurídico sobre comentários e métricas públicas (LGPD §20, item 12). Passo a passo técnico em [INTEGRATIONS §16.2](./INTEGRATIONS.md#162-ativar-o-instagram-pela-api).
+
+**Homologação antes da conta real** (staging, dados fictícios, `INSTAGRAM_PROVIDER=fake` com os mesmos segredos de teste do webhook):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| I1 | SDR | Cadastrar um lead fictício com Instagram e simular uma mensagem: `pnpm instagram:simulate mensagem --de @<perfil fictício> --texto "Olá, quero saber mais"` | A mensagem aparece na ficha (seção Instagram) e em Conversas → Instagram → "Aguardando resposta"; janela aberta por 24 h; cadência encerrada; sugestão da IA |
+| I2 | SDR | Na ficha, "Responder pelo Instagram" | `Na fila` → `Enviada`; com `pnpm instagram:simulate visto --de @<perfil>`, vira `Lida` |
+| I3 | SDR | Simular um comentário: `pnpm instagram:simulate comentario --de @<perfil> --texto "Que post bom!"` e "Responder em particular" | Comentário na ficha e aviso ao responsável; a resposta privada sai uma vez só (o botão some) |
+| I4 | SDR | Simular uma resposta dada pelo app: `pnpm instagram:simulate eco --de @<perfil> --texto "Te ligo amanhã"` | Entra no histórico da conversa como enviada "pelo app" |
+| I5 | SDR | Em outro lead, sem mensagem do contato, abrir a seção Instagram | Sem caixa de resposta; o motivo explica que o primeiro contato é pelo app |
+| I6 | GESTOR | Simular uma mensagem de um @ que não está na base | Aparece em Conversas → Instagram → "Quem não é lead"; nenhum lead criado; vincular depois de cadastrar o @ ou descartar |
+| I7 | ADMIN | Configurações → Instagram: "Verificar agora"; na ficha, "Atualizar métricas" | Conta ativa (simulada); seguidores, publicações e última publicação do @ do lead |
+
+**Primeira semana com a API:** acompanhar em Configurações → Instagram as respostas, as falhas e a consulta de perfis; conferir na ficha se as métricas fazem sentido. Só depois disso o ADMIN decide ligar o critério "Instagram ativo" em Configurações → Score (nova versão do modelo). Para voltar ao assistido: `INSTAGRAM_PROVIDER=assisted` no web e no worker.

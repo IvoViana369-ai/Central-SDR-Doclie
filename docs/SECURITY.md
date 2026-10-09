@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7, em 2026-10-09 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -135,6 +135,9 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 | Decidir mensagens de números sem lead (vincular, procurar de novo, descartar) | ✅ | ✅ | ❌ | ❌ |
 | Modelos do WhatsApp (vincular a abordagem, ativar) e tabela de custo | ✅ | ❌ | ❌ | ❌ |
 | Sincronizar modelos, checar o número e ver o painel do WhatsApp | ✅ | ❌ | ❌ | ❌ |
+| Instagram pela API: responder na janela, resposta privada a comentário, tentar de novo, atualizar métricas do perfil (no escopo) | ✅ | ✅ | ✅ | ✅ |
+| Decidir mensagens no Instagram de quem não é lead (vincular, procurar de novo, descartar) | ✅ | ✅ | ❌ | ❌ |
+| Configuração do Instagram (consulta de perfis, automação), verificar a conta e ver o painel | ✅ | ❌ | ❌ | ❌ |
 | Exportar leads | ✅ | ✅ | ❌ | ❌ |
 | Mover leads entre etapas abertas, para perda (com motivo) e reativar "Sem resposta" | ✅ | ✅ | ✅ | ✅ |
 | Mover para etapas das automações, converter ou reabrir lead ganho/perdido (auditado como correção) | ✅ | ✅ | ❌ | ❌ |
@@ -167,6 +170,7 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 - Credenciais de integração eventualmente salvas no banco (ex.: tokens OAuth por usuário, Fase 12) ficam **criptografadas** com AES-256-GCM (`ENCRYPTION_KEY`).
 - Rotação: tokens Meta/Google/IA a cada 90 dias ou após qualquer suspeita; segredos separados por ambiente.
 - **Meta (Fase 7):** token de *System User* com só `whatsapp_business_messaging` e `whatsapp_business_management`, nunca token pessoal. `META_APP_SECRET` assina os webhooks: vazou, troca no app Meta e no ambiente ao mesmo tempo. O adaptador não coloca token, número nem texto em erros ou logs; o token vai só no cabeçalho `Authorization`. Fora de produção, envio real só com `ALLOW_REAL_SENDS=true`, e o simulador de webhooks recusa rodar com `meta_cloud`.
+- **Instagram (Fase 8):** token **da Página** (`INSTAGRAM_PAGE_ACCESS_TOKEN`), gerado por um usuário do sistema com acesso só à Página da Docline e às permissões do App Review (INTEGRATIONS §16.2); o mesmo `META_APP_SECRET` assina os webhooks dos dois canais. O adaptador segue as mesmas regras (token só no cabeçalho, nada de token, @ ou texto em erros e logs, `ALLOW_REAL_SENDS` fora de produção); o simulador recusa rodar com `meta_graph`.
 - `SUPPRESSION_HASH_PEPPER` **não pode ser rotacionado** sem plano de migração (os hashes da Lista Não Contatar dependem dele). Guardar cópia segura fora do provedor de hospedagem.
 - Pino com `redact` para `authorization`, `cookie`, `*.token`, `*.password`, `*.secret`, telefones e e-mails.
 
@@ -228,6 +232,8 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 > - Sem o provedor configurado (`assisted`), a rota responde `404`: não há superfície exposta no modo assistido.
 > - Replay: a inbox é idempotente pelo SHA-256 do corpo, e cada efeito (status, mensagem recebida) também; uma entrega repetida não muda nada.
 > - Mensagens recebidas são **dados de terceiros**: aparecem como texto (React escapa), entram na IA só delimitadas (§13) e nunca criam lead sozinhas.
+>
+> **Fase 8:** `/api/webhooks/instagram` usa a mesma verificação e os mesmos limites (mesmo app da Meta). Eventos de outra conta, mensagens de teste e apagadas são ignorados; comentários e ecos só alteram leads e conversas já existentes.
 
 ---
 
@@ -392,10 +398,17 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - Testes: assinatura (corpo exato, segredo, cabeçalho ausente ou fora do formato), verificação do endpoint (unitários e E2E), webhook repetido, status fora de ordem, status que corrige um envio de resultado incerto, gate por número conferido de novo no envio, 131050 → supressão e opt-in revogado.
 - O **bloqueio de acesso de ADMIN/GESTOR sem 2FA**, prometido para antes da Fase 7, ficou de fora da 0.7.0 e entrou logo depois, na 0.7.1 (§3).
 
+**Revisão de segurança da Fase 8 (Instagram)**
+- Rotas novas da API v1 (`/leads/:id/instagram*`, `/instagram/*`) passam pelo `apiHandler` e pelos casos de uso com permissão e escopo; a resposta privada confere o lead do comentário (escopo e edição) e o gate do contato.
+- O webhook é a única rota pública nova (§9), com a mesma assinatura do WhatsApp; o `@` de quem escreve vem do perfil na Meta pelo IGSID (consulta do worker, fora da transação), nunca de texto livre do corpo.
+- Só responder: o gate do modo API exige a janela aberta naquele @; a resposta privada passa pelo gate do contato assistido. Prazos da Meta e gate são conferidos de novo no worker. Sem reenvio automático (ADR 022).
+- Consulta de perfis (Business Discovery): o @ é validado antes de entrar na URL (só letras, números, ponto e sublinhado; até 30), a seleção é SQL parametrizado e há teto por hora; nada além de três números públicos é gravado.
+- Testes: webhook (verificação, assinatura, E2E), ecos e conciliação de resultado incerto, comentários de quem não é lead não gravados, anonimização apagando comentários, métricas, payloads (pelo @ e pelo IGSID) e mensagens de quem não era lead.
+
 **Fases 7+ — Integrações**
 - [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).
-- [x] Webhooks com assinatura, idempotência e limites (Fase 7, §9).
-- [ ] Tokens com menor privilégio e rotação: definido para a Meta (§5); falta criar o *System User* e agendar a rotação na ativação.
+- [x] Webhooks com assinatura, idempotência e limites (Fase 7 e Fase 8, §9).
+- [ ] Tokens com menor privilégio e rotação: definido para a Meta (§5, WhatsApp e Instagram); falta criar os usuários do sistema e agendar a rotação na ativação.
 - [ ] Proteção SSRF antes de qualquer busca de URL externa.
 - [ ] Chaves de API com escopos e revogação (Fase 12).
 

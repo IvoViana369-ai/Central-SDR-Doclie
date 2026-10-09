@@ -28,7 +28,7 @@
 | 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ✅ concluída (2026-10-09) | MVP |
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ✅ concluída no código (2026-10-09); UAT e go-live com a Docline | MVP |
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ✅ concluída no código (2026-10-09); ativação depende da Meta e do jurídico | Canais |
-| 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ~1,5 semana + App Review | Canais |
+| 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ✅ concluída no código (2026-10-09); ativação depende do App Review da Meta e do jurídico | Canais |
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ~2 semanas | Captação |
 | 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ~2 semanas | Escala |
 | 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ~2 semanas | Inteligência |
@@ -106,6 +106,7 @@ Leitura aproximada:
 | **M3 — MVP completo** | Histórias MUST concluídas, E2E verde, desempenho com 100 mil leads | Iniciar UAT |
 | **M4 — Go-live do piloto** | [Critérios de lançamento](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) | Piloto de 4 semanas com métricas do [MVP §9](./MVP.md#9-métricas-de-sucesso) |
 | **M5 — Go/no-go WhatsApp API** | Meta aprovada, templates aprovados, opt-in definido, parecer jurídico | Ativar `meta_cloud` |
+| **M5b — Go/no-go Instagram API** | App Review aprovado, acesso às mensagens liberado na conta, parecer jurídico (item 12 da LGPD §20) | Ativar `meta_graph`; depois de uma semana, decidir o critério "Instagram ativo" |
 | **M6 — Go/no-go prospecção automatizada de fontes** | Parecer sobre dados abertos CNPJ e Google Places | Ativar provedores da Fase 9 |
 
 ---
@@ -427,6 +428,30 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F7-09 | Passos de cadência `API_MESSAGE` (somente com opt-in) — *adiada, ver acima* | COULD |
 
 ### Fase 8 — Instagram
+
+**Entregáveis:** mensagens e comentários da conta profissional da Docline pela Instagram API (Facebook Login), respostas na janela de 24 h, resposta privada a comentários, quem não é lead para decidir, conta conectada e métricas públicas dos perfis dos leads (Business Discovery) para o critério "Instagram ativo".
+
+**Situação (2026-10-09):** ✅ concluída no código; F8-01 a F8-04 entregues. A API fica **desligada por padrão** (`INSTAGRAM_PROVIDER=assisted`); a homologação usa o provedor simulado (`fake`) com `pnpm instagram:simulate`. Ligar depende da Docline: conta profissional ligada a uma Página, **App Review** das permissões, acesso às mensagens liberado na conta e parecer jurídico ([INTEGRATIONS §16.2](./INTEGRATIONS.md#162-ativar-o-instagram-pela-api)). F8-01 entrega o lado do sistema (variáveis, verificação da conta, roteiro do App Review); o App Review em si é da Docline com a Meta.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase8.spec.ts` e pelas suítes `instagram.int.test.ts`, `instagram-discovery.int.test.ts`, `instagram-domain.test.ts`, `instagram-schema.int.test.ts` e `meta-graph.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F8-01 | Verificação da conta (ativa, token recusado avisa os ADMINs uma vez); variáveis obrigatórias com `meta_graph`; adaptador testado contra um servidor local que imita a Graph API; envio real desligado fora de produção. |
+| F8-02 | Verificação do endpoint e assinatura obrigatória (E2E); DM vira resposta do lead (cadência parada, etapa, aviso, sugestão da IA, "Sair" → Lista Não Contatar); webhook repetido não duplica; quem não é lead fica para decidir; ecos conciliam envios e registram respostas dadas pelo app; "visto" marca como lida; comentários só de leads, sem texto na timeline. |
+| F8-03 | Resposta só com a janela aberta (antes, fora dela e com a API desligada, não); resposta privada uma vez por comentário e até 7 dias; falhas conhecidas voltam com "Tentar de novo", resultado incerto é corrigido pelo eco. |
+| F8-04 | Cada @ consultado uma vez, só de leads em contato, com teto por hora e validade; limite da Meta interrompe a rodada; falha mantém o que se sabia; @ trocado é consultado de novo; o score passa a contar "Instagram ativo" quando o critério está ligado. |
+
+Decisões e pendências:
+
+- **Só responder, nunca iniciar** (ADR 025): a API não permite o primeiro contato; ele continua assistido. A tag `human_agent` (até 7 dias) não é usada.
+- **Resposta privada** passa pelo gate do contato assistido (Lista Não Contatar, base legal, horário e intervalo): é a Docline escrevendo para alguém que só comentou.
+- **Comentários só de leads já cadastrados**; comentário não é resposta à cadência; pedido de opt-out num comentário público é sinalizado para uma pessoa.
+- **Business Discovery mínimo** (ADR 026): três números públicos, teto por hora, leads com opt-out ou bloqueados de fora. O critério "Instagram ativo" continua **inativo no seed**: o ADMIN liga depois de ver os dados.
+- **Mesmo desenho de envio do WhatsApp** (ADR 022): sem reenvio automático; o eco do webhook corrige um envio de resultado incerto.
+- **Pendências:** App Review e parecer jurídico (item 12 da [LGPD §20](./LGPD.md#20-itens-para-validação-jurídica)); revalidar os limites e códigos de erro da Meta antes de ligar; menções em stories e respostas a stories chegam como mensagens com rótulo, sem tratamento próprio.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. |
 |---|---|---|

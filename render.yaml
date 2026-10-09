@@ -63,6 +63,10 @@ envVarGroups:
       # os segredos da Meta no painel (nunca aqui).
       - key: WHATSAPP_PROVIDER
         value: assisted
+      # Instagram pela API (Fase 8): `fake` para homologar (mesmos segredos de
+      # teste do webhook); para a conta real (`meta_graph`), siga
+      # docs/INTEGRATIONS.md §16.2 e cadastre INSTAGRAM_PAGE_ACCESS_TOKEN,
+      # INSTAGRAM_BUSINESS_ACCOUNT_ID e FACEBOOK_PAGE_ID no painel.
       - key: INSTAGRAM_PROVIDER
         value: assisted
       - key: AI_PROVIDER
