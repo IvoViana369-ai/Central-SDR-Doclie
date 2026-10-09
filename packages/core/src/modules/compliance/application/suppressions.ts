@@ -76,7 +76,7 @@ export async function suppressIdentifiers(ctx: UseCaseContext, entries: Suppress
     skipDuplicates: true,
     select: { id: true, type: true, valueHash: true, valueMasked: true, scope: true, reason: true },
   });
-  const leadIds = await refreshLeadsForIdentifiers(ctx.tx, entries);
+  const leadIds = await refreshLeadsForIdentifiers(ctx.tx, entries, ctx.now);
   for (const entry of created) {
     await ctx.audit({
       action: 'suppression.add',
@@ -136,7 +136,7 @@ export const revokeSuppression = defineUseCase({
         revokeReason: input.reason,
       },
     });
-    const leadIds = await refreshLeadsForIdentifiers(ctx.tx, [entry]);
+    const leadIds = await refreshLeadsForIdentifiers(ctx.tx, [entry], ctx.now);
     await recordOnLeads(ctx, leadIds, 'suppression.revoked', {
       type: entry.type,
       scope: entry.scope,

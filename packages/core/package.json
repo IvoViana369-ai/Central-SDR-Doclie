@@ -14,6 +14,7 @@
     "./import-domain": "./src/modules/import/domain/index.ts",
     "./dedup-domain": "./src/modules/dedup/domain/index.ts",
     "./pipeline-domain": "./src/modules/pipeline/domain/index.ts",
+    "./scoring-domain": "./src/modules/scoring/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

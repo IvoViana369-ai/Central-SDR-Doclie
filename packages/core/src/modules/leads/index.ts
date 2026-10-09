@@ -21,6 +21,7 @@ export {
   type PreparedLead,
 } from './application/create-lead';
 export { updateLead } from './application/update-lead';
+export { getLeadScore } from './application/score';
 export { getLead, type LeadDetail } from './application/get-lead';
 export { addPerson, removePerson, updatePerson } from './application/people';
 export {

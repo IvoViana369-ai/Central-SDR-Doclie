@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { JOBS } from '../../../jobs/catalog';
 import type { Prisma } from '@docline/db';
 import {
   BusinessRuleError,
@@ -219,6 +220,17 @@ export const bulkLeads = defineUseCase({
         LEAD_EVENTS.tagRemoved,
         'lead.tag.remove',
       );
+    }
+
+    if ((input.action === 'addTag' || input.action === 'removeTag') && changeIds.length > 0) {
+      // Tags podem ser critério do score: recálculo em massa no worker.
+      for (let i = 0; i < changeIds.length; i += 1_000) {
+        await ctx.deps.jobs.enqueue(
+          JOBS.scoreRecomputeLeads.name,
+          { leadIds: changeIds.slice(i, i + 1_000), trigger: 'bulk.tag' },
+          { tx: ctx.tx },
+        );
+      }
     }
 
     await ctx.audit({

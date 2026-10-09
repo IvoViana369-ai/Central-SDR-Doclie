@@ -355,7 +355,7 @@ export const processImportRow = defineUseCase({
       // Dados novos no existente (contatos, CNPJ, site) podem revelar outros duplicados.
       await detectDuplicates(ctx.tx, { kind: 'leads', ids: [leadId] }, 'IMPORT', ctx.now);
     }
-    await refreshLeadContactState(ctx.tx, leadId);
+    await refreshLeadContactState(ctx.tx, leadId, ctx.now);
     const actorType = ctx.actor.kind === 'user' ? ('USER' as const) : ('SYSTEM' as const);
     await ctx.tx.leadEvent.create({
       data: {

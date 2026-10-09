@@ -298,7 +298,6 @@ export async function insertLead(
     });
   }
 
-  const contactStatus = await refreshLeadContactState(ctx.tx, lead.id);
   const code = formatLeadCode(lead.code);
   const duplicateCodes = options.duplicateCodes ?? [];
   await recordLeadEvent(ctx, lead.id, LEAD_EVENTS.created, {
@@ -313,6 +312,8 @@ export async function insertLead(
       ...(options.importBatchId ? { importBatchId: options.importBatchId } : {}),
     },
   });
+  // Depois do evento de cadastro: caches de contato e o primeiro score.
+  const contactStatus = await refreshLeadContactState(ctx.tx, lead.id, ctx.now);
   await auditLead(ctx, lead.id, 'lead.create', {
     changes: {
       displayName: [null, fields.displayName],

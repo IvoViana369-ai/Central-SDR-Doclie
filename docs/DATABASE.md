@@ -444,6 +444,7 @@ Diferenças em relação às seções acima:
 - **`loss_reasons`:** `position`; `applies_to_stage_keys` vazio vale para todas as etapas de perda.
 - **`scoring_models`:** `notes` e `created_by_id`; um único `ACTIVE` (único parcial).
 - **`lead_score_history`:** `previous_score` e `previous_band`, para mostrar a mudança sem consultar a linha anterior.
+- **Recálculo do score:** os critérios ficam no código (`modules/scoring/domain/criteria.ts`); o modelo no banco escolhe critérios, parâmetros e pesos. Mudar um lead (contatos, cidade, tipo, tags) recalcula na mesma transação; ações em massa, cidades prioritárias e a ativação de um modelo recalculam no worker (`score.recompute-lead` e `score.recompute-all`). `lead_score_history` recebe uma linha só quando o score ou a faixa mudam; o primeiro cálculo não gera evento `score.changed` na timeline.
 - **Configuração inicial** (`seed/sales-config.ts`): só cria o que falta, então renomear, reordenar ou recolorir etapas não é desfeito no próximo deploy. Os leads sem etapa vão para "Novo" com a primeira linha do histórico (`backfillLeadStages`, também chamada na subida do worker).
 
 **Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts` e `pipeline-scoring-schema.int.test.ts`):

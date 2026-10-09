@@ -475,8 +475,8 @@ export const mergeDuplicate = defineUseCase({
     });
 
     // 6. Caches, timeline, auditoria e nova busca de duplicados do sobrevivente.
-    await refreshLeadContactState(ctx.tx, survivor.id);
-    await refreshLeadContactState(ctx.tx, merged.id);
+    await refreshLeadContactState(ctx.tx, survivor.id, ctx.now);
+    await refreshLeadContactState(ctx.tx, merged.id, ctx.now);
     const counts = Object.fromEntries(Object.entries(moved).map(([k, ids]) => [k, ids.length]));
     const actorType = ctx.actor.kind === 'user' ? ('USER' as const) : ('SYSTEM' as const);
     await ctx.tx.leadEvent.createMany({

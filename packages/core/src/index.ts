@@ -33,4 +33,5 @@ export * from './modules/leads';
 export * from './modules/import';
 export * from './modules/dedup';
 export * from './modules/pipeline';
+export * from './modules/scoring';
 export * from './jobs/catalog';

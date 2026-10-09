@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { recomputeLeadScores } from '../../scoring';
 import { ConflictError, NotFoundError } from '../../../shared/errors';
 import { diffFields } from '../../../shared/diff';
 import { defineUseCase } from '../../../shared/use-case';
@@ -107,6 +108,7 @@ export const addLeadTag = defineUseCase({
       subjectId: tagId,
       changes: { tag: [null, tag.name] },
     });
+    await recomputeLeadScores(ctx.tx, [leadId], 'tag', ctx.now);
     return { ok: true };
   },
 });
@@ -129,6 +131,7 @@ export const removeLeadTag = defineUseCase({
       subjectId: tagId,
       changes: { tag: [tag?.name ?? tagId, null] },
     });
+    await recomputeLeadScores(ctx.tx, [leadId], 'tag', ctx.now);
     return { ok: true };
   },
 });

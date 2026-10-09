@@ -12,5 +12,9 @@ describe('jobHandlers', () => {
     const handlers = jobHandlers({} as CoreDeps, new Date());
     await expect(handlers['import.commit']!({ batchId: 'x' })).rejects.toThrow();
     await expect(handlers['dedup.check-lead']!({ leadIds: [] })).rejects.toThrow();
+    await expect(handlers['score.recompute-lead']!({ leadIds: ['x'] })).rejects.toThrow();
+    await expect(
+      handlers['score.recompute-all']!({ municipalityCode: 'Sobral' }),
+    ).rejects.toThrow();
   });
 });

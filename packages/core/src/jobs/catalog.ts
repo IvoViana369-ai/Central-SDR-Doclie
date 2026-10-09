@@ -65,6 +65,23 @@ export const JOBS = {
     retryDelaySeconds: 600,
     expireInSeconds: 3600,
   },
+  /** Recalcula o score de leads (ações em massa; dados: `{ leadIds, trigger }`). */
+  scoreRecomputeLeads: {
+    name: 'score.recompute-lead',
+    retryLimit: 3,
+    retryDelaySeconds: 30,
+    expireInSeconds: 600,
+  },
+  /**
+   * Recalcula toda a base (ativação de modelo) ou uma cidade (lista de
+   * prioridades); dados: `{ trigger, municipalityCode? }`.
+   */
+  scoreRecomputeAll: {
+    name: 'score.recompute-all',
+    retryLimit: 2,
+    retryDelaySeconds: 120,
+    expireInSeconds: 3600,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

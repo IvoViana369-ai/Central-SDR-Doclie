@@ -4,6 +4,7 @@ import { defineUseCase } from '../../../shared/use-case';
 import { updateLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
 import { refreshLeadContactState } from '../../compliance';
+import { recomputeLeadScores } from '../../scoring';
 import { auditLead, queueDuplicateCheck, recordLeadEvent } from '../infra/events';
 import { requireLeadInScope } from '../infra/scope';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
@@ -39,6 +40,10 @@ const IDENTITY_FIELDS = new Set([
   'municipalityCode',
   'stateUf',
 ]);
+
+/** Campos que são critérios do score (cidade prioritária, UF, tipo). */
+const SCORE_FIELDS = ['leadType', 'municipalityCode', 'cityRaw', 'stateUf'];
+const fieldsChanged = (changes: object, fields: string[]) => fields.some((f) => f in changes);
 
 export const updateLead = defineUseCase({
   name: 'leads.update',
@@ -99,7 +104,10 @@ export const updateLead = defineUseCase({
     }
 
     if ('cnpj' in changes || 'websiteUrl' in changes) {
-      await refreshLeadContactState(ctx.tx, leadId);
+      // Também recalcula o score (site e CNPJ são critérios).
+      await refreshLeadContactState(ctx.tx, leadId, ctx.now);
+    } else if (fieldsChanged(changes, SCORE_FIELDS)) {
+      await recomputeLeadScores(ctx.tx, [leadId], 'lead.update', ctx.now);
     }
     const fields = Object.keys(changes);
     if (fields.some((f) => IDENTITY_FIELDS.has(f))) await queueDuplicateCheck(ctx, leadId);

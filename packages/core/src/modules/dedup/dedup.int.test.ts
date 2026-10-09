@@ -251,7 +251,8 @@ describe('deduplicação (M06)', () => {
     const before = {
       leads: await db.lead.count(),
       contacts: await db.contactPoint.count(),
-      events: await db.leadEvent.count(),
+      // O score do sobrevivente pode mudar (ganha canais): conta à parte.
+      events: await db.leadEvent.count({ where: { type: { not: 'score.changed' } } }),
       notes: await db.leadNote.count(),
     };
 
@@ -328,7 +329,7 @@ describe('deduplicação (M06)', () => {
     expect({
       leads: await db.lead.count(),
       contacts: await db.contactPoint.count(),
-      events: await db.leadEvent.count(),
+      events: await db.leadEvent.count({ where: { type: { not: 'score.changed' } } }),
       notes: await db.leadNote.count(),
     }).toEqual({ ...before, events: before.events + 2 });
 

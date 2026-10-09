@@ -224,7 +224,7 @@ export const setChannelPermission = defineUseCase({
         data: { ...data, leadId: input.leadId, channel: input.channel },
       });
     }
-    const contactStatus = await refreshLeadContactState(ctx.tx, input.leadId);
+    const contactStatus = await refreshLeadContactState(ctx.tx, input.leadId, ctx.now);
     await recordLeadEvent(ctx, input.leadId, LEAD_EVENTS.permissionChanged, {
       payload: { channel: input.channel, legalBasis: input.legalBasis, optInStatus },
     });
@@ -415,7 +415,7 @@ export const anonymizeLead = defineUseCase({
       data: { raw: [], normalized: Prisma.DbNull, errors: Prisma.DbNull, warnings: Prisma.DbNull },
     });
 
-    const contactStatus = await refreshLeadContactState(ctx.tx, lead.id);
+    const contactStatus = await refreshLeadContactState(ctx.tx, lead.id, ctx.now);
     await recordLeadEvent(ctx, lead.id, LEAD_EVENTS.anonymized, {
       payload: { suppressed, viaDataSubjectRequest: Boolean(input.dataSubjectRequestId) },
     });

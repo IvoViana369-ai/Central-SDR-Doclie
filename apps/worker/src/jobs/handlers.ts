@@ -6,6 +6,8 @@ import {
   runImportParse,
   runImportPreview,
   runImportPurge,
+  runScoreRecomputeAll,
+  runScoreRecomputeLeads,
   type CoreDeps,
 } from '@docline/core';
 import { spreadsheetReader } from '@docline/integrations';
@@ -17,6 +19,14 @@ const batchJob = z.object({ batchId: z.uuid() });
 const checkJob = z.object({
   leadIds: z.array(z.uuid()).min(1).max(1_000),
   source: z.enum(['IMPORT', 'SCAN', 'MANUAL', 'PROSPECTING']).optional(),
+});
+const scoreLeadsJob = z.object({
+  leadIds: z.array(z.uuid()).min(1).max(1_000),
+  trigger: z.string().max(60).optional(),
+});
+const scoreAllJob = z.object({
+  trigger: z.string().max(60).optional(),
+  municipalityCode: z.number().int().positive().nullish(),
 });
 
 export type JobHandler = (data: unknown) => Promise<unknown>;
@@ -33,5 +43,9 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.importPurge.name]: async () => runImportPurge(deps),
     [JOBS.dedupCheckLead.name]: async (data) => runDuplicateCheck(deps, checkJob.parse(data)),
     [JOBS.dedupScan.name]: async () => runDuplicateScan(deps),
+    [JOBS.scoreRecomputeLeads.name]: async (data) =>
+      runScoreRecomputeLeads(deps, scoreLeadsJob.parse(data)),
+    [JOBS.scoreRecomputeAll.name]: async (data) =>
+      runScoreRecomputeAll(deps, scoreAllJob.parse(data ?? {})),
   };
 }

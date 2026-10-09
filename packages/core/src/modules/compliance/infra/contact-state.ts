@@ -1,4 +1,5 @@
 import type { ContactPointType, ContactStatus, DbTransaction } from '@docline/db';
+import { recomputeLeadScores } from '../../scoring';
 import { computeContactStatus } from '../domain/contact-status';
 import {
   findActiveSuppressions,
@@ -44,12 +45,14 @@ export async function loadLeadSuppressions(
 
 /**
  * Recalcula os caches do lead na mesma transação da alteração (docs/DATABASE.md
- * §4.3): canais disponíveis (has_*) e situação de contato (contact_status).
- * Chamado depois de qualquer mudança em contatos, base legal, supressões ou CNPJ.
+ * §4.3): canais disponíveis (has_*), situação de contato (contact_status) e o
+ * score. Chamado depois de qualquer mudança em contatos, base legal,
+ * supressões, CNPJ ou site.
  */
 export async function refreshLeadContactState(
   tx: DbTransaction,
   leadId: string,
+  now: Date,
 ): Promise<ContactStatus> {
   const lead = await tx.lead.findUniqueOrThrow({
     where: { id: leadId },
@@ -92,6 +95,8 @@ export async function refreshLeadContactState(
       hasWebsite: lead.websiteUrl !== null,
     },
   });
+  // Canais, site e CNPJ são critérios do score: recalcula na mesma transação.
+  await recomputeLeadScores(tx, [leadId], 'contact_state', now);
   return contactStatus;
 }
 
@@ -102,6 +107,7 @@ export async function refreshLeadContactState(
 export async function refreshLeadsForIdentifiers(
   tx: DbTransaction,
   identifiers: SuppressionIdentifier[],
+  now: Date,
 ): Promise<string[]> {
   const leadIds = new Set<string>();
   const byContact = identifiers.filter(
@@ -128,7 +134,7 @@ export async function refreshLeadsForIdentifiers(
 
   for (const leadId of leadIds) {
     const exists = await tx.lead.count({ where: { id: leadId } });
-    if (exists > 0) await refreshLeadContactState(tx, leadId);
+    if (exists > 0) await refreshLeadContactState(tx, leadId, now);
   }
   return [...leadIds];
 }
