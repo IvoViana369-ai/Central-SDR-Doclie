@@ -514,7 +514,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `dedup.scan` | Diário (03:43 UTC) e manual (`POST /duplicates/scan`) | Varredura completa em blocos por UF, um bloco por transação; cada par é visto uma vez | 3 |
 | `score.recompute-lead` | Ações em massa de tags (lotes de 1.000 leads). As mudanças de um lead só (contatos, cidade, tipo, tags) recalculam na própria transação | Recalcula o score; grava histórico e o evento `score.changed` quando o score ou a faixa mudam | 4 |
 | `score.recompute-all` | Ativação de modelo, inclusão ou retirada de cidade prioritária (só os leads da cidade) e subida do worker com leads sem score | Recalcula a base em lotes de 500 leads por transação | 4 |
-| `cadence.tick` | A cada 5 min | Passos vencidos → tarefas (modo assistido) ou envios (Fase 7); fim da cadência → `NO_RESPONSE` | 5 |
+| `cadence.tick` | A cada 5 min | Conclui as cadências sem resposta no prazo (lead em `NO_RESPONSE`), retoma pausas vencidas e recria a tarefa de um passo que ficou sem tarefa. Cada passo vira tarefa já na inscrição e a cada passo executado (modo assistido); envios automáticos só na Fase 7 | 5 |
 | `tasks.overdue-scan` | De hora em hora | Marca atrasos, recalcula prioridade, notifica | 5 |
 | `leads.forgotten-scan` | Diário | Marca leads sem atividade há N dias em etapas abertas | 5 |
 | `retention.enforce` | Diário | Anonimiza conforme a política de retenção (as `import_rows` têm job próprio, `import.purge`) | 5+ |

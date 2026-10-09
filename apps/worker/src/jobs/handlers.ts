@@ -1,5 +1,6 @@
 import {
   JOBS,
+  runCadenceTick,
   runDuplicateCheck,
   runDuplicateScan,
   runImportCommit,
@@ -45,6 +46,7 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.dedupScan.name]: async () => runDuplicateScan(deps),
     [JOBS.scoreRecomputeLeads.name]: async (data) =>
       runScoreRecomputeLeads(deps, scoreLeadsJob.parse(data)),
+    [JOBS.cadenceTick.name]: async () => runCadenceTick(deps),
     [JOBS.scoreRecomputeAll.name]: async (data) =>
       runScoreRecomputeAll(deps, scoreAllJob.parse(data ?? {})),
   };

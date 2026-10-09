@@ -68,3 +68,20 @@ export function validateCadenceSteps(steps: { dayOffset: number }[]): string[] {
   });
   return issues;
 }
+
+/** Título da tarefa de cada passo, pelo tipo de mensagem. */
+export const STEP_TASK_TITLES: Record<string, string> = {
+  FIRST_CONTACT: 'Primeiro contato',
+  FOLLOW_UP_1: 'Follow-up 1',
+  FOLLOW_UP_2: 'Follow-up 2',
+  FOLLOW_UP_3: 'Follow-up 3',
+  REACTIVATION: 'Reativação',
+  OTHER: 'Contato da cadência',
+};
+
+export const ENROLLMENT_STATUS_LABELS = {
+  ACTIVE: 'Ativa',
+  PAUSED: 'Pausada',
+  COMPLETED: 'Concluída sem resposta',
+  STOPPED: 'Encerrada',
+} as const;

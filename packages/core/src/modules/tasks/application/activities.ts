@@ -32,7 +32,7 @@ export const logActivity = defineUseCase({
     const task = input.taskId
       ? await ctx.tx.task.findFirst({
           where: { id: input.taskId, leadId: lead.id, status: 'OPEN' },
-          select: { id: true, leadId: true, type: true, title: true },
+          select: { id: true, leadId: true, type: true, title: true, enrollmentId: true },
         })
       : null;
     if (input.taskId && !task) throw new NotFoundError('Tarefa aberta não encontrada neste lead.');
@@ -76,7 +76,7 @@ export const logActivity = defineUseCase({
       ]
         .filter(Boolean)
         .join(': ');
-      await closeTask(ctx, task, 'DONE', outcome);
+      await closeTask(ctx, task, 'DONE', outcome, occurredAt);
     }
     await auditLead(ctx, lead.id, 'activity.log', {
       subjectId: activity.id,

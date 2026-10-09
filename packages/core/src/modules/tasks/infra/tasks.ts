@@ -1,6 +1,7 @@
 import type { MessageType, Prisma, TaskType } from '@docline/db';
 import { NotFoundError, BusinessRuleError } from '../../../shared/errors';
 import { toJson, type UseCaseContext } from '../../../shared/use-case';
+import { advanceEnrollment } from '../../cadence';
 import { refreshNextAction } from '../../engagement';
 import { LEAD_EVENTS, requireLeadInScope } from '../../leads';
 
@@ -74,12 +75,17 @@ export async function requireOpenTask(ctx: UseCaseContext, taskId: string) {
   return task;
 }
 
-/** Fecha a tarefa (concluída ou pulada), com o evento e a próxima ação do lead. */
+/**
+ * Fecha a tarefa (concluída ou pulada), com o evento e a próxima ação do lead.
+ * Tarefa de passo de cadência avança a cadência a partir de `executedAt`
+ * (quando o contato foi feito de fato).
+ */
 export async function closeTask(
   ctx: UseCaseContext,
-  task: { id: string; leadId: string; type: TaskType; title: string },
+  task: { id: string; leadId: string; type: TaskType; title: string; enrollmentId?: string | null },
   status: 'DONE' | 'SKIPPED',
   outcome: string | null,
+  executedAt: Date = ctx.now,
 ) {
   await ctx.tx.task.update({
     where: { id: task.id },
@@ -102,6 +108,9 @@ export async function closeTask(
       payload: toJson({ type: task.type, title: task.title, status, outcome }),
     },
   });
+  if (task.enrollmentId) {
+    await advanceEnrollment(ctx, task.enrollmentId, { executedAt, executed: status === 'DONE' });
+  }
   await refreshNextAction(ctx.tx, task.leadId);
 }
 
@@ -109,7 +118,7 @@ export async function closeTask(
 export async function closeReplyTasks(ctx: UseCaseContext, leadId: string, outcome: string) {
   const open = await ctx.tx.task.findMany({
     where: { leadId, status: 'OPEN', type: 'REPLY_NEEDED' },
-    select: { id: true, leadId: true, type: true, title: true },
+    select: { id: true, leadId: true, type: true, title: true, enrollmentId: true },
   });
   for (const task of open) await closeTask(ctx, task, 'DONE', outcome);
 }

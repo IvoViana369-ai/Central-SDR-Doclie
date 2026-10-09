@@ -38,4 +38,5 @@ export * from './modules/settings';
 export * from './modules/engagement';
 export * from './modules/tasks';
 export * from './modules/messaging';
+export * from './modules/cadence';
 export * from './jobs/catalog';

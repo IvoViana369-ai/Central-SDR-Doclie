@@ -82,6 +82,17 @@ export const JOBS = {
     retryDelaySeconds: 120,
     expireInSeconds: 3600,
   },
+  /**
+   * Cadências (docs/SDR-FLOW.md §4): conclui as que passaram do prazo sem
+   * resposta, retoma pausas vencidas e recria tarefas de passo perdidas.
+   */
+  cadenceTick: {
+    name: 'cadence.tick',
+    cron: '*/5 * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 600,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

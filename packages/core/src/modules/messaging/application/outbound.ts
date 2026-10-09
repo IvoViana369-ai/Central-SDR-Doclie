@@ -131,10 +131,10 @@ async function afterSent(
   const task = taskId
     ? await ctx.tx.task.findFirst({
         where: { id: taskId, leadId: message.leadId, status: 'OPEN' },
-        select: { id: true, leadId: true, type: true, title: true },
+        select: { id: true, leadId: true, type: true, title: true, enrollmentId: true },
       })
     : null;
-  if (task) await closeTask(ctx, task, 'DONE', 'Mensagem enviada.');
+  if (task) await closeTask(ctx, task, 'DONE', 'Mensagem enviada.', sentAt);
   await ctx.tx.leadEvent.create({
     data: {
       leadId: message.leadId,
@@ -180,7 +180,26 @@ export const prepareAssistedMessage = defineUseCase({
       where: { id: contactPointId },
       select: { id: true, type: true, valueNormalized: true },
     });
-    const task = await openTaskOf(ctx, lead.id, input.taskId);
+    // Sem tarefa informada, o envio cumpre o passo da cadência que já venceu (se houver).
+    const task = input.taskId
+      ? await openTaskOf(ctx, lead.id, input.taskId)
+      : await ctx.tx.task.findFirst({
+          where: {
+            leadId: lead.id,
+            status: 'OPEN',
+            enrollmentId: { not: null },
+            dueAt: { lte: ctx.now },
+          },
+          select: {
+            id: true,
+            leadId: true,
+            type: true,
+            title: true,
+            messageType: true,
+            enrollmentId: true,
+            cadenceStepId: true,
+          },
+        });
 
     // Um envio pendente por lead e canal: preparar de novo substitui o anterior.
     await ctx.tx.message.updateMany({
