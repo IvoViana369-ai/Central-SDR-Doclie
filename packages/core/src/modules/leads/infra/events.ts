@@ -1,4 +1,5 @@
 import type { Channel } from '@docline/db';
+import { JOBS } from '../../../jobs/catalog';
 import { toJson, type AuditChanges, type UseCaseContext } from '../../../shared/use-case';
 import type { LeadEventType } from '../domain/events';
 
@@ -54,4 +55,16 @@ export async function auditLead(
 /** Marca atividade recente no lead (ordenação "mexidos recentemente"). */
 export async function touchLead(ctx: UseCaseContext, leadId: string): Promise<void> {
   await ctx.tx.lead.update({ where: { id: leadId }, data: { lastActivityAt: ctx.now } });
+}
+
+/**
+ * Agenda a busca de duplicados do lead (job `dedup.check-lead`), na mesma
+ * transação: se a alteração for desfeita, o job também é.
+ */
+export async function queueDuplicateCheck(ctx: UseCaseContext, leadId: string): Promise<void> {
+  await ctx.deps.jobs.enqueue(
+    JOBS.dedupCheckLead.name,
+    { leadIds: [leadId], source: 'MANUAL' },
+    { tx: ctx.tx },
+  );
 }

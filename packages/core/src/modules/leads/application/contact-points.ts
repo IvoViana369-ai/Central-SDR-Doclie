@@ -7,7 +7,7 @@ import {
 } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
 import { refreshLeadContactState } from '../../compliance';
-import { auditLead, recordLeadEvent, touchLead } from '../infra/events';
+import { auditLead, queueDuplicateCheck, recordLeadEvent, touchLead } from '../infra/events';
 import { requireEditableLead } from '../infra/scope';
 import { findDuplicateLeads } from './duplicates';
 import { maskContactValue, normalizeContactValue } from './normalize-input';
@@ -131,8 +131,9 @@ export const addContactPoint = defineUseCase({
       changes: { [cp.type.toLowerCase()]: [null, masked] },
     });
 
-    // Aviso (não bloqueia): o mesmo contato em outros leads.
+    // Aviso (não bloqueia): o mesmo contato em outros leads; o par vai para a fila de revisão.
     const duplicates = await findDuplicateLeads(ctx, { contacts: [value], excludeLeadId: leadId });
+    await queueDuplicateCheck(ctx, leadId);
     return { contactPointId: cp.id, duplicates };
   },
 });
@@ -188,6 +189,7 @@ export const updateContactPoint = defineUseCase({
       subjectId: contactPointId,
       changes,
     });
+    if (changes.status) await queueDuplicateCheck(ctx, leadId);
     return { contactPointId };
   },
 });

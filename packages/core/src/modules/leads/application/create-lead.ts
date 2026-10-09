@@ -7,7 +7,7 @@ import { LEAD_EVENTS } from '../domain/events';
 import { firstNameOf, formatLeadCode } from '../domain/lead';
 import { refreshLeadContactState } from '../../compliance';
 import { formatName } from '../../normalization';
-import { auditLead, recordLeadEvent } from '../infra/events';
+import { auditLead, queueDuplicateCheck, recordLeadEvent } from '../infra/events';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
 import {
   normalizeContactValue,
@@ -341,9 +341,12 @@ export const createLead = defineUseCase({
     if (duplicates.length > 0 && !input.acknowledgeDuplicates) {
       throw new PossibleDuplicateError(duplicates);
     }
-    return insertLead(ctx, prepared, {
+    const lead = await insertLead(ctx, prepared, {
       createdVia: 'MANUAL',
       duplicateCodes: duplicates.map((d) => d.code),
     });
+    // Duplicados por similaridade (os exatos já foram mostrados acima) vão para a fila de revisão.
+    await queueDuplicateCheck(ctx, lead.id);
+    return lead;
   },
 });

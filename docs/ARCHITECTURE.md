@@ -508,8 +508,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `import.preview` | Mapeamento salvo | Normaliza e valida cada linha, casa com a base, com o próprio arquivo e com a Lista Não Contatar (lotes de 1.000 linhas) e propõe a decisão pela política do lote | 3 |
 | `import.commit` | Confirmação | Grava as linhas confirmadas, uma transação por linha (erro numa linha não derruba as outras), pelo mesmo caminho do cadastro manual. Emite eventos, sinaliza possíveis duplicados e gera o relatório. Retoma de onde parou | 3 |
 | `import.purge` | Diário (04:17 UTC) | Apaga as `import_rows` 30 dias após o lote e cancela lotes abandonados há mais de 7 dias | 3 |
-| `dedup.check-lead` | `lead.created` / `lead.updated` (identificadores) | Busca candidatos para um lead (índices exatos + trigram por cidade) | 3 |
-| `dedup.scan` | Diário (madrugada) e manual | Varredura completa em blocos (*blocking* por cidade/UF) | 3 |
+| `dedup.check-lead` | Cadastro manual, edição de nome/CNPJ/site/cidade, contato novo ou reativado, mesclagem (enfileirado na transação) | Busca candidatos para os leads (índices exatos + trigram por cidade) e atualiza a fila de revisão. Na importação, a busca roda na própria linha, para o relatório contar os sinalizados | 3 |
+| `dedup.scan` | Diário (03:43 UTC) e manual (`POST /duplicates/scan`) | Varredura completa em blocos por UF, um bloco por transação; cada par é visto uma vez | 3 |
 | `score.recompute-lead` | Eventos que mudam critérios | Recalcula score e grava histórico se mudou | 4 |
 | `score.recompute-all` | Ativação de modelo | Recalcula toda a base em lotes | 4 |
 | `cadence.tick` | A cada 5 min | Passos vencidos → tarefas (modo assistido) ou envios (Fase 7); fim da cadência → `NO_RESPONSE` | 5 |

@@ -3,9 +3,10 @@
 export * from './contracts/schemas';
 export * from './domain/lead';
 export { LEAD_EVENTS, LEAD_EVENT_LABELS, type LeadEventType } from './domain/events';
-export { leadScopeWhere } from './infra/scope';
+export { leadScopeWhere, requireLeadInScope } from './infra/scope';
 export {
   checkDuplicates,
+  GENERIC_DOMAINS,
   PossibleDuplicateError,
   type DuplicateMatch,
   type DuplicateReason,

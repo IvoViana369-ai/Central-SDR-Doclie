@@ -1,4 +1,4 @@
-import type { SuppressionReason, SuppressionScope } from '@docline/db';
+import { Prisma, type SuppressionReason, type SuppressionScope } from '@docline/db';
 import { ConflictError, NotFoundError, ValidationError } from '../../../shared/errors';
 import { defineUseCase, type UseCaseContext } from '../../../shared/use-case';
 import {
@@ -241,6 +241,102 @@ const ANONYMIZED_NOTE = '[conteúdo removido na anonimização]';
  * identificadores entram na Lista Não Contatar antes de serem apagados, para
  * o pedido continuar valendo em reimportações.
  */
+/** Leads mesclados (direta ou indiretamente) neste lead. */
+async function absorbedLeads(ctx: UseCaseContext, leadId: string) {
+  const found: { id: string; code: number; cnpj: string | null; cnpjHash: string | null }[] = [];
+  let frontier = [leadId];
+  for (let depth = 0; frontier.length > 0 && depth < 10; depth++) {
+    const next = await ctx.tx.lead.findMany({
+      where: { mergedIntoId: { in: frontier }, status: 'MERGED' },
+      select: { id: true, code: true, cnpj: true, cnpjHash: true },
+    });
+    found.push(...next);
+    frontier = next.map((l) => l.id);
+  }
+  return found;
+}
+
+/**
+ * Apaga os dados do lead e dos filhos (pessoas, contatos, observações,
+ * origens, bases legais). O lead anonimizado muda de status; um lead mesclado
+ * nele continua MERGED, só sem os dados.
+ */
+async function scrubLead(
+  ctx: UseCaseContext,
+  leadId: string,
+  code: string,
+  options: { anonymize: boolean },
+) {
+  const actorId = ctx.actor.kind === 'user' ? ctx.actor.id : null;
+  const placeholder = `Lead anonimizado ${code}`;
+  await ctx.tx.lead.update({
+    where: { id: leadId },
+    data: {
+      companyName: null,
+      tradeName: null,
+      displayName: placeholder,
+      nameSearch: toSearchKey(placeholder),
+      nameCore: toSearchKey(placeholder),
+      cnpj: null,
+      cnpjRoot: null,
+      cnpjHash: null,
+      addressLine: null,
+      addressNumber: null,
+      addressComplement: null,
+      neighborhood: null,
+      postalCode: null,
+      websiteUrl: null,
+      websiteDomain: null,
+      description: null,
+      customFields: Prisma.DbNull,
+      originDetail: null,
+      originUrl: null,
+      ...(options.anonymize ? { status: 'ANONYMIZED' as const } : {}),
+      anonymizedAt: ctx.now,
+      version: { increment: 1 },
+    },
+  });
+  await ctx.tx.leadPerson.updateMany({
+    where: { leadId },
+    data: {
+      fullName: ANONYMIZED_PERSON,
+      firstName: null,
+      roleTitle: null,
+      notes: null,
+      isPrimary: false,
+      status: 'ANONYMIZED',
+    },
+  });
+  const points = await ctx.tx.contactPoint.findMany({ where: { leadId }, select: { id: true } });
+  for (const cp of points) {
+    await ctx.tx.contactPoint.update({
+      where: { id: cp.id },
+      data: {
+        valueRaw: '',
+        valueNormalized: `anon:${cp.id}`,
+        valueHash: `anon:${cp.id}`,
+        label: null,
+        sourceDetail: null,
+        verificationMethod: null,
+        normalizationFlags: [],
+        isPrimary: false,
+        status: 'REMOVED',
+      },
+    });
+  }
+  await ctx.tx.leadNote.updateMany({ where: { leadId }, data: { body: ANONYMIZED_NOTE } });
+  await ctx.tx.leadNote.updateMany({
+    where: { leadId, removedAt: null },
+    data: { removedAt: ctx.now, removedById: actorId },
+  });
+  await ctx.tx.leadOrigin.updateMany({
+    where: { leadId },
+    data: { detail: null, url: null, referrerName: null },
+  });
+  await ctx.tx.contactPermission.updateMany({ where: { leadId }, data: { evidence: null } });
+  await ctx.tx.leadAssignment.updateMany({ where: { leadId }, data: { reason: null } });
+}
+
 export const anonymizeLead = defineUseCase({
   name: 'leads.anonymize',
   access: 'lead.anonymize',
@@ -264,92 +360,36 @@ export const anonymizeLead = defineUseCase({
       }
     }
 
+    // Leads mesclados neste guardam dados do mesmo titular: são anonimizados junto.
+    const absorbed = await absorbedLeads(ctx, lead.id);
     let suppressed = 0;
     if (input.suppress) {
-      const entries = await leadSuppressions(ctx, lead, {
-        scope: 'ALL_CHANNELS',
-        reason: input.dataSubjectRequestId ? 'DATA_SUBJECT_REQUEST' : 'INTERNAL_DECISION',
-        source: input.dataSubjectRequestId ? 'DSR' : 'ADMIN',
-      });
+      const options = {
+        scope: 'ALL_CHANNELS' as const,
+        reason: input.dataSubjectRequestId
+          ? ('DATA_SUBJECT_REQUEST' as const)
+          : ('INTERNAL_DECISION' as const),
+        source: input.dataSubjectRequestId ? ('DSR' as const) : ('ADMIN' as const),
+      };
+      const entries = await leadSuppressions(ctx, lead, options);
+      for (const other of absorbed) entries.push(...(await leadSuppressions(ctx, other, options)));
       suppressed = (await suppressIdentifiers(ctx, entries)).created.length;
     }
 
-    const actorId = ctx.actor.kind === 'user' ? ctx.actor.id : null;
-    const placeholder = `Lead anonimizado ${formatLeadCode(lead.code)}`;
-    await ctx.tx.lead.update({
-      where: { id: lead.id },
-      data: {
-        companyName: null,
-        tradeName: null,
-        displayName: placeholder,
-        nameSearch: toSearchKey(placeholder),
-        nameCore: toSearchKey(placeholder),
-        cnpj: null,
-        cnpjRoot: null,
-        cnpjHash: null,
-        addressLine: null,
-        addressNumber: null,
-        addressComplement: null,
-        neighborhood: null,
-        postalCode: null,
-        websiteUrl: null,
-        websiteDomain: null,
-        description: null,
-        originDetail: null,
-        originUrl: null,
-        status: 'ANONYMIZED',
-        anonymizedAt: ctx.now,
-        version: { increment: 1 },
-      },
-    });
-    await ctx.tx.leadPerson.updateMany({
-      where: { leadId: lead.id },
-      data: {
-        fullName: ANONYMIZED_PERSON,
-        firstName: null,
-        roleTitle: null,
-        notes: null,
-        isPrimary: false,
-        status: 'ANONYMIZED',
-      },
-    });
-    const points = await ctx.tx.contactPoint.findMany({
-      where: { leadId: lead.id },
-      select: { id: true },
-    });
-    for (const cp of points) {
-      await ctx.tx.contactPoint.update({
-        where: { id: cp.id },
-        data: {
-          valueRaw: '',
-          valueNormalized: `anon:${cp.id}`,
-          valueHash: `anon:${cp.id}`,
-          label: null,
-          sourceDetail: null,
-          verificationMethod: null,
-          normalizationFlags: [],
-          isPrimary: false,
-          status: 'REMOVED',
-        },
-      });
+    await scrubLead(ctx, lead.id, formatLeadCode(lead.code), { anonymize: true });
+    for (const other of absorbed) {
+      await scrubLead(ctx, other.id, formatLeadCode(other.code), { anonymize: false });
     }
-    await ctx.tx.leadNote.updateMany({
-      where: { leadId: lead.id },
-      data: { body: ANONYMIZED_NOTE },
+    const ids = [lead.id, ...absorbed.map((a) => a.id)];
+    // Cópias da mesclagem e linhas de importação ainda não purgadas.
+    await ctx.tx.leadMerge.updateMany({
+      where: { OR: [{ survivorLeadId: { in: ids } }, { mergedLeadId: { in: ids } }] },
+      data: { mergedSnapshot: { anonymized: true } },
     });
-    await ctx.tx.leadNote.updateMany({
-      where: { leadId: lead.id, removedAt: null },
-      data: { removedAt: ctx.now, removedById: actorId },
+    await ctx.tx.importRow.updateMany({
+      where: { OR: [{ resultLeadId: { in: ids } }, { matchedLeadId: { in: ids } }] },
+      data: { raw: [], normalized: Prisma.DbNull, errors: Prisma.DbNull, warnings: Prisma.DbNull },
     });
-    await ctx.tx.leadOrigin.updateMany({
-      where: { leadId: lead.id },
-      data: { detail: null, url: null, referrerName: null },
-    });
-    await ctx.tx.contactPermission.updateMany({
-      where: { leadId: lead.id },
-      data: { evidence: null },
-    });
-    await ctx.tx.leadAssignment.updateMany({ where: { leadId: lead.id }, data: { reason: null } });
 
     const contactStatus = await refreshLeadContactState(ctx.tx, lead.id);
     await recordLeadEvent(ctx, lead.id, LEAD_EVENTS.anonymized, {
@@ -361,6 +401,7 @@ export const anonymizeLead = defineUseCase({
         reason: input.reason,
         suppressed,
         ...(input.dataSubjectRequestId ? { dataSubjectRequestId: input.dataSubjectRequestId } : {}),
+        ...(absorbed.length ? { mergedLeads: absorbed.map((a) => formatLeadCode(a.code)) } : {}),
       },
     });
     return { status: 'ANONYMIZED' as const, contactStatus, suppressed };

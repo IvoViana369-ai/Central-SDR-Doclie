@@ -215,6 +215,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 - **Exclusão física**: só pela rotina de retenção ou por decisão do jurídico, auditada.
 - O hash na Lista Não Contatar é mantido para garantir o respeito ao opt-out.
 - **Implementado na Fase 2** (`anonymizeLead`, só ADMIN, com motivo): antes de apagar, telefone, e-mail, Instagram, CNPJ e o próprio lead entram na Lista Não Contatar (motivo "solicitação do titular" quando vinculado a um pedido). Depois são removidos nome, razão social, CNPJ, endereço, site, pessoas, valores e hashes dos contatos, observações, evidências e detalhes de origem. Cidade, UF, origem, datas e eventos (que não guardam dados pessoais em claro) são mantidos para as métricas.
+- **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
 ---

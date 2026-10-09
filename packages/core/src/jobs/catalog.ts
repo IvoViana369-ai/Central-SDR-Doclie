@@ -50,6 +50,21 @@ export const JOBS = {
     retryDelaySeconds: 300,
     expireInSeconds: 900,
   },
+  /** Procura duplicados de leads cadastrados ou alterados (dados: `{ leadIds, source }`). */
+  dedupCheckLead: {
+    name: 'dedup.check-lead',
+    retryLimit: 3,
+    retryDelaySeconds: 30,
+    expireInSeconds: 300,
+  },
+  /** Varredura completa de duplicados, em blocos por UF (docs/MVP.md M06). */
+  dedupScan: {
+    name: 'dedup.scan',
+    cron: '43 3 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 3600,
+  },
 } as const satisfies Record<string, JobDefinition>;
 
 export const ALL_JOBS: JobDefinition[] = Object.values(JOBS);

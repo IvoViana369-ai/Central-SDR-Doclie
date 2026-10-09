@@ -431,7 +431,9 @@ Diferenças em relação às seções acima:
 - **`import_rows`:** `raw` guarda as células como texto; `status` e `error` registram o resultado da gravação de cada linha.
 - **`leads`:** ganha `custom_fields` (colunas extras) e `merged_into_id` (o sobrevivente da mesclagem).
 - **`lead_origins`:** ganha `import_batch_id`.
-- **`duplicate_candidates`:** além do índice único, um `CHECK (lead_a_id < lead_b_id)` impede o mesmo par nas duas ordens.
+- **`duplicate_candidates`:** além do índice único, um `CHECK (lead_a_id < lead_b_id)` impede o mesmo par nas duas ordens. Par `KEPT_SEPARATE` ou `MERGED` nunca volta à fila; `IGNORED` volta só se surgir uma regra nova entre os motivos.
+- **Índices da deduplicação:** `leads(website_domain)` (mesmo site) e os trigram de `name_core`; `import_rows(result_lead_id)` e `import_rows(matched_lead_id)` para a anonimização achar as linhas ainda não purgadas de um lead.
+- **Mesclagem** (`lead_merges`): o mesclado vira `MERGED` com `merged_into_id`; contatos, pessoas, origens (sem `is_first_touch`), observações, eventos, responsáveis, bases legais por canal que o sobrevivente não tem e solicitações de titulares passam para o sobrevivente; tags são copiadas; contato repetido fica no mesclado. Leads já mesclados no mesclado passam a apontar para o sobrevivente (cadeia de um nível). Nenhuma linha é apagada.
 
 **Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`):
 

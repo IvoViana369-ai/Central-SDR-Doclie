@@ -14,9 +14,10 @@ import {
   type UseCaseContext,
 } from '../../../shared/use-case';
 import { refreshLeadContactState } from '../../compliance';
-import { signal, upsertCandidate, type DuplicateRule, type DuplicateSignal } from '../../dedup';
+import { detectDuplicates } from '../../dedup';
 import { resolveActor } from '../../identity';
 import {
+  buildLeadNames,
   createLeadInput,
   firstNameOf,
   formatLeadCode,
@@ -24,10 +25,9 @@ import {
   LEAD_EVENTS,
   prepareLeadCreation,
 } from '../../leads';
-import { formatName, toSearchKey } from '../../normalization';
+import { formatName, normalizeUrl, toSearchKey } from '../../normalization';
 import { z } from 'zod';
 import { importBatchIdInput } from '../contracts/schemas';
-import type { MatchReason } from '../domain/decisions';
 import type { NormalizedImportRow } from '../domain/row';
 import { IMPORT_RETENTION_DAYS, requireBatch } from './batches';
 
@@ -57,19 +57,6 @@ export const commitImport = defineUseCase({
     return { batchId: batch.id, status: 'COMMITTING' as const };
   },
 });
-
-/** Sinais de duplicidade a partir dos motivos do casamento (para a fila de revisão). */
-function signalsFrom(reasons: MatchReason[]): DuplicateSignal[] {
-  const map: Partial<Record<MatchReason['rule'], DuplicateRule>> = {
-    CNPJ: 'CNPJ',
-    CNPJ_ROOT: 'CNPJ_ROOT',
-    PHONE: 'PHONE',
-    EMAIL: 'EMAIL',
-    INSTAGRAM: 'INSTAGRAM',
-    NAME_CITY: 'NAME_CITY',
-  };
-  return reasons.flatMap((r) => (map[r.rule] ? [signal(map[r.rule]!, r.detail)] : []));
-}
 
 type Batch = Awaited<ReturnType<typeof requireBatch>>;
 
@@ -164,6 +151,20 @@ async function fillEmptyFields(
   };
   fill('companyName', n.companyName);
   fill('tradeName', n.tradeName);
+  if (changes.companyName || changes.tradeName) {
+    // Nome exibido e chaves de busca acompanham o nome completado.
+    const names = buildLeadNames({
+      companyName: lead.companyName ?? n.companyName,
+      tradeName: lead.tradeName ?? n.tradeName,
+    });
+    if (names) {
+      Object.assign(data, {
+        displayName: names.displayName,
+        nameSearch: names.nameSearch,
+        nameCore: names.nameCore,
+      });
+    }
+  }
   if (!lead.cnpj && n.cnpj) {
     const taken = await ctx.tx.lead.count({ where: { cnpj: n.cnpj, status: { not: 'MERGED' } } });
     if (!taken) {
@@ -186,7 +187,14 @@ async function fillEmptyFields(
   fill('addressNumber', n.addressNumber);
   fill('addressComplement', n.addressComplement);
   fill('neighborhood', n.neighborhood);
-  fill('websiteUrl', n.website);
+  if (!lead.websiteUrl && n.website) {
+    const url = normalizeUrl(n.website);
+    if (url.ok) {
+      // O domínio é o que a deduplicação compara (mesmo site).
+      Object.assign(data, { websiteUrl: url.value.url, websiteDomain: url.value.domain });
+      changes.websiteUrl = [null, url.value.url];
+    }
+  }
   if (!lead.segmentId && n.segmentId) {
     data.segment = { connect: { id: n.segmentId } };
     changes.segmentId = [null, n.segmentId];
@@ -271,7 +279,6 @@ export const processImportRow = defineUseCase({
     if (row.status !== 'PENDING' || !row.decision || row.decision === 'SKIP') return null;
     const n = row.normalized as NormalizedImportRow | null;
     if (!n) throw new ValidationError([{ path: 'row', message: 'Linha inválida.' }]);
-    const reasons = (row.matchReasons as MatchReason[] | null) ?? [];
 
     if (row.decision === 'IMPORT') {
       const parsed = createLeadInput.parse({
@@ -323,15 +330,16 @@ export const processImportRow = defineUseCase({
         duplicateCodes,
         customFields: Object.keys(n.customFields).length ? n.customFields : null,
       });
-      let flagged = false;
-      if (row.matchedLeadId) {
-        const signals = signalsFrom(reasons);
-        if (signals.length) {
-          flagged =
-            (await upsertCandidate(ctx.tx, lead.id, row.matchedLeadId, signals, 'IMPORT')) !==
-            'skipped';
-        }
-      }
+      // Busca completa de duplicados do lead novo (não só o da prévia), para a fila de revisão.
+      const { byLead } = await detectDuplicates(
+        ctx.tx,
+        { kind: 'leads', ids: [lead.id] },
+        'IMPORT',
+        ctx.now,
+      );
+      const flagged = (byLead.get(lead.id) ?? []).some(
+        (r) => r === 'created' || r === 'updated' || r === 'reopened',
+      );
       await ctx.tx.importRow.update({
         where: { id: row.id },
         data: { status: 'DONE', resultLeadId: lead.id, error: null },
@@ -343,6 +351,10 @@ export const processImportRow = defineUseCase({
     let changes: Record<string, [unknown, unknown]> = {};
     if (row.decision === 'UPDATE_EXISTING') changes = await fillEmptyFields(ctx, batch, leadId, n);
     await addOriginAndTags(ctx, batch, leadId, n.tagIds);
+    if (Object.keys(changes).length > 0) {
+      // Dados novos no existente (contatos, CNPJ, site) podem revelar outros duplicados.
+      await detectDuplicates(ctx.tx, { kind: 'leads', ids: [leadId] }, 'IMPORT', ctx.now);
+    }
     await refreshLeadContactState(ctx.tx, leadId);
     const actorType = ctx.actor.kind === 'user' ? ('USER' as const) : ('SYSTEM' as const);
     await ctx.tx.leadEvent.create({
@@ -393,8 +405,15 @@ async function reportStats(db: CoreDeps['db'], batchId: string) {
       where: { batchId, matchStatus: { not: null } },
       _count: { _all: true },
     }),
+    // Pares em que um dos lados foi criado por este lote (o lead novo pode ser o A ou o B).
     db.duplicateCandidate.count({
-      where: { detectedBy: 'IMPORT', leadA: { origins: { some: { importBatchId: batchId } } } },
+      where: {
+        detectedBy: 'IMPORT',
+        OR: [
+          { leadA: { origins: { some: { importBatchId: batchId, isFirstTouch: true } } } },
+          { leadB: { origins: { some: { importBatchId: batchId, isFirstTouch: true } } } },
+        ],
+      },
     }),
     db.lead.count({ where: { origins: { some: { importBatchId: batchId, isFirstTouch: true } } } }),
   ]);

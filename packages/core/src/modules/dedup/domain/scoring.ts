@@ -73,6 +73,42 @@ export function scoreSignals(signals: DuplicateSignal[]): {
   return { score, confidence };
 }
 
+/**
+ * Provedores de e-mail gratuitos: o mesmo endereço pode ser de um contador que
+ * atende vários escritórios, então o sinal pesa menos (EMAIL_FREE).
+ */
+export const FREE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'hotmail.com.br',
+  'outlook.com',
+  'outlook.com.br',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.com.br',
+  'ymail.com',
+  'icloud.com',
+  'me.com',
+  'bol.com.br',
+  'uol.com.br',
+  'terra.com.br',
+  'ig.com.br',
+  'globo.com',
+  'globomail.com',
+  'r7.com',
+  'zipmail.com.br',
+  'protonmail.com',
+  'proton.me',
+]);
+
+/** Regra para um e-mail repetido: provedor gratuito pesa menos. */
+export function emailRule(email: string): 'EMAIL' | 'EMAIL_FREE' {
+  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase();
+  return FREE_EMAIL_DOMAINS.has(domain) ? 'EMAIL_FREE' : 'EMAIL';
+}
+
 /** Sinal com o peso padrão da regra. */
 export const signal = (rule: DuplicateRule, detail: string, factor = 1): DuplicateSignal => ({
   rule,

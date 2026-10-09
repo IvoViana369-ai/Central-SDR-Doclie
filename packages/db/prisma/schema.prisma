@@ -529,6 +529,8 @@ model Lead {
   @@index([createdAt(sort: Desc)])
   @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_search_trgm_idx")
   @@index([nameCore(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_core_trgm_idx")
+  /// Deduplicação por site (mesmo domínio).
+  @@index([websiteDomain])
   @@map("leads")
 }
 
@@ -1162,6 +1164,9 @@ model ImportRow {
 
   @@unique([batchId, rowNumber])
   @@index([batchId, matchStatus])
+  /// Anonimização: achar as linhas ainda não purgadas de um lead.
+  @@index([resultLeadId])
+  @@index([matchedLeadId])
   @@map("import_rows")
 }
 

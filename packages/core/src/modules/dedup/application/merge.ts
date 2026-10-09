@@ -1,0 +1,504 @@
+import type { Prisma } from '@docline/db';
+import { JOBS } from '../../../jobs/catalog';
+import { BusinessRuleError, ConflictError, ValidationError } from '../../../shared/errors';
+import { defineUseCase, toJson, type UseCaseContext } from '../../../shared/use-case';
+import { refreshLeadContactState, suppressIdentifiers } from '../../compliance';
+import { buildLeadNames, formatLeadCode, LEAD_EVENTS, requireLeadInScope } from '../../leads';
+import { maskIdentifier } from '../../normalization';
+import { mergeDuplicateInput } from '../contracts/schemas';
+import {
+  defaultMergeChoices,
+  mergeCustomFields,
+  mergedColumns,
+  type MergeableLead,
+  type MergeChoices,
+} from '../domain/merge';
+import { lockCandidate } from './review';
+
+/** Todas as colunas do lead mesclado vão para a cópia em `lead_merges`. */
+async function loadForMerge(ctx: UseCaseContext, leadId: string) {
+  const lead = await requireLeadInScope(ctx, leadId, {
+    id: true,
+    code: true,
+    version: true,
+    status: true,
+  });
+  if (lead.status !== 'ACTIVE' && lead.status !== 'ARCHIVED') {
+    throw new ConflictError(`O lead ${formatLeadCode(lead.code)} não pode mais ser mesclado.`);
+  }
+  return ctx.tx.lead.findUniqueOrThrow({ where: { id: leadId } });
+}
+
+type FullLead = Prisma.LeadGetPayload<object>;
+
+/** Contatos do mesclado: os que o sobrevivente já tem ficam onde estão. */
+async function moveContactPoints(ctx: UseCaseContext, survivor: FullLead, merged: FullLead) {
+  const [mine, theirs] = await Promise.all(
+    [survivor.id, merged.id].map((leadId) =>
+      ctx.tx.contactPoint.findMany({
+        where: { leadId },
+        select: {
+          id: true,
+          type: true,
+          valueNormalized: true,
+          isPrimary: true,
+          status: true,
+          personId: true,
+          whatsappStatus: true,
+        },
+      }),
+    ),
+  );
+  const byValue = new Map(mine!.map((cp) => [`${cp.type}:${cp.valueNormalized}`, cp]));
+  const primaryTypes = new Set(
+    mine!.filter((cp) => cp.isPrimary && cp.status === 'ACTIVE').map((cp) => cp.type),
+  );
+  const moved: string[] = [];
+  const kept: string[] = [];
+  for (const cp of theirs!) {
+    const same = byValue.get(`${cp.type}:${cp.valueNormalized}`);
+    if (!same) {
+      moved.push(cp.id);
+      continue;
+    }
+    kept.push(cp.id);
+    // O mesmo contato nos dois: o do sobrevivente fica (inclusive a situação dele,
+    // mesmo removido ou inválido) e herda o que só o outro sabia. A cópia do
+    // outro continua no lead mesclado.
+    const data: Prisma.ContactPointUpdateInput = {};
+    if (same.whatsappStatus === 'UNKNOWN' && cp.whatsappStatus !== 'UNKNOWN') {
+      data.whatsappStatus = cp.whatsappStatus;
+    }
+    if (!same.personId && cp.personId) data.person = { connect: { id: cp.personId } };
+    if (Object.keys(data).length > 0) {
+      await ctx.tx.contactPoint.update({ where: { id: same.id }, data });
+    }
+  }
+  if (moved.length > 0) {
+    // Só um principal por tipo: os que chegam deixam de ser principais se já houver um.
+    await ctx.tx.contactPoint.updateMany({
+      where: { id: { in: moved }, type: { in: [...primaryTypes] } },
+      data: { isPrimary: false },
+    });
+    await ctx.tx.contactPoint.updateMany({
+      where: { id: { in: moved } },
+      data: { leadId: survivor.id },
+    });
+  }
+  return { moved, kept };
+}
+
+/**
+ * Base legal e opt-in por canal do lead: o canal que o sobrevivente não tem
+ * passa para ele; se os dois têm, fica o do sobrevivente, mas um opt-in
+ * revogado no mesclado vale para o sobrevivente (o mais restritivo prevalece).
+ * Permissões de pessoas e contatos acompanham a pessoa ou o contato.
+ */
+async function movePermissions(
+  ctx: UseCaseContext,
+  survivorId: string,
+  mergedId: string,
+  movedContactPoints: string[],
+) {
+  const theirs = await ctx.tx.contactPermission.findMany({ where: { leadId: mergedId } });
+  const mine = await ctx.tx.contactPermission.findMany({
+    where: { leadId: survivorId, personId: null, contactPointId: null },
+  });
+  const myChannels = new Map(mine.map((p) => [p.channel, p]));
+  const moved: string[] = [];
+  const kept: string[] = [];
+  const revoked: string[] = [];
+  for (const permission of theirs) {
+    const leadLevel = !permission.personId && !permission.contactPointId;
+    const followsContact =
+      permission.contactPointId !== null && movedContactPoints.includes(permission.contactPointId);
+    const followsPerson = permission.personId !== null && permission.contactPointId === null;
+    if (followsContact || followsPerson || (leadLevel && !myChannels.has(permission.channel))) {
+      moved.push(permission.id);
+      continue;
+    }
+    kept.push(permission.id);
+    const same = leadLevel ? myChannels.get(permission.channel) : undefined;
+    if (same && permission.optInStatus === 'REVOKED' && same.optInStatus !== 'REVOKED') {
+      await ctx.tx.contactPermission.update({
+        where: { id: same.id },
+        data: { optInStatus: 'REVOKED', optInAt: null, optInMethod: null },
+      });
+      revoked.push(permission.channel);
+    }
+  }
+  if (moved.length > 0) {
+    await ctx.tx.contactPermission.updateMany({
+      where: { id: { in: moved } },
+      data: { leadId: survivorId },
+    });
+  }
+  return { moved, kept, revoked };
+}
+
+/** Decisões já tomadas sobre o lead mesclado valem para o sobrevivente. */
+async function carryOverDecisions(
+  ctx: UseCaseContext,
+  survivorId: string,
+  merged: { id: string; code: number },
+  currentCandidateId: string,
+) {
+  const decided = await ctx.tx.duplicateCandidate.findMany({
+    where: {
+      id: { not: currentCandidateId },
+      status: { in: ['KEPT_SEPARATE', 'IGNORED'] },
+      OR: [{ leadAId: merged.id }, { leadBId: merged.id }],
+    },
+  });
+  let carried = 0;
+  for (const c of decided) {
+    const other = c.leadAId === merged.id ? c.leadBId : c.leadAId;
+    if (other === survivorId) continue;
+    const [leadAId, leadBId] = survivorId < other ? [survivorId, other] : [other, survivorId];
+    const created = await ctx.tx.duplicateCandidate.createMany({
+      data: [
+        {
+          leadAId,
+          leadBId,
+          score: c.score,
+          confidence: c.confidence,
+          reasons: c.reasons as Prisma.InputJsonValue,
+          status: c.status,
+          detectedBy: c.detectedBy,
+          detectedAt: c.detectedAt,
+          decidedById: c.decidedById,
+          decidedAt: c.decidedAt,
+          decisionNote: [
+            `Decisão herdada da mesclagem de ${formatLeadCode(merged.code)}.`,
+            c.decisionNote,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        },
+      ],
+      // O par do sobrevivente já existe: a decisão dele prevalece.
+      skipDuplicates: true,
+    });
+    carried += created.count;
+  }
+  return carried;
+}
+
+/**
+ * Mesclar (F3-10; docs/MVP.md M06): o sobrevivente fica com os campos
+ * escolhidos e recebe contatos, pessoas, origens, tags, observações, eventos,
+ * responsáveis, bases legais e solicitações de titulares do outro. O outro
+ * vira MERGED e aponta para o sobrevivente; a cópia integral dele fica em
+ * `lead_merges`. **Nada é excluído.**
+ */
+export const mergeDuplicate = defineUseCase({
+  name: 'dedup.merge',
+  access: 'duplicate.decide',
+  input: mergeDuplicateInput,
+  async run(ctx, input) {
+    const candidate = await lockCandidate(ctx, input.candidateId);
+    if (candidate.status !== 'PENDING' && candidate.status !== 'IGNORED') {
+      throw new BusinessRuleError('Este par já foi decidido.');
+    }
+    if (input.survivorId !== candidate.leadAId && input.survivorId !== candidate.leadBId) {
+      throw new ValidationError([
+        { path: 'survivorId', message: 'O lead que fica precisa ser um dos dois do par.' },
+      ]);
+    }
+    const mergedId = input.survivorId === candidate.leadAId ? candidate.leadBId : candidate.leadAId;
+    // Trava os dois leads, sempre na mesma ordem (evita impasse com outra mesclagem).
+    await ctx.tx.$queryRaw`
+      SELECT id FROM leads WHERE id = ANY(${[candidate.leadAId, candidate.leadBId]}::uuid[])
+      ORDER BY id FOR UPDATE`;
+    const survivor = await loadForMerge(ctx, input.survivorId);
+    const merged = await loadForMerge(ctx, mergedId);
+    if (
+      input.versions &&
+      (input.versions.survivor !== survivor.version || input.versions.merged !== merged.version)
+    ) {
+      throw new ConflictError(
+        'Um dos leads foi alterado. Recarregue a comparação e tente de novo.',
+      );
+    }
+
+    const survivorCode = formatLeadCode(survivor.code);
+    const mergedCode = formatLeadCode(merged.code);
+    const actorId = ctx.actor.kind === 'user' ? ctx.actor.id : null;
+    const choices: MergeChoices = {
+      ...defaultMergeChoices(survivor as MergeableLead, merged as MergeableLead),
+      ...input.choices,
+    };
+    const { patch, fields } = mergedColumns(
+      survivor as MergeableLead,
+      merged as MergeableLead,
+      choices,
+    );
+    const names = buildLeadNames({
+      tradeName: ('tradeName' in patch ? patch.tradeName : survivor.tradeName) as string | null,
+      companyName: ('companyName' in patch ? patch.companyName : survivor.companyName) as
+        string | null,
+    });
+    if (!names) {
+      throw new ValidationError([
+        { path: 'choices', message: 'O lead precisa ficar com nome fantasia ou razão social.' },
+      ]);
+    }
+
+    // 1. O mesclado sai primeiro (libera o CNPJ, que é único entre leads não mesclados).
+    await ctx.tx.lead.update({
+      where: { id: merged.id },
+      data: {
+        status: 'MERGED',
+        mergedIntoId: survivor.id,
+        version: { increment: 1 },
+        lastActivityAt: ctx.now,
+      },
+    });
+    // Leads que já tinham sido mesclados nele passam a apontar para o sobrevivente.
+    await ctx.tx.lead.updateMany({
+      where: { mergedIntoId: merged.id },
+      data: { mergedIntoId: survivor.id },
+    });
+
+    // 2. Campos escolhidos, nomes e campos extras no sobrevivente.
+    const ownerChanged = 'ownerId' in patch && patch.ownerId !== survivor.ownerId;
+    await ctx.tx.lead.update({
+      where: { id: survivor.id },
+      data: {
+        ...(patch as Prisma.LeadUncheckedUpdateInput),
+        ...names,
+        customFields:
+          (mergeCustomFields(
+            survivor.customFields,
+            merged.customFields,
+          ) as Prisma.InputJsonValue | null) ?? undefined,
+        ...(ownerChanged
+          ? { previousOwnerId: survivor.ownerId, assignedAt: patch.ownerId ? ctx.now : null }
+          : {}),
+        version: { increment: 1 },
+        lastActivityAt: ctx.now,
+      },
+    });
+    if (ownerChanged) {
+      await ctx.tx.leadAssignment.create({
+        data: {
+          leadId: survivor.id,
+          fromUserId: survivor.ownerId,
+          toUserId: (patch.ownerId as string | null) ?? null,
+          strategy: 'MANUAL',
+          assignedById: actorId,
+          reason: `Mesclagem com ${mergedCode}`,
+          assignedAt: ctx.now,
+        },
+      });
+    }
+
+    // 3. Filhos do mesclado.
+    const survivorPrimaryPerson = await ctx.tx.leadPerson.count({
+      where: { leadId: survivor.id, isPrimary: true },
+    });
+    const people = await ctx.tx.leadPerson.findMany({
+      where: { leadId: merged.id },
+      select: { id: true },
+    });
+    if (survivorPrimaryPerson > 0) {
+      await ctx.tx.leadPerson.updateMany({
+        where: { leadId: merged.id },
+        data: { isPrimary: false },
+      });
+    }
+    await ctx.tx.leadPerson.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id },
+    });
+    const contacts = await moveContactPoints(ctx, survivor, merged);
+    const permissions = await movePermissions(ctx, survivor.id, merged.id, contacts.moved);
+
+    const origins = await ctx.tx.leadOrigin.findMany({
+      where: { leadId: merged.id },
+      select: { id: true },
+    });
+    await ctx.tx.leadOrigin.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id, isFirstTouch: false },
+    });
+
+    const tags = await ctx.tx.leadTag.findMany({
+      where: { leadId: merged.id },
+      select: { tagId: true },
+    });
+    const tagsAdded = await ctx.tx.leadTag.createMany({
+      data: tags.map((t) => ({
+        leadId: survivor.id,
+        tagId: t.tagId,
+        addedById: actorId,
+        addedAt: ctx.now,
+      })),
+      skipDuplicates: true,
+    });
+
+    const [notes, events, assignments, requests] = await Promise.all([
+      ctx.tx.leadNote.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.leadEvent.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.leadAssignment.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ctx.tx.dataSubjectRequest.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+    ]);
+    await ctx.tx.leadNote.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id },
+    });
+    // lead_events é append-only, mas o trigger permite trocar o lead_id (mesclagem).
+    await ctx.tx.leadEvent.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id },
+    });
+    await ctx.tx.leadAssignment.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id },
+    });
+    await ctx.tx.dataSubjectRequest.updateMany({
+      where: { leadId: merged.id },
+      data: { leadId: survivor.id },
+    });
+
+    // 4. "Não contatar este lead" do mesclado passa a valer para o sobrevivente.
+    const leadSuppressions = await ctx.tx.suppressionEntry.findMany({
+      where: { type: 'LEAD', valueHash: merged.id, revokedAt: null },
+    });
+    if (leadSuppressions.length > 0) {
+      await suppressIdentifiers(
+        ctx,
+        leadSuppressions.map((s) => ({
+          type: 'LEAD' as const,
+          valueHash: survivor.id,
+          valueMasked: survivorCode,
+          scope: s.scope,
+          reason: s.reason,
+          source: s.source,
+          leadId: survivor.id,
+          notes: `Herdado da mesclagem de ${mergedCode}.`,
+        })),
+      );
+    }
+
+    // 5. Decisão do par, decisões herdadas e registro da mesclagem.
+    await ctx.tx.duplicateCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        status: 'MERGED',
+        decidedById: actorId,
+        decidedAt: ctx.now,
+        decisionNote: input.note,
+      },
+    });
+    const carried = await carryOverDecisions(ctx, survivor.id, merged, candidate.id);
+    const moved = {
+      people: people.map((p) => p.id),
+      contactPoints: contacts.moved,
+      permissions: permissions.moved,
+      origins: origins.map((o) => o.id),
+      notes: notes.map((n) => n.id),
+      events: events.map((e) => e.id),
+      assignments: assignments.map((a) => a.id),
+      dataSubjectRequests: requests.map((r) => r.id),
+    };
+    const record = await ctx.tx.leadMerge.create({
+      data: {
+        survivorLeadId: survivor.id,
+        mergedLeadId: merged.id,
+        candidateId: candidate.id,
+        fieldChoices: toJson(choices),
+        mergedSnapshot: toJson({
+          lead: merged,
+          moved,
+          keptOnMerged: { contactPoints: contacts.kept, permissions: permissions.kept },
+          tagsCopied: tagsAdded.count,
+        }),
+        performedById: actorId,
+        performedAt: ctx.now,
+      },
+      select: { id: true },
+    });
+
+    // 6. Caches, timeline, auditoria e nova busca de duplicados do sobrevivente.
+    await refreshLeadContactState(ctx.tx, survivor.id);
+    await refreshLeadContactState(ctx.tx, merged.id);
+    const counts = Object.fromEntries(Object.entries(moved).map(([k, ids]) => [k, ids.length]));
+    const actorType = ctx.actor.kind === 'user' ? ('USER' as const) : ('SYSTEM' as const);
+    await ctx.tx.leadEvent.createMany({
+      data: [
+        {
+          leadId: survivor.id,
+          type: LEAD_EVENTS.merged,
+          occurredAt: ctx.now,
+          actorType,
+          actorId,
+          payload: toJson({ mergedLeadId: merged.id, mergedCode, fields, moved: counts }),
+          subjectType: 'lead_merge',
+          subjectId: record.id,
+        },
+        {
+          leadId: merged.id,
+          type: LEAD_EVENTS.mergedInto,
+          occurredAt: ctx.now,
+          actorType,
+          actorId,
+          payload: toJson({ survivorLeadId: survivor.id, survivorCode }),
+          subjectType: 'lead_merge',
+          subjectId: record.id,
+        },
+      ],
+    });
+    const changes: Record<string, [unknown, unknown]> = {};
+    for (const [column, value] of Object.entries(patch)) {
+      if (column === 'cnpjHash' || column === 'cnpjRoot' || column === 'websiteDomain') continue;
+      const before = survivor[column as keyof FullLead];
+      changes[column] =
+        column === 'cnpj'
+          ? [
+              before ? maskIdentifier('CNPJ', before as string) : null,
+              value ? maskIdentifier('CNPJ', value as string) : null,
+            ]
+          : [before ?? null, value ?? null];
+    }
+    await ctx.audit({
+      action: 'lead.merge',
+      entityType: 'lead',
+      entityId: survivor.id,
+      changes: Object.keys(changes).length ? changes : null,
+      metadata: {
+        mergedLeadId: merged.id,
+        mergedCode,
+        candidateId: candidate.id,
+        mergeId: record.id,
+        fields,
+        moved: counts,
+        revokedOptIns: permissions.revoked,
+        decisionsCarried: carried,
+        ...(input.note ? { note: input.note } : {}),
+      },
+    });
+    await ctx.audit({
+      action: 'lead.merged_into',
+      entityType: 'lead',
+      entityId: merged.id,
+      changes: { status: [merged.status, 'MERGED'] },
+      metadata: { survivorLeadId: survivor.id, survivorCode, mergeId: record.id },
+    });
+    await ctx.deps.jobs.enqueue(
+      JOBS.dedupCheckLead.name,
+      { leadIds: [survivor.id], source: 'MANUAL' },
+      { tx: ctx.tx },
+    );
+
+    return {
+      mergeId: record.id,
+      survivorId: survivor.id,
+      survivorCode,
+      mergedId: merged.id,
+      mergedCode,
+      fields,
+      moved: counts,
+    };
+  },
+});

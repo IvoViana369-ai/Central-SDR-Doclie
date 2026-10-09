@@ -106,7 +106,6 @@ describe('importação de planilha (M04)', () => {
 
   beforeEach(async () => {
     await resetTestData(db);
-    enqueued.length = 0;
     sourceId = (await db.leadSource.findUniqueOrThrow({ where: { key: 'EVENT' } })).id;
     manager = (await createActor('MANAGER')).actor;
     alfaId = (
@@ -125,6 +124,8 @@ describe('importação de planilha (M04)', () => {
       make('Delta Antigo', { contactPoints: [{ type: 'PHONE', value: '(88) 98888-0004' }] }),
     );
     await registerOptOut(deps, manager, { leadId: delta.id });
+    // Só os jobs do teste (o cadastro acima agenda a busca de duplicados).
+    enqueued.length = 0;
   });
 
   afterAll(() => closeTestDb());

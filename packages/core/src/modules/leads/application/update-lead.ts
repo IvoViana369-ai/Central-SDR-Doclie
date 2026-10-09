@@ -4,7 +4,7 @@ import { defineUseCase } from '../../../shared/use-case';
 import { updateLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
 import { refreshLeadContactState } from '../../compliance';
-import { auditLead, recordLeadEvent } from '../infra/events';
+import { auditLead, queueDuplicateCheck, recordLeadEvent } from '../infra/events';
 import { requireLeadInScope } from '../infra/scope';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
 import { loadLeadDetail } from './get-lead';
@@ -28,6 +28,17 @@ const AUDITED_FIELDS: (keyof LeadFieldValues)[] = [
   'websiteUrl',
   'description',
 ];
+
+/** Campos que a deduplicação compara: mudou um deles, o lead é verificado de novo. */
+const IDENTITY_FIELDS = new Set([
+  'companyName',
+  'tradeName',
+  'cnpj',
+  'websiteUrl',
+  'cityRaw',
+  'municipalityCode',
+  'stateUf',
+]);
 
 export const updateLead = defineUseCase({
   name: 'leads.update',
@@ -91,6 +102,7 @@ export const updateLead = defineUseCase({
       await refreshLeadContactState(ctx.tx, leadId);
     }
     const fields = Object.keys(changes);
+    if (fields.some((f) => IDENTITY_FIELDS.has(f))) await queueDuplicateCheck(ctx, leadId);
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.updated, { payload: { fields } });
     await auditLead(ctx, leadId, 'lead.update', { changes });
     return loadLeadDetail(ctx, leadId);

@@ -46,7 +46,7 @@ export interface DuplicateCandidate {
 }
 
 /** Domínios que não identificam a empresa (perfis em redes e encurtadores). */
-const GENERIC_DOMAINS = new Set([
+export const GENERIC_DOMAINS: ReadonlySet<string> = new Set([
   'instagram.com',
   'facebook.com',
   'fb.com',
