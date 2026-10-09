@@ -2,13 +2,14 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 e 2 concluídas.**
+> **Status: Fases 1 a 3 concluídas.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
+> - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
 >
-> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-2--crm-de-leads)).
+> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-3--importação-normalização-e-deduplicação)).
 >
-> **Próxima:** Fase 3 (importação, normalização e deduplicação). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próxima:** Fase 4 (pipeline SDR e lead scoring). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -81,7 +82,7 @@ Registro completo em [ROADMAP §6](docs/ROADMAP.md#6-registro-de-riscos).
 
 ```
 apps/web               Next.js — telas, API /api/v1, autenticação, E2E (e2e/)
-apps/worker            Jobs pg-boss (hoje: heartbeat; depois importação, dedup, cadência…)
+apps/worker            Jobs pg-boss (heartbeat, importação, deduplicação; depois cadência…)
 packages/core          Domínio: casos de uso, RBAC, auditoria, portas (sem framework)
 packages/db            Prisma: schema, migrações, seed de referência (UFs, municípios, feriados)
 packages/integrations  Adaptadores: logger, e-mail, fila pg-boss, registro de provedores
@@ -170,5 +171,5 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 
 ## Próximo passo recomendado
 
-1. **Aprovar a Fase 2 — CRM de leads** ([backlog F2](docs/ROADMAP.md#fase-2--crm-de-leads)): cadastro de leads, pessoas e pontos de contato, filtros com contagem prévia, timeline e a base de conformidade (Lista Não Contatar, base legal por canal).
+1. **Aprovar a Fase 4 — Pipeline SDR** ([backlog F4](docs/ROADMAP.md#fase-4--pipeline-sdr)): Kanban configurável com as 17 etapas, histórico com duração por etapa e lead scoring explicável.
 2. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

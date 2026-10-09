@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fase 1 concluída · próxima: Fase 2 (CRM de leads) · **Última revisão:** 2026-10-08
+> **Status:** Fases 1 a 3 concluídas · próxima: Fase 4 (Pipeline SDR) · **Última revisão:** 2026-10-09
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -22,8 +22,8 @@
 |---|---|---|---|---|
 | 0 | Descoberta e arquitetura | Requisitos, riscos, arquitetura, modelo de dados, plano | ✅ concluída | Planejamento |
 | 1 | Fundação técnica | Monorepo, banco, auth, RBAC, auditoria, fila, layout, CI, staging | ✅ concluída (2026-10-08) | MVP |
-| 2 | CRM de leads | Cadastro, pessoas, contatos, lista e filtros, timeline, base de conformidade | ~3 semanas | MVP |
-| 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ~3 semanas | MVP |
+| 2 | CRM de leads | Cadastro, pessoas, contatos, lista e filtros, timeline, base de conformidade | ✅ concluída (2026-10-09) | MVP |
+| 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ✅ concluída (2026-10-09) | MVP |
 | 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ~1,5 semana | MVP |
 | 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ~2,5 semanas | MVP |
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ~3,5 semanas | MVP |
@@ -196,6 +196,31 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** assistente de importação completo, biblioteca de normalização, motor e tela de duplicados.
 **Aceite:** critérios M04, M05 e M06 do MVP; suítes de teste de telefone, CNPJ, deduplicação e importação ([ARCHITECTURE §12.2](./ARCHITECTURE.md#122-suítes-obrigatórias-requisito-35)).
+
+**Situação (2026-10-09):** ✅ concluída no código; as 13 histórias (F3-01 a F3-13) foram entregues.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase3.spec.ts`, que roda com o worker de verdade, e pelas suítes de integração `import.int.test.ts` e `dedup.int.test.ts`:
+
+| Critério | O que a jornada comprova |
+|---|---|
+| M04 | Planilha com título acima do cabeçalho: mapeamento sugerido, prévia, gravação e relatório. Reimportar o mesmo arquivo avisa e não cria leads. |
+| M05 | `(88) 99812-3401`, `88998123401` e `+55 88 99812-3401` são o mesmo contato. A prévia marca as repetições no próprio arquivo. |
+| M06 | "Manter separados" não volta à fila, nem depois da varredura completa. Mesclar com o nome do outro lead reúne tudo; o lead mesclado continua para consulta. |
+
+As suítes do ARCHITECTURE §12.2 (telefone, CNPJ, deduplicação e importação) estão em testes unitários, de propriedade e de integração.
+
+Decisões e pendências:
+
+- **Leitor de XLSX próprio** (fflate + saxes), em vez do ExcelJS: ADR-020.
+- **Arquivo enviado** fica em `import_files` só até o worker ler, sem *object storage*; é apagado na mesma transação.
+- **Duplicados na importação:** a busca roda na própria linha (e não pelo job `dedup.check-lead`), para o relatório contar os sinalizados.
+- **Sinais:** valor repetido em mais de 20 leads não conta (ex.: telefone de associação). "Ignorar" volta à fila só com uma regra nova.
+- **Modelos de mapeamento:** salvos na configuração do lote e sugeridos pelo cabeçalho. Não há tela nem rota própria (`/import-mapping-templates`).
+- **`POST /normalize/preview`:** não implementada; a prévia da importação já mostra os valores normalizados.
+- **Outra aba do XLSX:** pede o arquivo de novo, porque o original é descartado depois da leitura.
+- **Staging:** continua dependendo da conta da Docline na Render.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|

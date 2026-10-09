@@ -4,6 +4,61 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.3.0] — Fase 3: Importação, normalização e deduplicação — 2026-10-09
+
+Aceite da fase (MVP M04, M05 e M06) coberto por jornadas E2E que rodam com o worker de verdade. Totais: 278 testes unitários, 113 de integração e 23 jornadas E2E.
+
+### Adicionado
+
+- **Normalização completa (F3-01):**
+  - telefone com ramal, prefixo "055" e variantes do `wa_id` do WhatsApp (com e sem o 9º dígito);
+  - nomes com capitalização e siglas;
+  - cidade e UF casadas com o IBGE (abreviações como "Sta." e cidade ambígua avisada);
+  - listas numa célula ("fone1 / fone2");
+  - testes de propriedade (fast-check).
+- **Leitura segura de planilhas (F3-02):**
+  - CSV em UTF-8, Windows-1252 ou UTF-16, com `;`, `,` ou tab;
+  - XLSX com várias abas e cabeçalho fora da linha 1;
+  - recusa macros, `.xls` e DTD;
+  - protegida contra *zip bomb*.
+- **Importação (F3-03 a F3-07, F3-13):**
+  - mapeamento sugerido pelo nome da coluna, com modelos reutilizáveis e colunas extras em `custom_fields`;
+  - lote com origem, data da coleta, base legal, responsável, tags e política de duplicados;
+  - prévia com a situação de cada linha: novo, já existe, possível duplicado, repetido no arquivo, Lista Não Contatar, inválido;
+  - decisões por linha e por situação;
+  - gravação no worker, uma transação por linha (retoma se cair), com relatório final;
+  - aviso de arquivo já importado;
+  - linhas apagadas depois de 30 dias.
+- **Deduplicação (F3-08, F3-10 a F3-12):**
+  - sinais por CNPJ e filial, telefone, e-mail (provedor gratuito pesa menos), Instagram, site, nome na mesma cidade e nome parecido (`pg_trgm`, sem termos genéricos: "Contabilidade Silva" × "Contabilidade Souza" não é duplicado);
+  - score e confiança (alta, média, baixa);
+  - busca ao cadastrar, editar e importar, e varredura diária em blocos por UF;
+  - "Manter separados" nunca volta à fila; "Ignorar" volta só com motivo novo;
+  - mesclagem campo a campo: tudo vai para o lead que fica e a cópia do outro é guardada, sem exclusão;
+  - "Não Contatar", opt-in revogado e decisões anteriores do lead mesclado continuam valendo.
+- **Telas (F3-09):** Importar (envio, mapeamento, prévia, progresso e relatório) e Duplicados (fila por confiança e motivo, comparação lado a lado). O lead mesclado mostra o lead em que foi reunido.
+- **API v1:** `imports` (10 rotas) e `duplicates` (6 rotas).
+- **Worker:** jobs `import.parse`, `import.preview`, `import.commit`, `import.purge`, `dedup.check-lead` e `dedup.scan`, com os dados conferidos antes de rodar.
+
+### Alterado
+
+- **Anonimização:** apaga também os leads mesclados no anonimizado, a cópia guardada na mesclagem, os campos extras e as linhas de importação ainda não purgadas.
+- **Cadastro manual:** além do aviso antes de salvar, o lead entra na busca de duplicados por similaridade.
+- **E2E:** o Playwright sobe o worker junto com o web.
+
+### Decidido
+
+- **Leitor de XLSX próprio** (fflate 0.8.3 + saxes 6.0.0) em vez do ExcelJS, para controlar os limites contra *zip bomb* e recusar macros ([ADR-020](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs)).
+- **Arquivo enviado** fica no banco (`import_files`) só até o worker ler, sem *object storage*.
+- **Valor repetido em mais de 20 leads** (ex.: telefone de associação) não conta como sinal de duplicidade.
+
+### Pendente
+
+- **Staging no ar:** depende da conta da Docline na Render e das credenciais de e-mail.
+- **Sentry:** falta criar a conta e configurar o DSN.
+- **2FA obrigatória:** bloquear o acesso de ADMIN/GESTOR sem 2FA antes da Fase 7.
+- **Aviso do `pg`:** o adaptador do Prisma (7.10) dispara consultas em paralelo na mesma conexão, o que o `pg` 8 já marca como obsoleto. Funciona hoje e é revisto quando o `pg` 9 sair.
+
 ## [0.2.0] — Fase 2: CRM de leads — 2026-10-09
 
 Aceite da fase (MVP M02, M03, M09 e parte de M14) coberto por jornadas E2E. Totais: 229 testes unitários, 93 de integração e 21 jornadas E2E.

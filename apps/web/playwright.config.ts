@@ -31,8 +31,10 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // Prepara o banco de testes e sobe o build de produção (rode `pnpm build` antes).
-    command: `node e2e/prepare.mjs && pnpm start`,
+    // Prepara o banco de testes e sobe o build de produção (rode `pnpm build` antes)
+    // junto com o worker, que processa importações e a busca de duplicados. Os
+    // dois ficam no mesmo grupo de processos e são encerrados juntos.
+    command: `node e2e/prepare.mjs && (pnpm --filter @docline/worker start & pnpm start)`,
     url: `${baseURL}/api/health`,
     reuseExistingServer: false,
     timeout: 120_000,

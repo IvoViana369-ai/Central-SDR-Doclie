@@ -85,7 +85,7 @@ jobs:
         run: pnpm --filter @docline/web exec playwright install --with-deps chromium
       - name: Build de produção do web
         run: pnpm --filter @docline/web build
-      - name: Jornadas da Fase 1
+      - name: Jornadas E2E (web + worker)
         run: pnpm test:e2e
       - name: Relatório do Playwright
         if: failure()

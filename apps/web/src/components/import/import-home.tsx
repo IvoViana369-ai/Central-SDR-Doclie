@@ -4,7 +4,7 @@ import { IMPORT_STATUS_LABELS } from '@docline/core/import-domain';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -44,13 +44,18 @@ export function ImportHome({
   limits: { maxFileMb: number; maxRows: number };
 }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  // O arquivo é lido do campo no envio (vale mesmo se escolhido antes da página carregar).
+  const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!file) return;
+    const file = fileInput.current?.files?.[0];
+    if (!file) {
+      setError('Escolha um arquivo .csv ou .xlsx.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await uploadSpreadsheet(file, null, limits.maxFileMb);
@@ -80,21 +85,19 @@ export function ImportHome({
             <form onSubmit={submit} className="space-y-4">
               <Field label="Planilha" htmlFor="import-file" error={error ?? undefined}>
                 <Input
+                  ref={fileInput}
                   id="import-file"
                   type="file"
                   accept=".csv,.txt,.xlsx"
                   aria-invalid={Boolean(error)}
-                  onChange={(e) => {
-                    setFile(e.target.files?.[0] ?? null);
-                    setError(null);
-                  }}
+                  onChange={() => setError(null)}
                 />
               </Field>
               <Alert>
                 Use só dados obtidos de forma legítima. A origem e a base legal do lote são
                 obrigatórias e ficam registradas em cada lead.
               </Alert>
-              <Button type="submit" disabled={!file || busy} className="w-full">
+              <Button type="submit" disabled={busy} className="w-full">
                 {busy ? 'Enviando…' : 'Enviar e continuar'}
               </Button>
             </form>
