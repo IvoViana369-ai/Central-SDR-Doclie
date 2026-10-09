@@ -124,8 +124,8 @@ export const NAVIGATION: NavGroup[] = [
         href: '/relatorios',
         icon: ChartColumn,
         phase: 6,
-        permission: 'lead.read',
-        description: 'Funil, conversão e desempenho.',
+        permission: 'report.read',
+        description: 'Funil, conversão e desempenho, com exportação.',
       },
       {
         label: 'Equipe',
@@ -164,7 +164,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 5;
+export const CURRENT_PHASE = 6;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

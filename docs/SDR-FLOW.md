@@ -390,6 +390,15 @@ Métricas só são úteis se tiverem uma definição única. Toda métrica indic
 
 Comparações entre abordagens, canais ou cidades com amostras pequenas mostram **intervalo de confiança** ou alerta de "amostra insuficiente", para evitar decisões erradas.
 
+> **Implementação (Fase 6, módulo `analytics`).**
+> - Período em datas locais de Fortaleza, fim inclusivo; padrão de 30 dias, máximo de 366. Leads mesclados ficam fora de tudo (o histórico foi para o lead que ficou).
+> - "Responderam" conta mensagem recebida **ou** contato de entrada registrado (ex.: ligação recebida) depois do primeiro contato. "Interessados" no KPI é de período (resposta classificada como interesse recebida no intervalo); no funil da coorte, é "já demonstrou interesse até hoje".
+> - Contato registrado com data anterior ao cadastro conta como zero no tempo até o 1º contato.
+> - Taxas com menos de **20** primeiros contatos na base levam o aviso "amostra pequena" (asterisco nas tabelas). O intervalo de confiança fica para a Fase 11.
+> - **Filtro por pessoa:** indicadores do lead (novos, coorte, cidade, origem, funil por etapa) usam o responsável atual; contatos feitos usam quem enviou ou registrou; oportunidades e conversões usam quem transferiu (`sdr_id`).
+> - ADMIN e GESTOR (`report.read`) veem a equipe, filtram por pessoa e exportam CSV (auditado como `report.export`); SDR e Comercial veem só os próprios números no dashboard.
+> - Consultas agregadas ao vivo; os *rollups* diários (`daily_metrics`) entram quando o teste de desempenho pedir (ARCHITECTURE §13).
+
 ---
 
 ## 12. Perguntas de negócio → como o sistema responde

@@ -499,6 +499,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /analytics/funnel` | Funil por etapa | MVP |
 | `GET /analytics/breakdown?dimension=city\|source\|sdr\|channel\|approach\|campaign` | Quebra por dimensão | MVP (básico) / 11 |
 | `GET /analytics/timeseries?granularity=day\|month` | Evolução diária e mensal | MVP (básico) / 11 |
+| `GET /analytics/export?report=overview\|funnel\|city\|source\|sdr\|daily` | CSV do relatório (ADMIN/GESTOR, auditado) | MVP |
 | `GET /analytics/insights` | Insights da carteira | 11+ |
 | `POST /prospecting/searches`, `GET /prospecting/searches/{id}/results`, `POST /prospecting/searches/{id}/approve` | Busca em fontes autorizadas, comparação com a base, aprovação | 9 |
 | `GET/POST/PATCH /campaigns`, `POST /campaigns/{id}/build`, `POST /campaigns/{id}/activate\|pause`, `GET /campaigns/{id}/metrics` | Campanhas | 10 |

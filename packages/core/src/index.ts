@@ -44,4 +44,5 @@ export * from './modules/cadence';
 export * from './modules/notifications';
 export * from './modules/opportunities';
 export * from './modules/ai-sdr';
+export * from './modules/analytics';
 export * from './jobs/catalog';

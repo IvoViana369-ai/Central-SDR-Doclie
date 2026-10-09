@@ -46,6 +46,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'lead.anonymize': 'Lead anonimizado',
   'lead.bulk': 'Ação em massa',
   'lead.export': 'Leads exportados',
+  'report.export': 'Relatório exportado',
   'tag.create': 'Tag criada',
   'tag.update': 'Tag alterada',
   'view.create': 'Visão salva',
