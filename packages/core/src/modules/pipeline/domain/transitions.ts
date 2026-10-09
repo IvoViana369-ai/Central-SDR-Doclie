@@ -15,6 +15,9 @@ export interface StageRef {
   active: boolean;
 }
 
+/** Motivo de perda que é, ele mesmo, um pedido de opt-out (LGPD: vale na hora). */
+export const OPT_OUT_LOSS_REASON = 'ASKED_NOT_TO_BE_CONTACTED';
+
 /**
  * Etapas em que o lead só entra por uma ação registrada, nunca arrastando
  * (regra 2: o primeiro contato passa pelo gate de contactabilidade).

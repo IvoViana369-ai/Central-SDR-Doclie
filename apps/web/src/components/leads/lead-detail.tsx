@@ -11,6 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Select, Textarea } from '@/components/ui/input';
+import { LeadScoreCard, type LeadScoreView } from '@/components/pipeline/lead-score-card';
+import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead-stage-card';
+import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
 import { api } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { ActivityCard, type TimelinePage } from './activity-card';
@@ -77,6 +80,17 @@ export interface LeadDetailView {
   }[];
   legalBasis: { legalBasis: LegalBasis } | null;
   organizationSuppressions: { id: string; scope: string; since: string | Date }[];
+  stageId: string | null;
+  lossReason: { name: string } | null;
+}
+
+/** Pipeline e score na ficha (Fase 4). */
+export interface LeadSalesView {
+  stages: StageView[];
+  lossReasons: LossReasonView[];
+  stageHistory: StageHistoryItem[];
+  score: LeadScoreView | null;
+  privileged: boolean;
 }
 
 export interface LeadDetailPermissions {
@@ -104,12 +118,14 @@ export function LeadDetail({
   lead,
   gate,
   timeline,
+  sales,
   permissions,
   options,
 }: {
   lead: LeadDetailView;
   gate: GateResult[];
   timeline: TimelinePage;
+  sales: LeadSalesView;
   permissions: LeadDetailPermissions;
   options: {
     tags: { id: string; name: string; color: string }[];
@@ -272,6 +288,16 @@ export function LeadDetail({
         </div>
 
         <div className="space-y-4">
+          <LeadStageCard
+            lead={lead}
+            stages={sales.stages}
+            lossReasons={sales.lossReasons}
+            history={sales.stageHistory}
+            canMove={permissions.canEdit && lead.status === 'ACTIVE'}
+            privileged={sales.privileged}
+          />
+          {sales.score ? <LeadScoreCard score={sales.score} /> : null}
+
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle>Canais e base legal</CardTitle>

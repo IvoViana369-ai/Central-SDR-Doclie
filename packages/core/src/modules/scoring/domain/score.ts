@@ -10,6 +10,22 @@ export const SCORE_BAND_LABELS: Record<ScoreBand, string> = {
 
 export const SCORE_BANDS: ScoreBand[] = ['COLD', 'WARM', 'HOT', 'PRIORITY'];
 
+/** Por que o score foi recalculado (histórico na ficha do lead). */
+const SCORE_TRIGGER_LABELS: Record<string, string> = {
+  contact_state: 'Contatos ou situação de contato',
+  'lead.update': 'Edição do lead',
+  tag: 'Tags',
+  'bulk.tag': 'Tags (ação em massa)',
+  'priority_city.added': 'Cidade incluída nas prioritárias',
+  'priority_city.removed': 'Cidade retirada das prioritárias',
+  'model.activated': 'Nova versão do modelo',
+  backfill: 'Cálculo inicial',
+};
+
+export function scoreTriggerLabel(trigger: string): string {
+  return SCORE_TRIGGER_LABELS[trigger] ?? 'Recálculo';
+}
+
 export const NORMALIZATION_LABELS: Record<ScoreNormalization, string> = {
   CLAMP: 'Soma com teto (0 a 100)',
   SCALE: 'Proporcional ao máximo possível',

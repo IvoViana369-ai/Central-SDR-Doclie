@@ -9,6 +9,6 @@ export {
   requirePipeline,
   updatePipelineStages,
 } from './application/stages';
-export { moveLeadStage, OPT_OUT_LOSS_REASON } from './application/move';
+export { moveLeadStage } from './application/move';
 export { getPipelineBoard, listStageCards } from './application/board';
 export { listLeadStageHistory } from './application/history';

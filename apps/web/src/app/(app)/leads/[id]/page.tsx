@@ -1,9 +1,14 @@
 import {
   getLead,
   getLeadContactability,
+  getLeadScore,
+  getPipeline,
+  listLeadStageHistory,
   listLeadTimeline,
+  listLossReasons,
   listTags,
   listUsers,
+  NotFoundError,
   roleHasPermission,
 } from '@docline/core';
 import type { Metadata } from 'next';
@@ -23,18 +28,36 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
   const can = (permission: Parameters<typeof roleHasPermission>[1]) =>
     roleHasPermission(actor.role, permission);
-  const [gate, timeline, tags, users] = await Promise.all([
-    getLeadContactability(deps, actor, { leadId: id }, meta),
-    listLeadTimeline(deps, actor, { leadId: id }, meta),
-    listTags(deps, actor, {}, meta),
-    can('lead.assign') ? listUsers(deps, actor, { status: 'ACTIVE' }, meta) : Promise.resolve(null),
-  ]);
+  const [gate, timeline, tags, users, pipeline, lossReasons, stageHistory, score] =
+    await Promise.all([
+      getLeadContactability(deps, actor, { leadId: id }, meta),
+      listLeadTimeline(deps, actor, { leadId: id }, meta),
+      listTags(deps, actor, {}, meta),
+      can('lead.assign')
+        ? listUsers(deps, actor, { status: 'ACTIVE' }, meta)
+        : Promise.resolve(null),
+      getPipeline(deps, actor, {}, meta),
+      listLossReasons(deps, actor, {}, meta),
+      listLeadStageHistory(deps, actor, { leadId: id }, meta),
+      // Sem modelo ativo (não deveria acontecer após o seed), a ficha abre sem o score.
+      getLeadScore(deps, actor, { leadId: id }, meta).catch((error: unknown) => {
+        if (error instanceof NotFoundError) return null;
+        throw error;
+      }),
+    ]);
 
   return (
     <LeadDetail
       lead={lead}
       gate={gate.channels}
       timeline={timeline}
+      sales={{
+        stages: pipeline.stages,
+        lossReasons,
+        stageHistory,
+        score,
+        privileged: actor.role === 'ADMIN' || actor.role === 'MANAGER',
+      }}
       options={{
         tags,
         ...(users ? { owners: users.map((u) => ({ id: u.id, name: u.name })) } : {}),

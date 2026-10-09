@@ -63,6 +63,14 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'duplicate.ignore': 'Possível duplicado ignorado',
   'duplicate.scan_requested': 'Varredura de duplicados solicitada',
   'duplicate.scan_completed': 'Varredura de duplicados concluída',
+  'lead.stage_change': 'Etapa do pipeline alterada',
+  'pipeline.stages_update': 'Etapas do pipeline configuradas',
+  'scoring.draft_create': 'Rascunho do score criado',
+  'scoring.draft_update': 'Rascunho do score alterado',
+  'scoring.draft_discard': 'Rascunho do score descartado',
+  'scoring.activate': 'Modelo de score ativado',
+  'priority_city.add': 'Cidade prioritária incluída',
+  'priority_city.remove': 'Cidade prioritária retirada',
 };
 
 export function auditActionLabel(action: string): string {
@@ -145,7 +153,28 @@ const FIELD_LABELS: Record<string, string> = {
   errors: 'Com erro',
   duplicatesFlagged: 'Duplicados sinalizados',
   pairs: 'Pares',
+  stage: 'Etapa',
+  from: 'De',
+  to: 'Para',
+  durationSeconds: 'Tempo na etapa anterior (s)',
+  lossReason: 'Motivo da perda',
+  override: 'Movimentação de gestor',
+  slaHours: 'SLA (horas)',
+  position: 'Ordem',
+  city: 'Cidade',
+  version: 'Versão',
+  activeVersion: 'Versão ativa',
+  rules: 'Regras',
 };
+
+/** Campo com prefixo (ex.: `NEW.name` na configuração de etapas) → "NEW · Nome". */
+function fieldLabel(field: string): string {
+  if (FIELD_LABELS[field]) return FIELD_LABELS[field];
+  const dot = field.lastIndexOf('.');
+  if (dot <= 0) return field;
+  const last = field.slice(dot + 1);
+  return `${field.slice(0, dot)} · ${FIELD_LABELS[last] ?? last}`;
+}
 
 const PERMISSION_LABELS: Record<Permission, string> = {
   'user.read': 'Ver equipe',
@@ -193,13 +222,13 @@ export function describeAuditEntry(changes: unknown, metadata: unknown): string 
   if (changes && typeof changes === 'object') {
     for (const [field, value] of Object.entries(changes as Record<string, unknown[]>)) {
       parts.push(
-        `${FIELD_LABELS[field] ?? field}: ${valueLabel(field, value[0])} → ${valueLabel(field, value[1])}`,
+        `${fieldLabel(field)}: ${valueLabel(field, value[0])} → ${valueLabel(field, value[1])}`,
       );
     }
   }
   if (metadata && typeof metadata === 'object') {
     for (const [field, value] of Object.entries(metadata as Record<string, unknown>)) {
-      parts.push(`${FIELD_LABELS[field] ?? field}: ${valueLabel(field, value)}`);
+      parts.push(`${fieldLabel(field)}: ${valueLabel(field, value)}`);
     }
   }
   return parts.join(' · ');

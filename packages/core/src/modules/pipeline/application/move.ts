@@ -8,11 +8,8 @@ import {
   requireLeadInScope,
 } from '../../leads';
 import { moveLeadStageInput } from '../contracts/schemas';
-import { checkTransition } from '../domain/transitions';
+import { checkTransition, OPT_OUT_LOSS_REASON } from '../domain/transitions';
 import { applyStageChange, stageRefSelect } from '../infra/stage-change';
-
-/** Motivo de perda que é, ele mesmo, um pedido de opt-out (LGPD: vale na hora). */
-export const OPT_OUT_LOSS_REASON = 'ASKED_NOT_TO_BE_CONTACTED';
 
 /**
  * Move o lead de etapa no pipeline (docs/SDR-FLOW.md §3.2; MVP M08): regras

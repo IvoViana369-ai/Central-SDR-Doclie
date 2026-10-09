@@ -1,7 +1,13 @@
 import type { ScoreBand } from '@docline/db';
 import { NotFoundError } from '../../../shared/errors';
 import { defineUseCase } from '../../../shared/use-case';
-import { computeScore, loadActiveModel, loadScoreFacts, SCORE_BAND_LABELS } from '../../scoring';
+import {
+  computeScore,
+  loadActiveModel,
+  loadScoreFacts,
+  SCORE_BAND_LABELS,
+  scoreTriggerLabel,
+} from '../../scoring';
 import { leadIdInput } from '../contracts/schemas';
 import { requireLeadInScope } from '../infra/scope';
 
@@ -57,6 +63,7 @@ export const getLeadScore = defineUseCase({
       history: history.map(({ model: m, ...h }) => ({
         ...h,
         bandLabel: SCORE_BAND_LABELS[h.band as ScoreBand],
+        triggerLabel: scoreTriggerLabel(h.trigger),
         modelVersion: m.version,
       })),
     };

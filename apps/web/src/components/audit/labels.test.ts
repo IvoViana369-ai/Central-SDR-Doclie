@@ -19,4 +19,14 @@ describe('rótulos da auditoria', () => {
       describeAuditEntry(null, { email: 'a***@x.com', reason: 'INVALID_EMAIL_OR_PASSWORD' }),
     ).toBe('E-mail: a***@x.com · Motivo: e-mail ou senha incorretos');
   });
+
+  it('descreve as ações do pipeline e do score (Fase 4)', () => {
+    expect(auditActionLabel('lead.stage_change')).toBe('Etapa do pipeline alterada');
+    expect(
+      describeAuditEntry({ stage: ['Novo', 'Descartado'] }, { lossReason: 'OUT_OF_PROFILE' }),
+    ).toBe('Etapa: Novo → Descartado · Motivo da perda: OUT_OF_PROFILE');
+    expect(describeAuditEntry({ 'NEW.name': ['Novo', 'Entrada'] }, null)).toBe(
+      'NEW · Nome: Novo → Entrada',
+    );
+  });
 });

@@ -1,8 +1,15 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getServerEnv } from '@docline/config';
-import { ALL_JOBS, createIdentifierHasher, JOBS, systemClock, type CoreDeps } from '@docline/core';
-import { createDbClient } from '@docline/db';
+import {
+  ALL_JOBS,
+  createIdentifierHasher,
+  hasUnscoredLeads,
+  JOBS,
+  systemClock,
+  type CoreDeps,
+} from '@docline/core';
+import { backfillLeadStages, createDbClient } from '@docline/db';
 import {
   assertProvidersImplemented,
   createEmailProvider,
@@ -81,6 +88,15 @@ for (const job of ALL_JOBS) {
 }
 // Sinal imediato, sem esperar o primeiro minuto do cron.
 await handlers[JOBS.heartbeat.name]!(undefined);
+
+// --- Pipeline e score de leads antigos (Fase 4) ------------------------------
+// Leads sem etapa (de antes do pipeline ou gravados por uma versão anterior
+// durante o deploy) entram em "Novo"; quem ainda não tem score é calculado aqui.
+const placed = await backfillLeadStages(db);
+if (placed > 0) logger.info({ leads: placed }, 'Leads sem etapa colocados em "Novo"');
+if (await hasUnscoredLeads(deps)) {
+  await deps.jobs.enqueue(JOBS.scoreRecomputeAll.name, { trigger: 'backfill' });
+}
 
 logger.info({ jobs: ALL_JOBS.map((j) => j.name) }, 'Worker iniciado');
 

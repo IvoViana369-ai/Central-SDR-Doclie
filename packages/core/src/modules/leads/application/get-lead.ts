@@ -52,6 +52,15 @@ export const leadDetailSelect = {
   originSource: { select: { id: true, key: true, name: true } },
   owner: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
+  // Pipeline e score (Fase 4).
+  stageId: true,
+  stageEnteredAt: true,
+  lostAt: true,
+  convertedAt: true,
+  score: true,
+  scoreBand: true,
+  stage: { select: { id: true, key: true, name: true, category: true, color: true } },
+  lossReason: { select: { name: true } },
   /** Lead que absorveu este na mesclagem (status MERGED). */
   mergedInto: { select: { id: true, code: true } },
   people: {

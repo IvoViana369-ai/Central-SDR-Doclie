@@ -53,7 +53,7 @@ function describeModel(model: ModelRow) {
         id: r.id,
         criterionKey: r.criterionKey,
         label: criterion && params?.success ? criterion.describe(params.data) : r.criterionKey,
-        params: r.params,
+        params: (r.params ?? {}) as Record<string, unknown>,
         points: r.points,
         active: r.active,
         description: r.description,
