@@ -74,7 +74,7 @@
 | Armazenamento | Segredo e códigos de recuperação cifrados com `BETTER_AUTH_SECRET` na tabela `two_factors`. **Trocar esse segredo invalida a 2FA de todos**, que precisarão reativar. |
 | Auditoria | `auth.2fa_enabled`, `auth.2fa_disabled`, `auth.2fa_backup_codes` e `auth.2fa_challenge` (senha certa, aguardando código). O `auth.login` só é gravado depois do segundo fator. Código errado vira `auth.login_failed` com motivo `2FA_…`. |
 | Desativar | Exige a senha e fica auditado. |
-| Perda do celular | Usa-se um código de recuperação. Sem eles, a redefinição da 2FA é manual pelo ADMIN no banco (procedimento a definir antes da Fase 7). |
+| Perda do celular | Usa-se um código de recuperação. Sem eles, o ADMIN redefine em Equipe → "Redefinir 2FA": o segredo é apagado, as sessões são encerradas e a ação fica auditada (`user.2fa_reset`). Antes, confirme a identidade da pessoa por outro canal. |
 
 ---
 

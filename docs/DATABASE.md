@@ -401,7 +401,16 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 
 ### 4.11 Implementação até a Fase 2
 
-Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`. Diferenças em relação às seções acima:
+Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
+
+Tabelas de segurança, fora do modelo original:
+
+- **`login_throttles`:** falhas de login por conta + IP ou dispositivo, e por conta. As chaves usam o HMAC do e-mail ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)).
+- **`two_factors`:** segredo TOTP e códigos de recuperação cifrados (plugin do Better Auth), mais a coluna `users.two_factor_enabled` ([SECURITY §3](./SECURITY.md#3-autenticação)).
+
+O seed de desenvolvimento (`pnpm db:seed:dev`) marca seus leads com `is_test_data`.
+
+Diferenças em relação às seções acima:
 
 | Tabela | Diferença | Motivo |
 |---|---|---|

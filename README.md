@@ -2,7 +2,13 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fase 1 (fundação técnica) concluída.** Acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, layout com menu lateral, CI e deploy em Docker. Pendências registradas: subir o staging na Render (depende da conta e das credenciais da Docline), Sentry, 2FA e limite de login por conta ([ROADMAP](docs/ROADMAP.md#fase-1--fundação-técnica)). Próxima: **Fase 2 — CRM de leads**. Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Status: Fases 1 e 2 concluídas.**
+> - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
+> - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
+>
+> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-2--crm-de-leads)).
+>
+> **Próxima:** Fase 3 (importação, normalização e deduplicação). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

@@ -4,9 +4,59 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.2.0] — Fase 2: CRM de leads — 2026-10-09
+
+Aceite da fase (MVP M02, M03, M09 e parte de M14) coberto por jornadas E2E. Totais: 229 testes unitários, 93 de integração e 21 jornadas E2E.
+
+### Adicionado
+
+- **Leads (F2-01 a F2-06, F2-10, F2-12):**
+  - cadastro e edição com pessoas, contatos, origem, data da coleta e base legal obrigatórias (com padrão por origem);
+  - aviso de duplicidade **antes de salvar**: telefone em qualquer formato, e-mail, Instagram, site e nome parecido na mesma cidade; CNPJ igual bloqueia;
+  - detalhe responsivo com `tel:` e `wa.me`, notas fixáveis, tags, timeline append-only e histórico;
+  - atribuição com histórico; SDR assume lead do pool do seu território;
+  - arquivar e anonimizar (ADMIN).
+- **Normalização (F2-02):** telefone em E.164 (9º dígito, DDD inferido da cidade), e-mail, CNPJ numérico e **alfanumérico** (IN RFB 2.229/2024), Instagram e site.
+- **Lista (F2-07 a F2-09):**
+  - filtros combináveis (DSL validada), busca por nome, código, CNPJ, telefone, e-mail ou @instagram;
+  - contagem "N · X contactáveis · Y bloqueados";
+  - ações em massa (atribuir, tags) com simulação e token de confirmação;
+  - visões salvas.
+- **Conformidade (F2-11, F2-15):**
+  - Lista Não Contatar por HMAC: não pode ser alterada nem apagada, só revogada pelo ADMIN com motivo;
+  - opt-out em 1 clique, que vale para outros leads e reimportações;
+  - gate de contato por canal com motivos legíveis;
+  - avaliações de legítimo interesse e solicitações de titulares com prazo;
+  - tela Conformidade.
+- **Exportação auditada (F2-14):**
+  - CSV para o Excel, só ADMIN/GESTOR;
+  - proteção contra injeção de fórmulas;
+  - contatos só quando pedidos e nunca os da Lista Não Contatar;
+  - 5 exportações por dia, até 20.000 leads por arquivo.
+- **Seed de desenvolvimento (F2-13):** `pnpm db:seed:dev`, com ~2.000 empresas fictícias (5% de duplicados propositais, opt-outs e arquivados). Só roda em `development`.
+- **Limite de login por conta (F2-18):**
+  - atraso progressivo por conta + IP ou por dispositivo conhecido, sem bloqueio rígido nem como trancar um colega;
+  - alerta aos ADMIN em picos.
+- **Verificação em duas etapas (F2-16):**
+  - TOTP com códigos de recuperação, em "Minha conta";
+  - lembrete para ADMIN/GESTOR;
+  - ADMIN redefine a 2FA de quem perdeu o celular.
+- **Sentry (F2-17):** opcional por `SENTRY_DSN`, para web e worker, sem dados pessoais (e-mails e números mascarados em toda mensagem).
+- **API v1:** 40 rotas novas (leads, cadastros, conformidade, `exports`, `users/{id}/reset-two-factor`).
+- **Telas:** Leads (lista, cadastro, edição, detalhe), Conformidade, Minha conta, verificação no login e territórios do SDR na Equipe.
+
 ### Decidido
 
 - **Hospedagem: Render, região Virginia (EUA)** para staging e produção ([ADR-019](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs)). Antes de dados pessoais reais: cláusulas-padrão da ANPD no DPA da Render e validação jurídica ([LGPD §16](docs/LGPD.md#16-transferência-internacional)).
+- **Exportação síncrona:** o arquivo é gerado na resposta e não fica guardado no servidor. O job assíncrono vem quando o volume pedir ([ARCHITECTURE §9.2](docs/ARCHITECTURE.md#92-endpoints-por-módulo)).
+- **`SUPPRESSION_HASH_PEPPER` obrigatória** em todos os ambientes, porque o HMAC da Lista Não Contatar depende dela.
+- **Sentry 10.75.3** (linha estável) em vez da 11.x, lançada dias antes.
+
+### Pendente
+
+- **Staging no ar:** depende da conta da Docline na Render e das credenciais de e-mail.
+- **Sentry:** falta criar a conta e configurar o DSN.
+- **2FA obrigatória:** bloquear o acesso de ADMIN/GESTOR sem 2FA antes da Fase 7 (hoje é só um lembrete).
 
 ## [0.1.0] — Fase 1: Fundação técnica — 2026-10-08
 

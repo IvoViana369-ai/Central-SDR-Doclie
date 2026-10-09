@@ -289,6 +289,6 @@ Uma história só está pronta quando:
 - [ ] Decisão de hospedagem e transferência internacional resolvida. *(Hospedagem decidida: Render/Virginia, ADR-019. Falta a transferência internacional: cláusulas-padrão no DPA.)*
 - [ ] Importação da base real feita em produção, com revisão de duplicados.
 - [ ] Backup e restauração testados.
-- [ ] Monitoramento de erros (Sentry) e alertas de jobs ativos.
+- [ ] Monitoramento de erros (Sentry) e alertas de jobs ativos. *(Sentry integrado na Fase 2, opcional por `SENTRY_DSN`; falta a conta da Docline. Alertas de jobs a definir.)*
 - [ ] Treinamento da equipe (30–60 min) e guia rápido.
 - [ ] Plano de rollback (voltar à planilha) documentado.

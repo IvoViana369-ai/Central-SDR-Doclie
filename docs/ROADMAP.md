@@ -122,9 +122,9 @@ Prioridade: **MUST** · **SHOULD** · **COULD**. Tamanho: **P/M/G** (ver premiss
 **Situação (2026-10-08):** ✅ concluída no código, com pendências registradas. O critério de aceite é coberto pela suíte E2E (`apps/web/e2e/fase1.spec.ts`) e o CI roda verde no GitHub. Pendências:
 
 - **Staging no ar:** hospedagem decidida (Render, região Virginia — ARCHITECTURE ADR-019). `render.yaml` e imagem validados de ponta a ponta; a subida **depende da conta da Docline na Render e das credenciais de e-mail (SMTP)**.
-- **F1-13 parcial:** logs pino com mascaramento entregues; a **integração com o Sentry não foi feita** (só a variável `SENTRY_DSN` está reservada) e passou para F2-17. Depende da conta da Docline no Sentry.
-- **F1-15 (2FA)** não foi feito e passou para F2-16.
-- **Limite de login por conta** (SECURITY §12) não foi feito; hoje o limite é por IP. Passou para F2-18.
+- **F1-13 parcial:** logs pino com mascaramento entregues; o Sentry passou para F2-17, *entregue na Fase 2* (falta só o DSN da conta da Docline).
+- **F1-15 (2FA):** passou para F2-16, *entregue na Fase 2*.
+- **Limite de login por conta** (SECURITY §12): passou para F2-18, *entregue na Fase 2*.
 
 Detalhes em [CHANGELOG](../CHANGELOG.md).
 
@@ -150,6 +150,26 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** cadastro completo de leads com pessoas e pontos de contato, lista com filtros avançados e contagem, detalhe responsivo, timeline, histórico, base de conformidade.
 **Aceite:** critérios M02, M03, M09 e parte de M14 do [MVP](./MVP.md#4-escopo-incluído).
+
+**Situação (2026-10-09):** ✅ concluída no código; as 18 histórias (F2-01 a F2-18) foram entregues.
+
+O aceite é coberto pelas jornadas E2E `apps/web/e2e/fase2-ui.spec.ts`, `fase2-api.spec.ts` e `fase2-login.spec.ts`:
+
+| Critério | O que a jornada comprova |
+|---|---|
+| M02 | O mesmo telefone em outro formato é avisado antes de salvar. |
+| M03 | Busca, contagem "contactáveis × bloqueados" e ação em massa com simulação. |
+| M09 | Timeline. |
+| M14, parte | Opt-out em 1 clique bloqueia o WhatsApp e aparece na Lista Não Contatar. |
+
+Decisões e pendências:
+
+- **Exportação síncrona** (sem arquivo guardado no servidor), em vez de job assíncrono: ARCHITECTURE §9.2.
+- **2FA:** disponível para todos, com lembrete para ADMIN/GESTOR. Bloquear o acesso sem 2FA fica para antes da Fase 7.
+- **Sentry:** pronto; falta o DSN da conta da Docline.
+- **Staging:** continua dependendo da conta da Docline na Render.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|
