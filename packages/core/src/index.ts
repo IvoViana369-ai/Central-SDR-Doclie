@@ -13,6 +13,7 @@ export {
 } from './shared/identifier-hash';
 export {
   assertAccess,
+  requirePermission,
   checkAccess,
   defineUseCase,
   type Access,

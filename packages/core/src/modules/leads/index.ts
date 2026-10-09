@@ -37,3 +37,7 @@ export {
   registerOptOut,
   setChannelPermission,
 } from './application/compliance';
+export * from './contracts/filters';
+export { countLeads, searchLeads } from './application/search';
+export { BULK_LIMIT, bulkLeads } from './application/bulk';
+export { deleteView, listSavedViews, saveView, updateView } from './application/saved-views';

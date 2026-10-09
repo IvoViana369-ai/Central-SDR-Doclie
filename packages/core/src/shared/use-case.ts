@@ -214,3 +214,24 @@ export async function assertAccess(
     throw error;
   }
 }
+
+/**
+ * Permissão adicional exigida dentro de um caso de uso (ex.: ação em massa de
+ * atribuição exige também `lead.assign`). A negação é auditada fora da
+ * transação, para sobreviver ao rollback.
+ */
+export async function requirePermission(
+  ctx: UseCaseContext,
+  permission: Permission,
+): Promise<void> {
+  if (ctx.actor.kind !== 'user' || roleHasPermission(ctx.actor.role, permission)) return;
+  await ctx.deps.db.auditLog.create({
+    data: auditData(ctx.actor, ctx.meta, {
+      action: 'access.denied',
+      entityType: 'permission',
+      entityId: permission,
+      metadata: { required: permission },
+    }),
+  });
+  throw new ForbiddenError();
+}
