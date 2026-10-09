@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas das Fases 1 a 6 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-6)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 a 7 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-7)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 6
+### 4.11 Implementação até a Fase 7
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -470,11 +470,22 @@ Diferenças em relação às seções acima:
 - **Mesclagem** leva os rascunhos para o sobrevivente; **anonimização** apaga contexto, saída, textos, comentário e motivo de descarte dos rascunhos do lead.
 - **Indicadores** sem `daily_metrics`: consultas agregadas ao vivo, medidas com 100 mil leads ([ARCHITECTURE §13](./ARCHITECTURE.md#13-escalabilidade)).
 
-**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts` e `sdr-operation-schema.int.test.ts`):
+**Fase 7 (WhatsApp Cloud API):** `whatsapp_templates`, `conversations`, `message_status_events`, `webhook_events` e `integration_connections`, como nas seções acima, mais:
+
+- **`contact_permissions`:** o opt-in do WhatsApp passa a ser **do número** (`contact_point_id` preenchido, único parcial por número e canal), com `evidence_message_id` quando a evidência é uma mensagem recebida. A linha do lead (sem pessoa nem contato) continua guardando a base legal por canal.
+- **`messages`:** ganha `conversation_id`, `whatsapp_template_id`, `template_params` (valores das variáveis; dado pessoal), `send_attempted_at` (o job de envio nunca repete uma chamada de resultado incerto), `delivered_at`, `read_at`, `failed_at`, `error_code`, `error_detail`, `pricing_category`, `billable` e `cost_estimate_usd`, mais os índices `(conversation_id, created_at desc)` e `(channel, mode, sent_at)`.
+- **`whatsapp_templates`:** `meta_template_id` único (não `(name, language)`: a Meta permite recriar um nome depois de apagado); `status` e `quality_score` em texto, porque a Meta acrescenta valores; `body_text` e `body_parameters` para a prévia; `supported`/`unsupported_reason` (o app envia modelos com variáveis só no corpo); `active` (o ADMIN pode tirar um modelo do uso) e `removed_at` (sumiu da conta, fica para o histórico).
+- **`conversations`:** `external_thread_id` é o `wa_id`; `profile_name` (nome do perfil na Meta, dado pessoal). Sem `status`: a janela de atendimento (`service_window_expires_at`) é o que importa. Único `(lead_id, channel, external_thread_id)`.
+- **`webhook_events`:** `external_event_id` é o SHA-256 do corpo recebido (a Meta não manda id de evento); só entram eventos com assinatura válida, então não há `signature_valid`. `contact_hashes` (HMAC dos telefones citados, índice GIN) permite à anonimização apagar os payloads de um lead.
+- **`inbound_unmatched`** (nova): mensagem recebida de um número que não está em nenhum lead ativo, ou que está em mais de um (`candidate_lead_ids`). Nunca vira lead sozinha: uma pessoa vincula ou descarta.
+- **`integration_connections`:** sem `credentials_encrypted`; os tokens ficam só no ambiente. `config` guarda dados não secretos (número exibido, nome verificado, qualidade, limite de mensagens).
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts` e `whatsapp-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
 - `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
-- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição e oportunidade aberta por lead.
+- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição, oportunidade aberta por lead, envio ativo por rascunho da IA e opt-in por número e canal.
+- Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)` e `inbound_unmatched (provider, provider_message_id)`.
 
 ---
 

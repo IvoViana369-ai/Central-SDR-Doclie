@@ -107,6 +107,8 @@ model User {
   aiKnowledgeApproved    AiKnowledgeItem[] @relation("AiKnowledgeApprovedBy")
   approachesCreated      Approach[]        @relation("ApproachCreator")
 
+  unmatchedResolved InboundUnmatched[] @relation("InboundUnmatchedResolver")
+
   @@index([role, status])
   @@index([teamId])
   @@map("users")
@@ -576,6 +578,8 @@ model Lead {
   opportunities Opportunity[]
   notifications Notification[]
   aiGenerations AiGeneration[]
+  conversations Conversation[]
+  inboundLinked InboundUnmatched[]   @relation("InboundUnmatchedLead")
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -694,12 +698,13 @@ model ContactPoint {
   createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead        Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  person      LeadPerson?         @relation(fields: [personId], references: [id], onDelete: SetNull)
-  source      LeadSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  permissions ContactPermission[]
-  messages    Message[]
-  activities  Activity[]
+  lead          Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  person        LeadPerson?         @relation(fields: [personId], references: [id], onDelete: SetNull)
+  source        LeadSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  permissions   ContactPermission[]
+  messages      Message[]
+  activities    Activity[]
+  conversations Conversation[]
 
   @@unique([leadId, type, valueNormalized])
   @@unique([leadId, type], map: "contact_points_primary_key", where: raw("is_primary AND status = 'ACTIVE'"))
@@ -887,7 +892,8 @@ enum OptInMethod {
 }
 
 /// Base legal LGPD e opt-in de plataforma por canal (são exigências diferentes:
-/// docs/LGPD.md §6). Fase 2: no nível do lead; por pessoa/ponto de contato depois.
+/// docs/LGPD.md §6). Fase 2: no nível do lead. Fase 7: o opt-in do WhatsApp é
+/// do número (`contact_point_id`), com a evidência.
 model ContactPermission {
   id                     String         @id @default(uuid(7)) @db.Uuid
   leadId                 String         @map("lead_id") @db.Uuid
@@ -900,18 +906,23 @@ model ContactPermission {
   optInAt                DateTime?      @map("opt_in_at") @db.Timestamptz(3)
   optInMethod            OptInMethod?   @map("opt_in_method")
   evidence               String?
+  /// Mensagem recebida que comprova o opt-in (método INBOUND_MESSAGE).
+  evidenceMessageId      String?        @map("evidence_message_id") @db.Uuid
   recordedById           String?        @map("recorded_by_id") @db.Uuid
   recordedAt             DateTime       @default(now()) @map("recorded_at") @db.Timestamptz(3)
   validUntil             DateTime?      @map("valid_until") @db.Timestamptz(3)
   createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead         Lead                  @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  person       LeadPerson?           @relation(fields: [personId], references: [id], onDelete: Cascade)
-  contactPoint ContactPoint?         @relation(fields: [contactPointId], references: [id], onDelete: Cascade)
-  assessment   LegalBasisAssessment? @relation(fields: [legalBasisAssessmentId], references: [id], onDelete: SetNull)
+  lead            Lead                  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  person          LeadPerson?           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  contactPoint    ContactPoint?         @relation(fields: [contactPointId], references: [id], onDelete: Cascade)
+  assessment      LegalBasisAssessment? @relation(fields: [legalBasisAssessmentId], references: [id], onDelete: SetNull)
+  evidenceMessage Message?              @relation("PermissionEvidence", fields: [evidenceMessageId], references: [id], onDelete: SetNull)
 
   @@unique([leadId, channel], map: "contact_permissions_lead_channel_key", where: raw("person_id IS NULL AND contact_point_id IS NULL"))
+  /// Opt-in por número (Fase 7): um registro por número e canal.
+  @@unique([contactPointId, channel], map: "contact_permissions_point_channel_key", where: raw("contact_point_id IS NOT NULL"))
   @@index([leadId])
   @@map("contact_permissions")
 }
@@ -1785,6 +1796,22 @@ model Message {
   approvedAt               DateTime?             @map("approved_at") @db.Timestamptz(3)
   /// Expressão de opt-out encontrada no texto recebido (regra determinística).
   optOutMatch              String?               @map("opt_out_match")
+  /// Fase 7: conversa do WhatsApp (janela de atendimento) e modelo aprovado usado.
+  conversationId           String?               @map("conversation_id") @db.Uuid
+  whatsappTemplateId       String?               @map("whatsapp_template_id") @db.Uuid
+  /// Valores das variáveis do modelo (dado pessoal; apagado na anonimização).
+  templateParams           Json?                 @map("template_params")
+  /// Envio pela API já tentado: o job nunca repete uma chamada de resultado incerto.
+  sendAttemptedAt          DateTime?             @map("send_attempted_at") @db.Timestamptz(3)
+  deliveredAt              DateTime?             @map("delivered_at") @db.Timestamptz(3)
+  readAt                   DateTime?             @map("read_at") @db.Timestamptz(3)
+  failedAt                 DateTime?             @map("failed_at") @db.Timestamptz(3)
+  errorCode                String?               @map("error_code")
+  errorDetail              String?               @map("error_detail")
+  /// Cobrança informada pela Meta no status (categoria e se é cobrada) e custo estimado.
+  pricingCategory          String?               @map("pricing_category")
+  billable                 Boolean?
+  costEstimateUsd          Decimal?              @map("cost_estimate_usd") @db.Decimal(10, 6)
   provider                 String?
   providerMessageId        String?               @map("provider_message_id")
   idempotencyKey           String?               @unique @map("idempotency_key")
@@ -1792,18 +1819,23 @@ model Message {
   createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead              Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  contactPoint      ContactPoint?      @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
-  task              Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  enrollment        CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  cadenceStep       CadenceStep?       @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
-  sentBy            User?              @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
-  classifiedBy      User?              @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
-  aiGeneration      AiGeneration?      @relation("MessageFromGeneration", fields: [aiGenerationId], references: [id], onDelete: SetNull)
-  approach          Approach?          @relation(fields: [approachId], references: [id], onDelete: SetNull)
-  approvedBy        User?              @relation("MessageApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lead              Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint      ContactPoint?        @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  task              Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  enrollment        CadenceEnrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  cadenceStep       CadenceStep?         @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
+  sentBy            User?                @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  classifiedBy      User?                @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
+  aiGeneration      AiGeneration?        @relation("MessageFromGeneration", fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  approach          Approach?            @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  approvedBy        User?                @relation("MessageApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   /// Sugestões de classificação da IA para esta resposta recebida.
-  aiClassifications AiGeneration[]     @relation("ReplyClassificationSource")
+  aiClassifications AiGeneration[]       @relation("ReplyClassificationSource")
+  conversation      Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  whatsappTemplate  WhatsappTemplate?    @relation(fields: [whatsappTemplateId], references: [id], onDelete: SetNull)
+  statusEvents      MessageStatusEvent[]
+  /// Opt-ins comprovados por esta mensagem.
+  optInEvidenceFor  ContactPermission[]  @relation("PermissionEvidence")
 
   @@unique([provider, providerMessageId])
   /// Um envio em andamento ou feito por rascunho da IA (cancelados não contam).
@@ -1814,6 +1846,10 @@ model Message {
   @@index([sentById, sentAt], map: "messages_first_contact_idx", where: raw("is_first_contact"))
   /// Taxa de resposta por abordagem (analytics).
   @@index([approachId, sentAt])
+  /// Conversa do WhatsApp (Fase 7).
+  @@index([conversationId, createdAt(sort: Desc)])
+  /// Custo e resultado do mês por modelo (Fase 7).
+  @@index([channel, mode, sentAt])
   @@map("messages")
 }
 
@@ -2059,9 +2095,10 @@ model Approach {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy   User?          @relation("ApproachCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  generations AiGeneration[]
-  messages    Message[]
+  createdBy         User?              @relation("ApproachCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  generations       AiGeneration[]
+  messages          Message[]
+  whatsappTemplates WhatsappTemplate[]
 
   @@map("approaches")
 }
@@ -2141,4 +2178,203 @@ model AiGeneration {
   @@index([createdAt])
   @@index([sourceMessageId])
   @@map("ai_generations")
+}
+
+// ─── Fase 7: WhatsApp Cloud API (docs/INTEGRATIONS.md §6.2) ────────────────
+
+enum WhatsappTemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+
+  @@map("whatsapp_template_category")
+}
+
+/// Espelho dos modelos (templates) da conta na Meta, sincronizado pela API e
+/// pelo webhook de situação. Nunca é apagado: mensagens enviadas apontam para ele.
+model WhatsappTemplate {
+  id                String                   @id @default(uuid(7)) @db.Uuid
+  /// Id do modelo na Meta.
+  metaTemplateId    String                   @unique @map("meta_template_id")
+  name              String
+  language          String
+  category          WhatsappTemplateCategory
+  /// Situação na Meta (APPROVED, PENDING, REJECTED, PAUSED, DISABLED…). Texto
+  /// porque a Meta acrescenta valores; só APPROVED pode ser enviado.
+  status            String
+  /// Qualidade do modelo na Meta (GREEN, YELLOW, RED, UNKNOWN).
+  qualityScore      String?                  @map("quality_score")
+  rejectedReason    String?                  @map("rejected_reason")
+  /// POSITIONAL ({{1}}) ou NAMED ({{nome}}).
+  parameterFormat   String                   @default("POSITIONAL") @map("parameter_format")
+  /// Componentes como vieram da Meta (cabeçalho, corpo, rodapé, botões).
+  components        Json
+  /// Corpo com as variáveis, para a prévia e para gravar o texto enviado.
+  bodyText          String                   @map("body_text")
+  /// Variáveis do corpo, na ordem em que aparecem ("1", "2"… ou os nomes).
+  bodyParameters    String[]                 @default([]) @map("body_parameters")
+  /// O app envia modelos com corpo de texto, sem variáveis no cabeçalho ou nos botões.
+  supported         Boolean                  @default(true)
+  unsupportedReason String?                  @map("unsupported_reason")
+  /// Abordagem a que o modelo pertence (atribuição em analytics).
+  approachId        String?                  @map("approach_id") @db.Uuid
+  /// O ADMIN pode tirar um modelo aprovado do uso dos SDRs.
+  active            Boolean                  @default(true)
+  /// Deixou de existir na conta da Meta (fica para o histórico).
+  removedAt         DateTime?                @map("removed_at") @db.Timestamptz(3)
+  lastSyncedAt      DateTime                 @map("last_synced_at") @db.Timestamptz(3)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  approach Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([name, language])
+  @@map("whatsapp_templates")
+}
+
+/// Conversa do WhatsApp com um número do lead. Guarda a janela de atendimento:
+/// texto livre só até 24 h depois da última mensagem do contato.
+model Conversation {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  leadId                 String    @map("lead_id") @db.Uuid
+  channel                Channel
+  contactPointId         String?   @map("contact_point_id") @db.Uuid
+  /// Identificador do contato no canal (no WhatsApp, o `wa_id`).
+  externalThreadId       String    @map("external_thread_id")
+  /// Nome do perfil informado pela Meta (dado pessoal; apagado na anonimização).
+  profileName            String?   @map("profile_name")
+  lastInboundAt          DateTime? @map("last_inbound_at") @db.Timestamptz(3)
+  lastOutboundAt         DateTime? @map("last_outbound_at") @db.Timestamptz(3)
+  serviceWindowExpiresAt DateTime? @map("service_window_expires_at") @db.Timestamptz(3)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint ContactPoint? @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  messages     Message[]
+
+  @@unique([leadId, channel, externalThreadId])
+  @@index([channel, externalThreadId])
+  /// Conversas com resposta recente (tela Conversas).
+  @@index([lastInboundAt(sort: Desc)])
+  @@map("conversations")
+}
+
+/// Histórico de status de uma mensagem enviada pela API (um registro por status).
+model MessageStatusEvent {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  messageId      String        @map("message_id") @db.Uuid
+  status         MessageStatus
+  occurredAt     DateTime      @map("occurred_at") @db.Timestamptz(3)
+  webhookEventId String?       @map("webhook_event_id") @db.Uuid
+  errorCode      String?       @map("error_code")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message      Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@unique([messageId, status])
+  @@map("message_status_events")
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+
+  @@map("webhook_event_status")
+}
+
+/// Inbox de webhooks recebidos (docs/INTEGRATIONS.md §13): só entram com
+/// assinatura válida; idempotência pelo hash do corpo; payload purgado em 90 dias.
+model WebhookEvent {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  provider        String
+  /// SHA-256 do corpo recebido (a Meta não manda id do evento).
+  externalEventId String             @map("external_event_id")
+  payload         Json
+  /// HMAC dos telefones citados, para a anonimização achar os payloads de um lead.
+  contactHashes   String[]           @default([]) @map("contact_hashes")
+  status          WebhookEventStatus @default(PENDING)
+  attempts        Int                @default(0)
+  error           String?
+  receivedAt      DateTime           @map("received_at") @db.Timestamptz(3)
+  processedAt     DateTime?          @map("processed_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  statusEvents MessageStatusEvent[]
+  unmatched    InboundUnmatched[]
+
+  @@unique([provider, externalEventId])
+  @@index([status, receivedAt])
+  @@index([receivedAt])
+  @@index([contactHashes], type: Gin)
+  @@map("webhook_events")
+}
+
+enum InboundUnmatchedStatus {
+  PENDING
+  LINKED
+  DISMISSED
+
+  @@map("inbound_unmatched_status")
+}
+
+/// Mensagem recebida de um número que não está em nenhum lead ativo, ou que
+/// está em mais de um. Nunca vira lead sozinha: uma pessoa decide.
+model InboundUnmatched {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  channel           Channel
+  provider          String
+  providerMessageId String                 @map("provider_message_id")
+  /// Identificador do contato no canal (no WhatsApp, o `wa_id`) e o telefone em E.164.
+  externalThreadId  String                 @map("external_thread_id")
+  phoneE164         String?                @map("phone_e164")
+  profileName       String?                @map("profile_name")
+  /// Tipo da mensagem na Meta (text, image, button…) e o texto, quando há.
+  messageKind       String                 @map("message_kind")
+  body              String?
+  receivedAt        DateTime               @map("received_at") @db.Timestamptz(3)
+  /// Leads com o mesmo número, quando há mais de um (a pessoa escolhe).
+  candidateLeadIds  String[]               @default([]) @map("candidate_lead_ids") @db.Uuid
+  webhookEventId    String?                @map("webhook_event_id") @db.Uuid
+  status            InboundUnmatchedStatus @default(PENDING)
+  resolvedLeadId    String?                @map("resolved_lead_id") @db.Uuid
+  resolvedById      String?                @map("resolved_by_id") @db.Uuid
+  resolvedAt        DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+  resolvedLead Lead?         @relation("InboundUnmatchedLead", fields: [resolvedLeadId], references: [id], onDelete: SetNull)
+  resolvedBy   User?         @relation("InboundUnmatchedResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerMessageId])
+  @@index([status, receivedAt(sort: Desc)])
+  @@map("inbound_unmatched")
+}
+
+enum IntegrationHealth {
+  UNKNOWN
+  ACTIVE
+  DEGRADED
+  ERROR
+
+  @@map("integration_health")
+}
+
+/// Situação de uma integração (ex.: o número do WhatsApp na Meta). Sem segredos:
+/// credenciais ficam no ambiente.
+model IntegrationConnection {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  provider    String            @unique
+  status      IntegrationHealth @default(UNKNOWN)
+  /// Dados não secretos: número exibido, nome verificado, qualidade, limite de mensagens.
+  config      Json              @default("{}")
+  lastCheckAt DateTime?         @map("last_check_at") @db.Timestamptz(3)
+  lastError   String?           @map("last_error")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("integration_connections")
 }
