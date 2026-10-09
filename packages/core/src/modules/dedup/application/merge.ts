@@ -171,9 +171,9 @@ async function movePermissions(
 }
 
 /**
- * Conversas do WhatsApp (Fase 7): passam para o sobrevivente. Se ele já tem a
- * conversa do mesmo número, as mensagens vão para ela e a janela de
- * atendimento fica com o que for mais recente.
+ * Conversas do WhatsApp (Fase 7) e do Instagram (Fase 8): passam para o
+ * sobrevivente. Se ele já tem a conversa do mesmo contato, as mensagens vão
+ * para ela e a janela de atendimento fica com o que for mais recente.
  */
 async function moveConversations(
   ctx: UseCaseContext,
@@ -217,9 +217,29 @@ async function moveConversations(
           conversation.serviceWindowExpiresAt,
         ),
         profileName: target.profileName ?? conversation.profileName,
+        handle: target.handle ?? conversation.handle,
       },
     });
   }
+}
+
+/** Comentários no Instagram da Docline (Fase 8): passam para o sobrevivente. */
+async function moveSocialComments(
+  ctx: UseCaseContext,
+  survivorId: string,
+  mergedId: string,
+  pairs: Map<string, string>,
+) {
+  for (const [from, to] of pairs) {
+    await ctx.tx.socialComment.updateMany({
+      where: { leadId: mergedId, contactPointId: from },
+      data: { contactPointId: to },
+    });
+  }
+  await ctx.tx.socialComment.updateMany({
+    where: { leadId: mergedId },
+    data: { leadId: survivorId },
+  });
 }
 
 /** Decisões já tomadas sobre o lead mesclado valem para o sobrevivente. */
@@ -532,6 +552,7 @@ export const mergeDuplicate = defineUseCase({
     await ctx.tx.opportunity.updateMany(toSurvivor);
     await ctx.tx.aiGeneration.updateMany(toSurvivor);
     await moveConversations(ctx, survivor.id, merged.id, contacts.pairs);
+    await moveSocialComments(ctx, survivor.id, merged.id, contacts.pairs);
     await mergeContactDates(ctx, survivor.id, merged.id);
     await ctx.tx.leadNote.updateMany({
       where: { leadId: merged.id },

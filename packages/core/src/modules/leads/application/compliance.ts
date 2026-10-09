@@ -403,6 +403,45 @@ async function scrubLead(
       where: { phoneE164: { in: phones.map((p) => p.valueNormalized) } },
     });
   }
+  // Instagram (Fase 8): payloads de webhook (pelo @ e pelos IGSIDs das conversas e
+  // dos comentários), mensagens de quem não era lead, comentários e métricas públicas.
+  const handles = await ctx.tx.contactPoint.findMany({
+    where: { leadId, type: 'INSTAGRAM' },
+    select: { id: true, valueHash: true, valueNormalized: true },
+  });
+  const igsids = [
+    ...(
+      await ctx.tx.conversation.findMany({
+        where: { leadId, channel: 'INSTAGRAM' },
+        select: { externalThreadId: true },
+      })
+    ).map((c) => c.externalThreadId),
+    ...(
+      await ctx.tx.socialComment.findMany({ where: { leadId }, select: { externalUserId: true } })
+    ).map((c) => c.externalUserId),
+  ];
+  const instagramHashes = [
+    ...handles.map((h) => h.valueHash),
+    ...igsids.map((id) => ctx.deps.identifiers.hash('INSTAGRAM', `igsid:${id}`)),
+  ];
+  if (instagramHashes.length > 0) {
+    await ctx.tx.webhookEvent.deleteMany({
+      where: { contactHashes: { hasSome: instagramHashes } },
+    });
+    await ctx.tx.inboundUnmatched.deleteMany({
+      where: {
+        channel: 'INSTAGRAM',
+        OR: [
+          { handle: { in: handles.map((h) => h.valueNormalized) } },
+          { externalThreadId: { in: igsids } },
+        ],
+      },
+    });
+  }
+  await ctx.tx.socialComment.deleteMany({ where: { leadId } });
+  await ctx.tx.instagramProfile.deleteMany({
+    where: { contactPointId: { in: handles.map((h) => h.id) } },
+  });
   await ctx.tx.inboundUnmatched.deleteMany({ where: { resolvedLeadId: leadId } });
   await ctx.tx.conversation.deleteMany({ where: { leadId } });
   const points = await ctx.tx.contactPoint.findMany({ where: { leadId }, select: { id: true } });

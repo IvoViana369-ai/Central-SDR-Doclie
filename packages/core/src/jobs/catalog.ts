@@ -154,6 +154,39 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 120,
   },
+  /**
+   * Envia uma mensagem do Instagram pela API (dados: `{ messageId }`): texto a
+   * quem escreveu ou resposta privada a comentário. Sem nova tentativa
+   * automática, como no WhatsApp (docs/INTEGRATIONS.md §7.2).
+   */
+  instagramSend: {
+    name: 'instagram.send',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 120,
+  },
+  /** Processa um webhook do Instagram guardado na inbox (dados: `{ eventId }`). */
+  instagramWebhook: {
+    name: 'instagram.webhook',
+    retryLimit: 3,
+    retryDelaySeconds: 60,
+    expireInSeconds: 300,
+  },
+  /** Sugestão automática de classificação de uma mensagem recebida no Instagram (`{ messageId }`). */
+  instagramSuggestClassification: {
+    name: 'instagram.suggest-classification',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 180,
+  },
+  /** Confere a conta e o token do Instagram (diário, 04:13 em Fortaleza). */
+  instagramAccountCheck: {
+    name: 'instagram.account-check',
+    cron: '13 7 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 120,
+  },
   /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
   webhooksPurge: {
     name: 'webhooks.purge',

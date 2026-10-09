@@ -201,6 +201,7 @@ describe('erros e configuração', () => {
     // Subcódigo desconhecido cai no código principal.
     expect(describeInstagramError('613/123').kind).toBe('RATE_LIMITED');
     expect(describeInstagramError('TIMEOUT').kind).toBe('UNKNOWN_OUTCOME');
+    expect(describeInstagramError('GATE_BLOCKED').message).toMatch(/regras de contato/);
     expect(describeInstagramError('99999').message).toContain('99999');
     expect(isRetryableInstagramError('613')).toBe(true);
     expect(isRetryableInstagramError('10/2018278')).toBe(false);

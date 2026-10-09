@@ -9,6 +9,10 @@ import {
   runImportParse,
   runImportPreview,
   runImportPurge,
+  runInstagramAccountCheck,
+  runInstagramSend,
+  runInstagramSuggestClassification,
+  runInstagramWebhook,
   runScoreRecomputeAll,
   runScoreRecomputeLeads,
   runWebhooksPurge,
@@ -66,5 +70,10 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.whatsappSyncTemplates.name]: async () => runWhatsappTemplateSync(deps),
     [JOBS.whatsappHealthCheck.name]: async () => runWhatsappHealthCheck(deps),
     [JOBS.webhooksPurge.name]: async () => runWebhooksPurge(deps),
+    [JOBS.instagramSend.name]: async (data) => runInstagramSend(deps, data),
+    [JOBS.instagramWebhook.name]: async (data) => runInstagramWebhook(deps, data),
+    [JOBS.instagramSuggestClassification.name]: async (data) =>
+      runInstagramSuggestClassification(deps, data),
+    [JOBS.instagramAccountCheck.name]: async () => runInstagramAccountCheck(deps),
   };
 }

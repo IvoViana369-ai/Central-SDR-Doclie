@@ -258,7 +258,7 @@ export const getWhatsappOverview = defineUseCase({
     const [connection, settingsRow, pendingUnmatched, sent, failures] = await Promise.all([
       provider ? ctx.tx.integrationConnection.findUnique({ where: { provider } }) : null,
       ctx.tx.appSetting.findUnique({ where: { key: WHATSAPP_SETTINGS_KEY } }),
-      ctx.tx.inboundUnmatched.count({ where: { status: 'PENDING' } }),
+      ctx.tx.inboundUnmatched.count({ where: { channel: 'WHATSAPP', status: 'PENDING' } }),
       ctx.tx.message.findMany({
         where: {
           channel: 'WHATSAPP',

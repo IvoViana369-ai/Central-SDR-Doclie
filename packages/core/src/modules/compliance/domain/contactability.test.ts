@@ -150,6 +150,38 @@ describe('gate de contactabilidade', () => {
     expect(evaluateChannel(suppressed, 'WHATSAPP', 'API').allowed).toBe(false);
   });
 
+  it('modo API do Instagram: só responde a quem escreveu nas últimas 24 h', () => {
+    const instagram = {
+      ...mobile,
+      id: 'ig',
+      type: 'INSTAGRAM' as const,
+      phoneKind: null,
+    };
+    const input: GateInput = { ...base, contactPoints: [instagram] };
+    // No assistido (copiar e abrir o perfil), o @ basta.
+    expect(evaluateChannel(input, 'INSTAGRAM').allowed).toBe(true);
+    expect(evaluateChannel(input, 'INSTAGRAM', 'API').reasons).toEqual([
+      'O contato não escreveu para a Docline no Instagram nas últimas 24 h: pela API só dá para responder (o primeiro contato é pelo app).',
+    ]);
+    const open: GateInput = { ...base, contactPoints: [{ ...instagram, serviceWindowOpen: true }] };
+    expect(evaluateChannel(open, 'INSTAGRAM', 'API')).toMatchObject({
+      allowed: true,
+      usableContactPointIds: ['ig'],
+    });
+    // Lista Não Contatar continua valendo dentro da janela.
+    const suppressed: GateInput = {
+      ...base,
+      contactPoints: [
+        {
+          ...instagram,
+          serviceWindowOpen: true,
+          suppressions: [{ reason: 'OPT_OUT', scope: 'INSTAGRAM', createdAt: since }],
+        },
+      ],
+    };
+    expect(evaluateChannel(suppressed, 'INSTAGRAM', 'API').allowed).toBe(false);
+  });
+
   it('lead arquivado não é contatado', () => {
     expect(evaluateChannel({ ...base, leadStatus: 'ARCHIVED' }, 'PHONE').reasons).toEqual([
       'Lead arquivado.',

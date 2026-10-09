@@ -174,6 +174,14 @@ export function evaluateChannel(
         'Nenhum número com opt-in registrado nem conversa aberta pelo contato nas últimas 24 h (exigido para enviar pela API do WhatsApp).',
       );
     }
+  } else if (mode === 'API' && channel === 'INSTAGRAM') {
+    // A API do Instagram só responde a quem escreveu, até 24 h depois (Fase 8).
+    usable = usable.filter((cp) => cp.serviceWindowOpen);
+    if (usable.length === 0) {
+      reasons.push(
+        'O contato não escreveu para a Docline no Instagram nas últimas 24 h: pela API só dá para responder (o primeiro contato é pelo app).',
+      );
+    }
   }
 
   return {

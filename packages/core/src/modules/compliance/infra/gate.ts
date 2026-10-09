@@ -34,12 +34,14 @@ export async function loadGateInput(
           phoneKind: true,
           whatsappStatus: true,
           // Opt-in do WhatsApp do número e janela de atendimento aberta (Fase 7).
+          // A conversa é do canal do contato: telefone no WhatsApp, @ no
+          // Instagram (Fase 8, só responder a quem escreveu).
           permissions: {
             where: { channel: 'WHATSAPP', optInStatus: 'GRANTED' },
             select: { id: true },
           },
           conversations: {
-            where: { channel: 'WHATSAPP', serviceWindowExpiresAt: { gt: now } },
+            where: { serviceWindowExpiresAt: { gt: now } },
             select: { id: true },
           },
         },

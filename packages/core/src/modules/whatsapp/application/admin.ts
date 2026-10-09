@@ -295,10 +295,14 @@ export const updateWhatsappSettings = defineUseCase({
 export const listUnmatchedInbound = defineUseCase({
   name: 'whatsapp.unmatched.list',
   access: 'lead.assign',
-  input: z.object({ status: z.enum(['PENDING', 'LINKED', 'DISMISSED']).default('PENDING') }),
+  input: z.object({
+    status: z.enum(['PENDING', 'LINKED', 'DISMISSED']).default('PENDING'),
+    /** Mesma lista para o Instagram (Fase 8); vincular e procurar de novo são por canal. */
+    channel: z.enum(['WHATSAPP', 'INSTAGRAM']).default('WHATSAPP'),
+  }),
   async run(ctx, input) {
     const rows = await ctx.tx.inboundUnmatched.findMany({
-      where: { status: input.status },
+      where: { status: input.status, channel: input.channel },
       orderBy: { receivedAt: 'desc' },
       take: 100,
     });
@@ -325,7 +329,7 @@ export const linkUnmatchedInbound = defineUseCase({
   input: z.object({ unmatchedId: z.uuid(), leadId: z.uuid() }),
   async run(ctx, input) {
     const row = await ctx.tx.inboundUnmatched.findUnique({ where: { id: input.unmatchedId } });
-    if (!row || row.status !== 'PENDING')
+    if (!row || row.status !== 'PENDING' || row.channel !== 'WHATSAPP')
       throw new NotFoundError('Mensagem pendente não encontrada.');
     const lead = await ctx.tx.lead.findUnique({
       where: { id: input.leadId },
@@ -386,7 +390,7 @@ export const retryUnmatchedInbound = defineUseCase({
   input: z.object({ unmatchedId: z.uuid() }),
   async run(ctx, input) {
     const row = await ctx.tx.inboundUnmatched.findUnique({ where: { id: input.unmatchedId } });
-    if (!row || row.status !== 'PENDING')
+    if (!row || row.status !== 'PENDING' || row.channel !== 'WHATSAPP')
       throw new NotFoundError('Mensagem pendente não encontrada.');
     const match = await matchInbound(ctx, row.externalThreadId);
     if (match.kind !== 'matched') {
@@ -438,6 +442,8 @@ export const dismissUnmatchedInbound = defineUseCase({
       action: 'whatsapp.unmatched.dismiss',
       entityType: 'inbound_unmatched',
       entityId: row.id,
+      // Serve também ao Instagram (Fase 8).
+      metadata: { channel: row.channel },
     });
     return { status: 'DISMISSED' as const };
   },

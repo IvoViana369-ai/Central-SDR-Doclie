@@ -101,6 +101,12 @@ const LOCAL_ERRORS: Record<string, ErrorInfo> = {
     kind: 'SENDS_DISABLED',
     message: 'Envios reais estão desligados neste ambiente (ALLOW_REAL_SENDS).',
   },
+  // Conferido de novo na hora do envio; pode mudar (horário, intervalo entre contatos).
+  GATE_BLOCKED: {
+    kind: 'UNKNOWN',
+    message:
+      'As regras de contato bloquearam o envio (Lista Não Contatar, base legal, horário ou intervalo).',
+  },
 };
 
 export function describeInstagramError(code: string): ErrorInfo {

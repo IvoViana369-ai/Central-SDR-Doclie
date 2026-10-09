@@ -3,3 +3,25 @@
 // métricas públicas dos perfis (Business Discovery) para o score.
 export * from './domain';
 export { FakeInstagramProvider, fakeInstagramUserId } from './infra/fake-provider';
+export * from './contracts/schemas';
+export {
+  retryInstagramMessage,
+  runInstagramSend,
+  sendInstagramMessage,
+  sendInstagramPrivateReply,
+} from './application/send';
+export { receiveInstagramWebhook, runInstagramWebhook } from './application/webhooks';
+export {
+  checkInstagramAccount,
+  getInstagramSettings,
+  linkInstagramUnmatched,
+  retryInstagramUnmatched,
+  runInstagramAccountCheck,
+  runInstagramSuggestClassification,
+  updateInstagramSettings,
+} from './application/admin';
+export {
+  getInstagramOverview,
+  getLeadInstagram,
+  listInstagramConversations,
+} from './application/reads';
