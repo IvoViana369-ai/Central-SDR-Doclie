@@ -1,8 +1,8 @@
 import type { ContactPointType, DbTransaction, LeadType, PhoneKind } from '@docline/db';
 import { ValidationError, type ValidationIssue } from '../../../shared/errors';
-import { maskEmail } from '../../../shared/mask';
+import type { IdentifierHasher } from '../../../shared/identifier-hash';
 import {
-  maskPhone,
+  maskIdentifier,
   normalizeCnpj,
   normalizeEmail,
   normalizeInstagram,
@@ -59,9 +59,7 @@ export function normalizeContactValue(
 
 /** Valor mascarado para auditoria, eventos e avisos de duplicidade. */
 export function maskContactValue(type: ContactPointType, normalized: string): string {
-  if (type === 'PHONE') return maskPhone(normalized);
-  if (type === 'EMAIL') return maskEmail(normalized);
-  return `@${normalized.slice(0, 2)}***`;
+  return maskIdentifier(type, normalized);
 }
 
 /** Campos do lead vindos do cadastro ou da edição (`undefined` = não alterar). */
@@ -96,6 +94,7 @@ export interface LeadFieldValues {
   category?: string | null;
   cnpj?: string | null;
   cnpjRoot?: string | null;
+  cnpjHash?: string | null;
   addressLine?: string | null;
   addressNumber?: string | null;
   addressComplement?: string | null;
@@ -124,6 +123,7 @@ const has = <K extends keyof LeadFieldsInput>(input: LeadFieldsInput, key: K) =>
  */
 export async function resolveLeadFields(
   tx: DbTransaction,
+  hasher: IdentifierHasher,
   input: LeadFieldsInput,
   current?: {
     companyName: string | null;
@@ -172,12 +172,14 @@ export async function resolveLeadFields(
       if (cnpj.ok) {
         data.cnpj = cnpj.value.cnpj;
         data.cnpjRoot = cnpj.value.root;
+        data.cnpjHash = hasher.hash('CNPJ', cnpj.value.cnpj);
       } else {
         issues.push({ path: 'cnpj', message: cnpj.message });
       }
     } else {
       data.cnpj = null;
       data.cnpjRoot = null;
+      data.cnpjHash = null;
     }
   }
 

@@ -408,6 +408,8 @@ model Lead {
   cnaeMain          String?        @map("cnae_main") @db.VarChar(7)
   cnpj              String?        @db.VarChar(14)
   cnpjRoot          String?        @map("cnpj_root") @db.VarChar(8)
+  /// HMAC do CNPJ (cruzamento com a Lista Não Contatar, como em contact_points).
+  cnpjHash          String?        @map("cnpj_hash")
   addressLine       String?        @map("address_line")
   addressNumber     String?        @map("address_number")
   addressComplement String?        @map("address_complement")
@@ -464,6 +466,7 @@ model Lead {
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
+  @@index([cnpjHash])
   @@index([ownerId, status])
   @@index([status, stateUf])
   @@index([municipalityCode])

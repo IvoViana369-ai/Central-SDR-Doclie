@@ -25,6 +25,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'duplicate.decide': ['ADMIN', 'MANAGER'],
   'ai.generate': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
   'optout.register': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
+  'suppression.read': ['ADMIN', 'MANAGER'],
   'suppression.revoke': ['ADMIN'],
   'permission.update': ['ADMIN', 'MANAGER'],
   'dsr.manage': ['ADMIN'],

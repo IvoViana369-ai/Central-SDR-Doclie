@@ -406,6 +406,7 @@ Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_pe
 | Tabela | Diferença | Motivo |
 |---|---|---|
 | `leads` | Colunas de pipeline, score, atividade (exceto `last_activity_at`) e desfecho entram nas Fases 4–5; `merged_into_id`, `import_batch_id` e `custom_fields` na Fase 3; `google_place_id` na Fase 9. Sem `search_vector`: a busca usa `name_search` (trigram), CNPJ e os valores normalizados de `contact_points`. Acrescentadas `archived_at` e `anonymized_at`. | Cada coluna nasce na fase que a usa |
+| `leads` (cont.) | `cnpj_hash` (HMAC do CNPJ, como `contact_points.value_hash`) | Encontrar os leads de uma supressão de CNPJ ao incluí-la ou revogá-la |
 | `lead_sources` | `default_legal_basis` (base legal sugerida no cadastro, [LGPD §4](./LGPD.md#4-bases-legais-por-origem)) e `position` | O cadastro exige base legal "com padrão por origem" (MVP M02) |
 | `tags` | `name_search` único | Evita "Parceiro" e "parceiro" ao mesmo tempo |
 | `lead_notes` | Remoção lógica (`removed_at`, `removed_by_id`), auditada | Corrigir observação com dado que não deveria estar ali ([LGPD §11](./LGPD.md#11-minimização-e-qualidade)) |

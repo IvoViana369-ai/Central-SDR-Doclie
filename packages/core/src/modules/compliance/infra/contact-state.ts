@@ -1,21 +1,19 @@
 import type { ContactPointType, ContactStatus, DbTransaction } from '@docline/db';
-import type { IdentifierHasher } from '../../../shared/identifier-hash';
+import { computeContactStatus } from '../domain/contact-status';
 import {
-  computeContactStatus,
   findActiveSuppressions,
   identifierKey,
   type ActiveSuppression,
   type SuppressionIdentifier,
-} from '../../compliance';
+} from './suppressions';
 
 /** Identificadores do lead e dos contatos, para cruzar com a Lista Não Contatar. */
 export function leadIdentifiers(
-  hasher: IdentifierHasher,
-  lead: { id: string; cnpj: string | null },
+  lead: { id: string; cnpjHash: string | null },
   contactPoints: { type: ContactPointType; valueHash: string }[],
 ): { organization: SuppressionIdentifier[]; contactPoints: SuppressionIdentifier[] } {
   const organization: SuppressionIdentifier[] = [{ type: 'LEAD', valueHash: lead.id }];
-  if (lead.cnpj) organization.push({ type: 'CNPJ', valueHash: hasher.hash('CNPJ', lead.cnpj) });
+  if (lead.cnpjHash) organization.push({ type: 'CNPJ', valueHash: lead.cnpjHash });
   return {
     organization,
     contactPoints: contactPoints.map((cp) => ({ type: cp.type, valueHash: cp.valueHash })),
@@ -31,11 +29,10 @@ export interface LeadSuppressionState {
 /** Supressões vigentes que atingem o lead (organização e cada ponto de contato). */
 export async function loadLeadSuppressions(
   tx: DbTransaction,
-  hasher: IdentifierHasher,
-  lead: { id: string; cnpj: string | null },
+  lead: { id: string; cnpjHash: string | null },
   contactPoints: { id: string; type: ContactPointType; valueHash: string }[],
 ): Promise<LeadSuppressionState> {
-  const ids = leadIdentifiers(hasher, lead, contactPoints);
+  const ids = leadIdentifiers(lead, contactPoints);
   const found = await findActiveSuppressions(tx, [...ids.organization, ...ids.contactPoints]);
   return {
     organization: ids.organization.flatMap((i) => found.get(identifierKey(i)) ?? []),
@@ -52,14 +49,13 @@ export async function loadLeadSuppressions(
  */
 export async function refreshLeadContactState(
   tx: DbTransaction,
-  hasher: IdentifierHasher,
   leadId: string,
 ): Promise<ContactStatus> {
   const lead = await tx.lead.findUniqueOrThrow({
     where: { id: leadId },
     select: {
       id: true,
-      cnpj: true,
+      cnpjHash: true,
       websiteUrl: true,
       contactPoints: {
         where: { status: 'ACTIVE' },
@@ -71,7 +67,7 @@ export async function refreshLeadContactState(
       },
     },
   });
-  const suppressions = await loadLeadSuppressions(tx, hasher, lead, lead.contactPoints);
+  const suppressions = await loadLeadSuppressions(tx, lead, lead.contactPoints);
   const contactStatus = computeContactStatus({
     legalBasis: lead.permissions[0]?.legalBasis ?? null,
     organizationSuppressions: suppressions.organization,
@@ -97,4 +93,42 @@ export async function refreshLeadContactState(
     },
   });
   return contactStatus;
+}
+
+/**
+ * Recalcula a situação de contato de todos os leads atingidos por identificadores
+ * (inclusão ou revogação na Lista Não Contatar). Devolve os ids dos leads.
+ */
+export async function refreshLeadsForIdentifiers(
+  tx: DbTransaction,
+  identifiers: SuppressionIdentifier[],
+): Promise<string[]> {
+  const leadIds = new Set<string>();
+  const byContact = identifiers.filter(
+    (i): i is SuppressionIdentifier & { type: ContactPointType } =>
+      i.type === 'PHONE' || i.type === 'EMAIL' || i.type === 'INSTAGRAM',
+  );
+  if (byContact.length > 0) {
+    const points = await tx.contactPoint.findMany({
+      where: { OR: byContact.map((i) => ({ type: i.type, valueHash: i.valueHash })) },
+      select: { leadId: true },
+      distinct: ['leadId'],
+    });
+    points.forEach((p) => leadIds.add(p.leadId));
+  }
+  const cnpjHashes = identifiers.filter((i) => i.type === 'CNPJ').map((i) => i.valueHash);
+  if (cnpjHashes.length > 0) {
+    const leads = await tx.lead.findMany({
+      where: { cnpjHash: { in: cnpjHashes } },
+      select: { id: true },
+    });
+    leads.forEach((l) => leadIds.add(l.id));
+  }
+  identifiers.filter((i) => i.type === 'LEAD').forEach((i) => leadIds.add(i.valueHash));
+
+  for (const leadId of leadIds) {
+    const exists = await tx.lead.count({ where: { id: leadId } });
+    if (exists > 0) await refreshLeadContactState(tx, leadId);
+  }
+  return [...leadIds];
 }

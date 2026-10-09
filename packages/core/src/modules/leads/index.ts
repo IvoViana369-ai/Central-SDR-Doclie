@@ -4,7 +4,6 @@ export * from './contracts/schemas';
 export * from './domain/lead';
 export { LEAD_EVENTS, LEAD_EVENT_LABELS, type LeadEventType } from './domain/events';
 export { leadScopeWhere } from './infra/scope';
-export { refreshLeadContactState } from './infra/contact-state';
 export {
   checkDuplicates,
   PossibleDuplicateError,
@@ -32,3 +31,9 @@ export {
   listSegments,
   setUserTerritories,
 } from './application/reference';
+export {
+  anonymizeLead,
+  getLeadContactability,
+  registerOptOut,
+  setChannelPermission,
+} from './application/compliance';

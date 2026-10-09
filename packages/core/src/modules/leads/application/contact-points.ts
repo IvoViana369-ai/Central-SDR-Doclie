@@ -6,7 +6,7 @@ import {
   updateContactPointInput,
 } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
-import { refreshLeadContactState } from '../infra/contact-state';
+import { refreshLeadContactState } from '../../compliance';
 import { auditLead, recordLeadEvent, touchLead } from '../infra/events';
 import { requireEditableLead } from '../infra/scope';
 import { findDuplicateLeads } from './duplicates';
@@ -119,7 +119,7 @@ export const addContactPoint = defineUseCase({
     if (input.isPrimary) await makePrimary(ctx, leadId, cp);
     else await ensurePrimary(ctx, leadId, cp.type);
 
-    await refreshLeadContactState(ctx.tx, ctx.deps.identifiers, leadId);
+    await refreshLeadContactState(ctx.tx, leadId);
     await touchLead(ctx, leadId);
     const masked = maskContactValue(cp.type, cp.valueNormalized);
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.contactPointAdded, {
@@ -174,7 +174,7 @@ export const updateContactPoint = defineUseCase({
       });
     }
     await ensurePrimary(ctx, leadId, cp.type);
-    await refreshLeadContactState(ctx.tx, ctx.deps.identifiers, leadId);
+    await refreshLeadContactState(ctx.tx, leadId);
     await touchLead(ctx, leadId);
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.contactPointUpdated, {
       payload: {
@@ -205,7 +205,7 @@ export const removeContactPoint = defineUseCase({
       data: { status: 'REMOVED', isPrimary: false },
     });
     await ensurePrimary(ctx, leadId, cp.type);
-    await refreshLeadContactState(ctx.tx, ctx.deps.identifiers, leadId);
+    await refreshLeadContactState(ctx.tx, leadId);
     await touchLead(ctx, leadId);
     const masked = maskContactValue(cp.type, cp.valueNormalized);
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.contactPointRemoved, {

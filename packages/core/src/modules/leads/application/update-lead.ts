@@ -3,7 +3,7 @@ import { diffFields } from '../../../shared/diff';
 import { defineUseCase } from '../../../shared/use-case';
 import { updateLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
-import { refreshLeadContactState } from '../infra/contact-state';
+import { refreshLeadContactState } from '../../compliance';
 import { auditLead, recordLeadEvent } from '../infra/events';
 import { requireLeadInScope } from '../infra/scope';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
@@ -62,7 +62,7 @@ export const updateLead = defineUseCase({
       throw new ConflictError('O lead foi alterado por outra pessoa. Recarregue e tente de novo.');
     }
 
-    const { data } = await resolveLeadFields(ctx.tx, input, current);
+    const { data } = await resolveLeadFields(ctx.tx, ctx.deps.identifiers, input, current);
     const changes = diffFields(current as LeadFieldValues, data, AUDITED_FIELDS);
     if (Object.keys(changes).length === 0) return loadLeadDetail(ctx, leadId);
 
@@ -88,7 +88,7 @@ export const updateLead = defineUseCase({
     }
 
     if ('cnpj' in changes || 'websiteUrl' in changes) {
-      await refreshLeadContactState(ctx.tx, ctx.deps.identifiers, leadId);
+      await refreshLeadContactState(ctx.tx, leadId);
     }
     const fields = Object.keys(changes);
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.updated, { payload: { fields } });

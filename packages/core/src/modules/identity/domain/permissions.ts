@@ -29,6 +29,7 @@ export const PERMISSIONS = [
   // Contato e conformidade
   'ai.generate',
   'optout.register',
+  'suppression.read',
   'suppression.revoke',
   'permission.update',
   'dsr.manage',
@@ -55,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'lead.export',
     'tag.manage',
     'duplicate.decide',
+    'suppression.read',
     'permission.update',
   ]),
   SDR: new Set<Permission>(LEAD_BASICS),

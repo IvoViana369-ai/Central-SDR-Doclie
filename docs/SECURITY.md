@@ -98,6 +98,7 @@
 | Decidir duplicados (mesclar) | ✅ | ✅ | ⚙️ | ❌ |
 | Gerar e aprovar mensagens com IA | ✅ | ✅ | ✅ | ✅ |
 | Registrar opt-out | ✅ | ✅ | ✅ | ✅ |
+| Consultar a Lista Não Contatar (valores mascarados) | ✅ | ✅ | ❌ | ❌ |
 | **Revogar** item da Lista Não Contatar | ✅ | ❌ | ❌ | ❌ |
 | Alterar base legal/opt-in | ✅ | ✅ | ⚙️ (com evidência) | ❌ |
 | Exportar leads | ✅ | ✅ | ❌ | ❌ |

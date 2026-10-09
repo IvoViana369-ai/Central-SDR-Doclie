@@ -5,7 +5,7 @@ import { defineUseCase, type UseCaseContext } from '../../../shared/use-case';
 import { createLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
 import { firstNameOf, formatLeadCode } from '../domain/lead';
-import { refreshLeadContactState } from '../infra/contact-state';
+import { refreshLeadContactState } from '../../compliance';
 import { auditLead, recordLeadEvent } from '../infra/events';
 import { blockingDuplicates, findDuplicateLeads, PossibleDuplicateError } from './duplicates';
 import {
@@ -50,7 +50,11 @@ export const createLead = defineUseCase({
   access: 'lead.create',
   input: createLeadInput,
   async run(ctx, input) {
-    const { data: fields, defaultDdd } = await resolveLeadFields(ctx.tx, input);
+    const { data: fields, defaultDdd } = await resolveLeadFields(
+      ctx.tx,
+      ctx.deps.identifiers,
+      input,
+    );
     const issues: ValidationIssue[] = [];
 
     const source = await ctx.tx.leadSource.findUnique({ where: { id: input.origin.sourceId } });
@@ -152,6 +156,7 @@ export const createLead = defineUseCase({
         category: fields.category ?? null,
         cnpj: fields.cnpj ?? null,
         cnpjRoot: fields.cnpjRoot ?? null,
+        cnpjHash: fields.cnpjHash ?? null,
         addressLine: fields.addressLine ?? null,
         addressNumber: fields.addressNumber ?? null,
         addressComplement: fields.addressComplement ?? null,
@@ -259,7 +264,7 @@ export const createLead = defineUseCase({
       });
     }
 
-    const contactStatus = await refreshLeadContactState(ctx.tx, ctx.deps.identifiers, lead.id);
+    const contactStatus = await refreshLeadContactState(ctx.tx, lead.id);
     const code = formatLeadCode(lead.code);
     await recordLeadEvent(ctx, lead.id, LEAD_EVENTS.created, {
       payload: {

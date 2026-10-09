@@ -104,6 +104,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'duplicate.decide': 'Decidir duplicados',
   'ai.generate': 'Gerar mensagens com IA',
   'optout.register': 'Registrar opt-out',
+  'suppression.read': 'Ver Lista Não Contatar',
   'suppression.revoke': 'Revogar Não Contatar',
   'permission.update': 'Alterar base legal',
   'dsr.manage': 'Pedidos de titulares',

@@ -150,6 +150,8 @@ Os estados pedidos no §14 dos requisitos são independentes e calculados pelo g
 | Confirmação ao titular | Uma única mensagem curta confirmando o descadastro, quando o canal permitir |
 | Compartilhamento interno | Evento `optout.registered` disponível para outros sistemas Docline (Fase 12) |
 
+**Implementado na Fase 2:** opt-out em 1 clique (lead inteiro, um canal ou um contato), inclusão manual por valor, revogação só pelo ADMIN com motivo, efeito imediato em todos os leads com o mesmo identificador, CNPJ e o próprio lead também entram na lista, consulta com valores mascarados (ADMIN/GESTOR) e gate de contactabilidade por canal com motivos legíveis. Ficam para as próximas fases: detecção de palavras-chave e confirmação ao titular (Fase 5), parada de cadência (Fase 5), prévia de importação (Fase 3) e campanhas (Fase 10).
+
 ---
 
 ## 9. Transparência com o titular
@@ -212,6 +214,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 - **Anonimização** (padrão): remove ou embaralha nome, pessoas, pontos de contato, observações e conteúdo de mensagens; mantém o registro com `status = ANONYMIZED` para que métricas agregadas (quantos contatos, conversões por cidade) continuem corretas.
 - **Exclusão física**: só pela rotina de retenção ou por decisão do jurídico, auditada.
 - O hash na Lista Não Contatar é mantido para garantir o respeito ao opt-out.
+- **Implementado na Fase 2** (`anonymizeLead`, só ADMIN, com motivo): antes de apagar, telefone, e-mail, Instagram, CNPJ e o próprio lead entram na Lista Não Contatar (motivo "solicitação do titular" quando vinculado a um pedido). Depois são removidos nome, razão social, CNPJ, endereço, site, pessoas, valores e hashes dos contatos, observações, evidências e detalhes de origem. Cidade, UF, origem, datas e eventos (que não guardam dados pessoais em claro) são mantidos para as métricas.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
 ---
@@ -281,11 +284,11 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 ## 19. Checklist por fase
 
 **Fase 1–2 (fundação e CRM)**
-- [ ] Origem, data de coleta e base legal obrigatórias no cadastro.
-- [ ] `contact_permissions` e `suppression_entries` com testes.
-- [ ] Auditoria imutável ativa.
-- [ ] Logs com mascaramento de dados pessoais.
-- [ ] Seeds somente com dados fictícios.
+- [x] Origem, data de coleta e base legal obrigatórias no cadastro.
+- [x] `contact_permissions` e `suppression_entries` com testes (incluindo garantias no banco: a lista não pode ser alterada nem apagada, só revogada).
+- [x] Auditoria imutável ativa.
+- [x] Logs com mascaramento de dados pessoais.
+- [x] Seeds somente com dados fictícios.
 
 **Fase 3 (importação)**
 - [ ] Importação exige origem e base legal; suprimidos aparecem na prévia.

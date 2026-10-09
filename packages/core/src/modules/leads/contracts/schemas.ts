@@ -215,3 +215,49 @@ export const userRefInput = z.object({ userId: id });
 
 export type CreateLeadInput = z.input<typeof createLeadInput>;
 export type UpdateLeadInput = z.input<typeof updateLeadInput>;
+
+export const registerOptOutInput = z.object({
+  leadId: id,
+  /** Todos os canais (padrão) ou um canal específico. */
+  scope: z
+    .enum(['ALL_CHANNELS', 'WHATSAPP', 'INSTAGRAM', 'EMAIL', 'PHONE'])
+    .default('ALL_CHANNELS'),
+  /** Só este contato (ex.: a pessoa deste telefone pediu para sair). */
+  contactPointId: id.nullish(),
+  reason: z
+    .enum(['OPT_OUT', 'DATA_SUBJECT_REQUEST', 'COMPLAINT', 'INVALID_CONTACT', 'INTERNAL_DECISION'])
+    .default('OPT_OUT'),
+  notes: text(500),
+});
+
+export const setChannelPermissionInput = z.object({
+  leadId: id,
+  channel: z.enum(['ALL', 'WHATSAPP', 'INSTAGRAM', 'EMAIL', 'PHONE']),
+  legalBasis: z.enum(LEGAL_BASES),
+  legalBasisAssessmentId: id.nullish(),
+  optInStatus: z.enum(['NONE', 'GRANTED', 'REVOKED']).optional(),
+  optInMethod: z
+    .enum([
+      'INBOUND_MESSAGE',
+      'FORM',
+      'EVENT',
+      'EXISTING_RELATIONSHIP',
+      'VERBAL_RECORDED',
+      'CLICK_TO_WHATSAPP',
+    ])
+    .nullish(),
+  evidence: text(1000),
+});
+
+export const contactabilityInput = z.object({
+  leadId: id,
+  mode: z.enum(['ASSISTED', 'API']).default('ASSISTED'),
+});
+
+export const anonymizeLeadInput = z.object({
+  leadId: id,
+  reason: z.string().trim().min(10, 'Explique o motivo (mín. 10 caracteres).').max(500),
+  dataSubjectRequestId: id.nullish(),
+  /** Mantém os identificadores na Lista Não Contatar (padrão: sim). */
+  suppress: z.boolean().default(true),
+});

@@ -4,7 +4,7 @@ import { CONTACT_STATUS_LABELS } from '../../compliance';
 import { formatCnpj, formatPhone, whatsappLink } from '../../normalization';
 import { leadIdInput } from '../contracts/schemas';
 import { formatLeadCode } from '../domain/lead';
-import { loadLeadSuppressions } from '../infra/contact-state';
+import { loadLeadSuppressions } from '../../compliance';
 import { requireLeadInScope } from '../infra/scope';
 
 export const leadDetailSelect = {
@@ -19,6 +19,7 @@ export const leadDetailSelect = {
   category: true,
   cnaeMain: true,
   cnpj: true,
+  cnpjHash: true,
   addressLine: true,
   addressNumber: true,
   addressComplement: true,
@@ -131,12 +132,7 @@ function displayValue(type: ContactPointType, value: string): string {
 /** Monta o detalhe do lead (já dentro do escopo do ator). */
 export async function loadLeadDetail(ctx: UseCaseContext, leadId: string) {
   const lead = await requireLeadInScope(ctx, leadId, leadDetailSelect);
-  const suppressions = await loadLeadSuppressions(
-    ctx.tx,
-    ctx.deps.identifiers,
-    lead,
-    lead.contactPoints,
-  );
+  const suppressions = await loadLeadSuppressions(ctx.tx, lead, lead.contactPoints);
   const describe = (s: { id: string; reason: string; scope: string; createdAt: Date }) => ({
     id: s.id,
     reason: s.reason,
@@ -144,8 +140,9 @@ export async function loadLeadDetail(ctx: UseCaseContext, leadId: string) {
     since: s.createdAt,
   });
 
+  const { cnpjHash: _cnpjHash, ...rest } = lead;
   return {
-    ...lead,
+    ...rest,
     codeLabel: formatLeadCode(lead.code),
     cnpjFormatted: lead.cnpj ? formatCnpj(lead.cnpj) : null,
     contactStatusLabel: CONTACT_STATUS_LABELS[lead.contactStatus],
