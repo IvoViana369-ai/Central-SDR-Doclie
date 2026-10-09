@@ -1,7 +1,8 @@
 import { listMessages, roleHasPermission } from '@docline/core';
 import type { Metadata } from 'next';
 import { AccessDenied } from '@/components/access-denied';
-import { MESSAGE_VIEWS, MessagesView, type MessageViewKey } from '@/components/sdr/messages-view';
+import { MESSAGE_VIEWS, type MessageViewKey } from '@/components/sdr/message-views';
+import { MessagesView } from '@/components/sdr/messages-view';
 import { getPageContext, loadIfAllowed } from '@/server/page-context';
 
 export const metadata: Metadata = { title: 'Mensagens' };

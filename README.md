@@ -2,15 +2,16 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 a 4 concluídas.**
+> **Status: Fases 1 a 5 concluídas.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
 > - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
 > - **Fase 4 (pipeline SDR):** Kanban com as 17 etapas, regras de movimentação, motivo de perda e histórico com duração; lista por etapa no celular; lead scoring explicável, com versões, simulação e cidades prioritárias.
+> - **Fase 5 (fila e follow-ups):** Minha Fila SDR com prioridade e ações rápidas; cadência D0/D2/D5/D10 configurável, em dias úteis e com parada automática; contato assistido (`wa.me`, Instagram, e-mail, `tel:`) com confirmação de envio; registro de respostas com detecção de opt-out; limites de horário e de frequência; transferência ao Comercial com checklist; avisos no app.
 >
-> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-4--pipeline-sdr)).
+> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-5--fila-e-follow-ups)).
 >
-> **Próxima:** Fase 5 (fila e follow-ups). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próxima:** Fase 6 (IA de prospecção e fechamento do MVP). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -172,5 +173,5 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 
 ## Próximo passo recomendado
 
-1. **Aprovar a Fase 5 — Fila e follow-ups** ([backlog F5](docs/ROADMAP.md#fase-5--fila-e-follow-ups)): tarefas, cadência configurável (D0/D2/D5/D10) com parada automática, Minha Fila SDR, gate de contactabilidade completo, contato assistido (`wa.me`, `tel:`), registro de respostas e transferência ao Comercial.
+1. **Aprovar a Fase 6 — IA de prospecção e fechamento do MVP** ([backlog F6](docs/ROADMAP.md#fase-6--ia-de-prospecção-e-fechamento-do-mvp)). A IA gera abordagens que uma pessoa edita e aprova antes do envio assistido, com guardrails, registro de custo e avaliação offline. A fase traz também o dashboard e os relatórios básicos, o endurecimento (E2E das jornadas, desempenho com 100 mil leads, revisão de segurança) e a preparação do piloto (UAT e importação da base real).
 2. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

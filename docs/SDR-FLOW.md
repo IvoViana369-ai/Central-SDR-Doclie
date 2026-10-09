@@ -130,6 +130,10 @@ stateDiagram-v2
 > - O motivo "Pediu para não ser contatado" inclui o lead na Lista Não Contatar na hora.
 > - A regra 5 entra com a cadência (Fase 5).
 
+> **Implementação (Fase 5):**
+> - Regra 5: mover o lead à mão para uma etapa fora da cadência encerra a inscrição (motivo "Lead movido para fora da cadência") e cancela as tarefas de contato abertas.
+> - "Primeiro contato" é preenchido pelo envio confirmado ou pelo contato registrado; "Follow-up 1" a "3", pela conclusão de cada passo; "Respondeu", pela resposta registrada; "Oportunidade", pela transferência; "Convertido", pela oportunidade ganha.
+
 ### 3.3 Interface
 
 Colunas com contagem e cards paginados por coluna. O card mostra nome, cidade, faixa de score, próximo passo, dias na etapa e selos (WhatsApp, Instagram, Não contatar). Filtros: responsável, cidade, UF, faixa, origem, tag. No celular, as etapas viram uma lista com seletor de etapa (sem arrastar).
@@ -139,6 +143,7 @@ Colunas com contagem e cards paginados por coluna. O card mostra nome, cidade, f
 > - Durante o arraste, as etapas de perda e de conversão aparecem numa barra fixa, sem rolar até o fim do quadro.
 > - Cada card tem o botão "Mover", que faz o mesmo pelo teclado ou no celular.
 > - O "próximo passo" no card depende das tarefas da Fase 5.
+> - Fase 5: a data da próxima ação já é gravada no lead (`next_action_at`), e a ficha e a Minha Fila mostram as tarefas. Exibir essa data no card do Kanban fica para a Fase 6.
 
 ---
 
@@ -165,6 +170,16 @@ Colunas com contagem e cards paginados por coluna. O card mostra nome, cidade, f
 - **Atraso do SDR:** se o SDR executa um passo com atraso, os passos seguintes são recalculados a partir da execução real, para não "acumular" mensagens.
 - **Reativação:** leads em `NO_RESPONSE` ficam elegíveis para uma cadência de reativação após N dias (padrão 90), com mensagem do tipo `REACTIVATION`.
 
+> **Implementação (Fase 5):**
+> - A cadência padrão "Padrão — Contabilidade" vem do seed. Inscrever leva o lead a "Aguardando prospecção" (de "Novo", "A qualificar" ou "Qualificado") e já cria a tarefa do primeiro passo.
+> - Calendário: feriados nacionais, estaduais e municipais vêm da tabela `holidays`. O fuso do lead sai do município, depois da UF, depois `America/Fortaleza`. A janela e os dias da semana vêm das regras de contato; cada cadência pode ter a sua janela. Fim de janela "24:00" vai até o fim do dia.
+> - O passo é cumprido ao concluir a tarefa, inclusive pelo envio assistido confirmado, que cumpre o passo vencido mesmo sem a pessoa escolher a tarefa. O próximo passo é calculado da execução real. "Pular passo" segue a cadência sem mudar a etapa.
+> - Depois do último passo, a inscrição espera o prazo de "Sem resposta". O job `cadence.tick` leva o lead a "Sem resposta" e conclui a cadência. O job também retoma pausas vencidas e recria a tarefa de um passo que ficou sem tarefa.
+> - Pausar (com data opcional de retomada), retomar e encerrar ficam na ficha. Reagendar o passo leva a data da inscrição junto.
+> - Parada automática: resposta (se a cadência pedir), opt-out, bloqueio na Lista Não Contatar, arquivamento, mesclagem, mudança manual de etapa e falta de contato válido para o canal do próximo passo. "Ausente" pausa até a data informada (padrão: 7 dias).
+> - Editar uma cadência sobe a versão; quem já está nela segue pela posição do passo.
+> - **Não implementado:** a cadência de reativação de 90 dias. O tipo de mensagem `REACTIVATION` já existe para configurá-la.
+
 ### 4.3 Follow-up avulso
 
 O SDR pode agendar um follow-up fora da cadência ("ligar terça às 10h"), criando uma `task` com data e hora. Também funciona pelo celular.
@@ -187,6 +202,15 @@ O SDR pode agendar um follow-up fora da cadência ("ligar terça às 10h"), cria
 | **Oportunidades abertas** | Leads do SDR em `MEETING`/`OPPORTUNITY` (acompanhamento) |
 | **Esquecidos** | Etapa aberta, sem tarefa aberta, sem atividade há N dias (padrão 7) |
 
+> **Implementação (Fase 5):**
+> - O SLA das respostas conta horas corridas (padrão 2 h, configurável), e não horas úteis.
+> - Cada lead aparece uma vez nas seções por lead: quentes, novos, esquecidos e aguardando resposta. As tarefas aparecem nas seções de tarefa.
+> - "Oportunidades abertas" são as oportunidades em aberto em que a pessoa é o SDR de origem ou o comercial. Um lead com oportunidade aberta não aparece em "Leads quentes" nem em "Esquecidos".
+> - "Leads quentes" consideram só as etapas antes do primeiro contato (Novo, A qualificar, Qualificado, Aguardando prospecção).
+> - "Aguardando resposta" são as cadências com todos os passos feitos, com a data em que o lead vai para "Sem resposta".
+> - Também há a seção **Envios a confirmar**: mensagens preparadas sem confirmação.
+> - Gestor e administrador podem consultar a fila de outra pessoa, sem as ações.
+
 ### 5.2 Ordenação por prioridade
 
 Cada item recebe `priority_score` (configurável), por exemplo:
@@ -204,6 +228,16 @@ Ordem padrão das seções: respostas → atrasados → hoje → quentes → nov
 
 Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) · Registrar contato · Registrar resposta · Reagendar · Concluir. Atalhos de teclado no desktop.
 
+> **Implementação (Fase 5):** a prioridade é calculada na leitura da fila, sem coluna gravada, e a ordem é fixa: seções na ordem acima e, dentro delas, prioridade e vencimento. As ações no item são as seguintes:
+> - Contatar ou Responder (contato assistido) e Registrar contato.
+> - Concluir, Reagendar e Pular passo (nos passos de cadência).
+> - Confirmar envio e "Não enviei".
+> - Inscrever na cadência (quentes, novos e esquecidos).
+> - Registrar resposta (aguardando resposta) e Aceitar oportunidade.
+> - Puxar leads do pool do território.
+>
+> "Gerar abordagem" chega com a IA (Fase 6). Reordenar a fila e os atalhos de teclado ficam para depois.
+
 ---
 
 ## 6. Contato pelos canais
@@ -215,6 +249,14 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 | **Registro manual** | Contato feito fora do fluxo (ligação, conversa antiga) | "Registrar contato" com data, canal e resumo (`mode = LOGGED`). |
 
 **Limites de uso responsável (modo assistido), configuráveis:** máximo de primeiros contatos por SDR por dia (padrão 40); intervalo mínimo entre contatos ao mesmo lead (padrão 48h, exceto respostas); nenhum contato fora da janela de horário. Ver [LGPD §6](./LGPD.md#6-whatsapp-base-legal-lgpd--opt-in-da-meta).
+
+> **Implementação (Fase 5):**
+> - WhatsApp, Instagram e e-mail (na ficha e na fila) abrem o diálogo de contato assistido, que consulta o gate antes de qualquer coisa.
+> - Os links são três: `wa.me` com o texto; o perfil do Instagram, com o botão para copiar o texto, porque o Instagram não aceita texto no link; e `mailto:` com o corpo.
+> - Preparar um envio novo no mesmo canal cancela o pendente anterior.
+> - Quando só o horário impede o contato, o gate informa quando o contato fica liberado.
+> - O limite diário conta os primeiros contatos no fuso do SDR. Responder a quem escreveu não conta para o intervalo.
+> - Envios feitos fora do sistema entram como "Registro manual" (`LOGGED`), com data no passado.
 
 ---
 
@@ -235,6 +277,14 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 1. **Regras determinísticas de opt-out** primeiro: palavras e expressões configuráveis, como "SAIR", "PARAR", "não quero receber", "remova meu número", "descadastrar".
 2. **IA** sugere classificação e confiança ([AI-SDR §12](./AI-SDR.md#12-classificação-de-respostas)).
 3. Confiança baixa ou possível opt-out → **humano decide**. Na dúvida sobre opt-out, a cadência é **pausada** até a decisão.
+
+> **Implementação (Fase 5):**
+> - Sem IA ainda (Fase 6): a classificação é manual, escolhida ao registrar a resposta ou depois, na ficha ou em Mensagens.
+> - Opt-out **certo** é uma resposta curta (até 3 palavras) com uma palavra da lista ou uma frase de opt-out. Ele vence a classificação escolhida (origem "regra") e leva o lead à Lista Não Contatar, a "Sem interesse" com o motivo "Pediu para não ser contatado" e ao fim da cadência.
+> - Opt-out **possível** é a palavra dentro de um texto maior. Vira a tarefa "Possível pedido de opt-out…" para o SDR classificar. Nada é bloqueado ou excluído em caso de dúvida.
+> - Qualquer resposta sem classificação encerra a cadência (o lead respondeu) e cria a tarefa "Classificar e responder". O efeito na cadência é mais forte que pausar, e o contato seguinte é decisão humana.
+> - Tarefas por classificação: "Propor reunião" (interessado); "Responder" (dúvida, objeção, outro); "Retomar contato" na data informada (ausente); "Procurar outro contato" (contato errado).
+> - Opt-out não se reclassifica: a revogação é pela Conformidade, pelo ADMIN.
 
 ---
 
@@ -259,6 +309,13 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 3. O comercial é notificado e tem um SLA de aceite (padrão 1 dia útil). Sem aceite, o Gestor é alertado.
 4. O SDR continua vendo o lead (somente leitura) para acompanhar o resultado: a conversão conta também para o SDR de origem.
 5. Ganha → `CONVERTED` + `conversion_type` (`PARTNER` ou `CUSTOMER`). Perdida → motivo obrigatório.
+
+> **Implementação (Fase 5):**
+> - O checklist usa os três itens obrigatórios acima; os recomendados e a reunião são opcionais. O comercial pode ter perfil Comercial, Gestor ou Administrador.
+> - A transferência encerra a cadência e cria a tarefa de aceite para o comercial, que recebe um aviso no sino. O job `tasks.overdue-scan` avisa os gestores quando o aceite passa do prazo.
+> - O comercial passa a ver o lead (escopo do perfil Comercial). O SDR continua com acesso; o modo somente leitura fica para a Fase 6.
+> - Perdida leva o lead a "Sem interesse" com o motivo escolhido.
+> - Mesclar dois leads com oportunidades abertas é recusado.
 
 ---
 
@@ -299,7 +356,7 @@ O resultado traz **motivos legíveis** ("Sem base legal registrada", "Número na
 |---|---|---|
 | **Manual** | Gestor atribui um lead ou um lote (ação em massa com contagem prévia) | MVP |
 | **Na importação** | Responsável padrão do lote | MVP |
-| **Puxar do pool** | SDR pega leads não atribuídos do seu território (com trava para dois SDRs não pegarem o mesmo) | MVP (SHOULD) |
+| **Puxar do pool** | SDR pega leads não atribuídos do seu território (com trava para dois SDRs não pegarem o mesmo) | ✅ Fase 5 (5 por vez, maior score primeiro, na Minha Fila) |
 | **Round-robin** | Rodízio entre SDRs ativos de uma equipe | Futura |
 | **Por cidade / UF** | `user_territories` | Futura |
 | **Por prioridade** | Leads de faixa alta para SDRs designados | Futura |

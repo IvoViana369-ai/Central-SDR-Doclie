@@ -154,6 +154,12 @@ Os estados pedidos no §14 dos requisitos são independentes e calculados pelo g
 
 **Fase 4:** perder o lead no pipeline com o motivo "Pediu para não ser contatado" registra o opt-out em todos os canais, na mesma transação da movimentação. A tela avisa antes de confirmar. A prévia da importação já marca os identificadores suprimidos (Fase 3). O score usa só sinais de negócio (canais cadastrados, cidade, tipo, tags) e mostra na ficha quanto cada critério pesou.
 
+**Fase 5:**
+- **Detecção nas respostas registradas.** As palavras e frases ficam em Configurações → Regras de contato. Uma resposta curta com a palavra, ou uma frase de opt-out, inclui o lead na Lista Não Contatar na mesma transação, mesmo que outra classificação tenha sido escolhida. A tela avisa enquanto o SDR digita. A palavra dentro de um texto maior vira tarefa para uma pessoa decidir, e nada é bloqueado ou excluído por suposição.
+- **Parada de cadência.** Opt-out ou bloqueio encerra a cadência e cancela as tarefas de contato abertas.
+- **Gate.** Todo envio assistido passa pelo gate antes de gerar o link. O gate inclui a janela de horário, o intervalo mínimo entre contatos e o limite diário de primeiros contatos. Nada é enviado automaticamente; quem envia é a pessoa, pelo app.
+- **Confirmação ao titular: pendente.** No modo assistido, o gate bloqueia qualquer mensagem depois do opt-out. A mensagem única de confirmação depende de decisão do jurídico (§20) e, no WhatsApp, de template próprio (Fase 7).
+
 ---
 
 ## 9. Transparência com o titular
@@ -217,6 +223,14 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 - **Exclusão física**: só pela rotina de retenção ou por decisão do jurídico, auditada.
 - O hash na Lista Não Contatar é mantido para garantir o respeito ao opt-out.
 - **Implementado na Fase 2** (`anonymizeLead`, só ADMIN, com motivo): antes de apagar, telefone, e-mail, Instagram, CNPJ e o próprio lead entram na Lista Não Contatar (motivo "solicitação do titular" quando vinculado a um pedido). Depois são removidos nome, razão social, CNPJ, endereço, site, pessoas, valores e hashes dos contatos, observações, evidências e detalhes de origem. Cidade, UF, origem, datas e eventos (que não guardam dados pessoais em claro) são mantidos para as métricas.
+- **Operação comercial (Fase 5):** a anonimização também apaga:
+  - o texto das mensagens e o trecho que disparou o opt-out;
+  - as anotações de ligações e reuniões;
+  - título, descrição e resultado das tarefas;
+  - o checklist e as notas da oportunidade;
+  - título e texto dos avisos ligados ao lead.
+
+  Depois, a cadência é encerrada e as tarefas abertas são canceladas. A timeline e a auditoria guardam só tipos, datas, canais e classificações, sem texto livre, e por isso não precisam de limpeza depois.
 - **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
@@ -300,13 +314,15 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [x] Seeds somente com dados fictícios.
 
 **Fase 3 (importação)**
-- [ ] Importação exige origem e base legal; suprimidos aparecem na prévia.
-- [ ] Arquivos não persistidos; `import_rows` com purga automática.
+- [x] Importação exige origem e base legal; suprimidos aparecem na prévia.
+- [x] Arquivos não persistidos; `import_rows` com purga automática.
 
 **Fase 5–6 (contato e IA)**
-- [ ] Gate em todas as ações de contato e de geração.
-- [ ] Palavras de opt-out ativas; confirmação de descadastro.
-- [ ] Limites de frequência e janela de horário.
+- [x] Gate em todas as ações de contato (Fase 5).
+- [ ] Gate nas ações de geração com IA (Fase 6).
+- [x] Palavras de opt-out ativas nas respostas registradas (Fase 5).
+- [ ] Confirmação de descadastro ao titular (depende do jurídico; ver §8).
+- [x] Limites de frequência e janela de horário (Fase 5).
 - [ ] IA com contexto mínimo; DPA do provedor revisado.
 
 **Go-live do MVP**

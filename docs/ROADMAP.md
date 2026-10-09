@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 4 concluídas · próxima: Fase 5 (Fila e follow-ups) · **Última revisão:** 2026-10-09
+> **Status:** Fases 1 a 5 concluídas · próxima: Fase 6 (IA de prospecção e fechamento do MVP) · **Última revisão:** 2026-10-09
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -25,7 +25,7 @@
 | 2 | CRM de leads | Cadastro, pessoas, contatos, lista e filtros, timeline, base de conformidade | ✅ concluída (2026-10-09) | MVP |
 | 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ✅ concluída (2026-10-09) | MVP |
 | 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ✅ concluída (2026-10-09) | MVP |
-| 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ~2,5 semanas | MVP |
+| 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ✅ concluída (2026-10-09) | MVP |
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ~3,5 semanas | MVP |
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ~2,5 semanas + prazos da Meta | Canais |
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ~1,5 semana + App Review | Canais |
@@ -286,6 +286,41 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** tarefas, cadência configurável, Minha Fila, gate de contactabilidade, contato assistido, respostas, transferência ao Comercial.
 **Aceite:** critérios M10, M11, M13, M14 e M15; suítes de cadência e opt-out.
+
+**Situação (2026-10-09):** ✅ concluída no código; as 13 histórias (F5-01 a F5-13) foram entregues.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase5.spec.ts` e pelas suítes `cadence.int.test.ts`, `messaging.int.test.ts`, `tasks.int.test.ts`, `operations.int.test.ts` (oportunidades, fila e jobs), `schedule.test.ts`, `calendar.test.ts`, `opt-out.test.ts`, `contact-timing.test.ts` e `queue.test.ts`:
+
+| Critério | O que a jornada comprova |
+|---|---|
+| M11 | Inscrever o lead na cadência padrão cria a tarefa do primeiro passo e leva o lead a "Aguardando prospecção". Depois do envio, o "Follow-up 1" fica agendado. Um follow-up avulso é criado e reagendado. |
+| M10 | O passo aparece na Minha Fila com a ação "Contatar" e sai dela depois do envio confirmado. A oportunidade aparece para o comercial com "Aceitar". |
+| M13 | O diálogo mostra o contato liberado pelo gate. "Abrir no WhatsApp" leva a `wa.me` com o texto, e só a confirmação registra o envio, avança a etapa e grava a timeline. |
+| M14 | A resposta "Sair" é avisada já ao digitar. Ao registrar, o lead entra na Lista Não Contatar, vai a "Sem interesse", a cadência termina com o motivo "Opt-out" e o WhatsApp fica bloqueado. A tela Mensagens e a Conformidade mostram o registro. |
+| M15 | Sem o checklist, a transferência é recusada. Com ele, o lead vai a "Oportunidade" e o comercial recebe o aviso no sino. Ele aceita pela fila e marca "Ganha (parceiro)", e o lead vai a "Convertido". |
+
+As suítes cobrem a agenda da cadência (D0/D2/D5/D10 em dias úteis, feriado de Finados, janela e fuso do lead, "Sem resposta"), a parada automática (resposta, opt-out, mudança de etapa, arquivamento, mesclagem, contato inválido), pausa, retomada e passo pulado. Também cobrem os limites do gate (janela, intervalo e primeiros contatos por dia) e a detecção de opt-out (certa ou possível). Por fim, cobrem a fila (seções, prioridade e cada lead uma vez), os jobs de atrasados e esquecidos, a transferência e a anonimização das mensagens.
+
+Decisões e pendências:
+
+- **Contato assistido de ponta a ponta.** WhatsApp, Instagram e e-mail abrem um diálogo que consulta o gate e registra a mensagem como "a confirmar". O envio só conta com a confirmação; sem ela, a pendência fica na fila e em Mensagens. "Ligar" continua com `tel:`, e a ligação se registra em "Registrar contato". Nada é enviado automaticamente.
+- **Os botões de WhatsApp da ficha deixaram de ser links `wa.me` diretos** (Fase 2): o contato fica registrado e a cadência avança.
+- **Regras de contato** (janela, intervalo de 48 h, 40 primeiros contatos por SDR por dia, prazos da fila, palavras de opt-out) ficam em `app_settings`. Os padrões estão no código, e a tela é do ADMIN. Fim de janela "24:00" vale até o fim do dia. O limite diário conta no fuso do SDR.
+- **Opt-out na resposta:** uma resposta curta com a palavra, ou uma frase de opt-out, é pedido certo. Ela vence a classificação escolhida e leva o lead à Lista Não Contatar e a "Sem interesse" com o motivo "Pediu para não ser contatado". A palavra dentro de um texto maior vira tarefa para o SDR decidir; nada é excluído ou bloqueado em caso de dúvida.
+- **Resposta sem classificação** encerra a cadência (motivo "O lead respondeu") e cria a tarefa "Responder". "Ausente" pausa em vez de encerrar.
+- **Prazo de resposta (SLA)** em horas corridas.
+- **Inscrever na cadência** leva o lead a "Aguardando prospecção". O envio assistido cumpre o passo vencido mesmo quando a pessoa não o escolheu.
+- **Editar uma cadência** sobe a versão; quem já está nela segue pela posição do passo. Reagendar um passo leva a data da inscrição junto.
+- **Cadência de reativação de 90 dias** não foi implementada (SHOULD); o tipo de mensagem já existe.
+- **Transferência:** o comercial pode ser alguém com perfil Comercial, Gestor ou Administrador. Ele passa a ver o lead (escopo do perfil Comercial). O SDR continua com acesso; o modo somente leitura depois da transferência fica para a Fase 6. Mesclar dois leads com oportunidades abertas é recusado.
+- **Fila de outra pessoa:** gestor e administrador consultam, sem ações.
+- **Avisos no app** (tabela `notifications`, sino no topo, atualizado a cada minuto): transferência recebida, aceite atrasado, tarefas atrasadas e leads esquecidos.
+- **LGPD na operação:** a timeline (append-only) guarda só tipos, datas e classificações, sem títulos, resultados ou textos livres. A anonimização limpa os textos de mensagens, anotações, tarefas, checklist e avisos.
+- **Fora desta fase:** modelos de mensagem e abordagens (`message_templates`) ficam para a IA da Fase 6. A prioridade é calculada na leitura da fila, sem coluna gravada.
+- **E2E:** o preparo do banco abre a janela de contato o dia todo e remove os feriados, para a jornada rodar a qualquer hora. Janela, feriados e limites têm testes com relógio fixo.
+- **Staging:** continua dependendo da conta da Docline na Render.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|

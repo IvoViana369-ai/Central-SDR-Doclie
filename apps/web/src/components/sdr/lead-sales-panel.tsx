@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
-import { api } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
 import { ContactDialog } from './contact-dialog';
 import { MessageItem } from './message-item';
@@ -712,7 +712,14 @@ function HandoffDialog({
       });
       onDone('Lead transferido ao Comercial.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível transferir.');
+      // Checklist incompleto: mostra o que falta (a validação é do servidor).
+      setError(
+        err instanceof ApiError
+          ? err.errors.length > 0
+            ? err.errors.map((e) => e.message).join(' ')
+            : err.message
+          : 'Não foi possível transferir.',
+      );
       setBusy(false);
     }
   }

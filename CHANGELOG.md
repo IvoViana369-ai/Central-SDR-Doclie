@@ -4,6 +4,77 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.5.0] — Fase 5: Fila e follow-ups — 2026-10-09
+
+Aceite da fase (MVP M10, M11, M13, M14 e M15) coberto pela jornada E2E `fase5.spec.ts` e pelas suítes de cadência e opt-out. Totais: 317 testes unitários, 155 de integração e 30 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** tarefas, atividades, mensagens, cadências (passos e inscrições), oportunidades e avisos. Índices parciais garantem uma inscrição em andamento por lead, uma oportunidade aberta por lead, uma tarefa aberta por passo e uma cadência padrão. O seed cria a cadência "Padrão — Contabilidade" (D0, D2, D5 e D10).
+- **Tarefas e atividades (F5-01, F5-02):** criar, reagendar, concluir com resultado e cancelar. Ligação, reunião e visita registradas, com duração e resultado; ligação atendida e reunião realizada contam como contato.
+- **Calendário útil (F5-03):**
+  - dias úteis com feriados nacionais, estaduais e municipais;
+  - fuso do lead (município, UF ou `America/Fortaleza`);
+  - janela de horário, com fim "24:00" permitido.
+- **Motor de cadência (F5-04, F5-05):**
+  - cada passo vira tarefa, e concluí-la move o lead para a etapa do passo e agenda o próximo a partir da execução real;
+  - depois do último passo, o job `cadence.tick` leva o lead a "Sem resposta";
+  - pausar (com retomada automática), retomar, encerrar e pular passo;
+  - parada automática por resposta, opt-out, bloqueio, arquivamento, mesclagem, mudança manual de etapa ou falta de contato válido.
+- **Configuração de cadências (F5-06):** passos, canal, ação, etapa de destino, janela, dias úteis e prazo de "Sem resposta", com versão; escolha da cadência padrão.
+- **Minha Fila (F5-07):**
+  - seções: respostas com prazo, atrasados, envios a confirmar, hoje, quentes, novos, esquecidos, aguardando resposta e oportunidades;
+  - prioridade calculada na leitura e ações rápidas no item;
+  - gestor e ADMIN consultam a fila de outra pessoa.
+- **Gate completo (F5-08):** janela de horário, intervalo mínimo entre contatos (exceto ao responder quem escreveu) e limite diário de primeiros contatos por SDR. Quando só o horário impede o contato, informa quando ele fica liberado.
+- **Contato assistido (F5-09):**
+  - links `wa.me` com o texto, Instagram (copiar o texto e abrir o perfil) e e-mail;
+  - o envio só conta com a confirmação; sem ela, fica pendente;
+  - envio feito fora do sistema pode ser registrado;
+  - o passo de cadência vencido é cumprido pelo envio.
+- **Respostas (F5-10):**
+  - registro da resposta colada pelo SDR, com classificação na hora ou depois;
+  - detecção de opt-out: certo (Lista Não Contatar na hora) ou possível (tarefa para decidir);
+  - tarefas e etapas por classificação; "Ausente" pausa a cadência.
+- **Jobs e avisos (F5-11):** `tasks.overdue-scan` (tarefas atrasadas e transferências sem aceite) e `leads.forgotten-scan` (leads esquecidos); sino de avisos no topo.
+- **Transferência ao Comercial (F5-12):**
+  - checklist de qualificação e oportunidade com prazo de aceite;
+  - aviso e tarefa para o comercial;
+  - aceite, ganho (parceiro ou cliente, lead em "Convertido") e perda com motivo.
+- **Puxar do pool (F5-13):** 5 leads por vez do território, com trava contra dois SDRs pegarem o mesmo.
+- **Telas:**
+  - `/fila` e `/mensagens`;
+  - na ficha do lead: próximas ações, cadência, mensagens e respostas, e Comercial;
+  - `/configuracoes/cadencias` e `/configuracoes/contato` (regras de contato e palavras de opt-out).
+- **API v1:** 34 rotas da Fase 5 (ARCHITECTURE §9.2).
+
+### Alterado
+
+- **Botões de WhatsApp, Instagram e e-mail da ficha** abrem o contato assistido em vez de links diretos, para o envio ficar registrado. "Ligar" segue com `tel:`.
+- **Score:** "Já respondeu" e "Mostrou interesse" passam a pontuar.
+- **Escopo do perfil Comercial:** inclui os leads das oportunidades em que ele é o comercial responsável.
+- **Arquivar, mesclar e anonimizar** encerram a cadência e cuidam das tarefas, mensagens e oportunidades do lead. A mesclagem é recusada quando os dois leads têm oportunidade aberta.
+- **Dashboard e menu:** Minha Fila e Mensagens disponíveis; próximas entregas a partir da Fase 6.
+
+### Decidido
+
+- **Nada é enviado automaticamente.** O modo assistido abre o app com o texto; quem envia é a pessoa, e a mensagem fica registrada.
+- **Opt-out certo vence a classificação escolhida.** Na dúvida, uma pessoa decide; nada é bloqueado ou excluído por suposição.
+- **Resposta sem classificação** encerra a cadência e cria a tarefa "Classificar e responder".
+- **Prazo de resposta (SLA)** em horas corridas.
+- **Regras de contato** em `app_settings`, com os padrões no código.
+- **Editar a cadência** sobe a versão; quem já está nela segue pela posição do passo.
+- **Comercial** pode ser alguém com perfil Comercial, Gestor ou Administrador.
+- **Timeline e auditoria sem texto livre:** guardam tipos, datas, canais e classificações; títulos, resultados e textos ficam nas tabelas que a anonimização limpa.
+
+### Pendente
+
+- **Confirmação de descadastro ao titular:** depende do jurídico e, no WhatsApp, de template (Fase 7).
+- **SDR somente leitura depois da transferência:** Fase 6.
+- **Cadência de reativação (90 dias):** não implementada; o tipo de mensagem já existe.
+- **Próximo passo no card do Kanban:** a data já é gravada no lead; a exibição fica para a Fase 6.
+- **Staging na Render e Sentry:** continuam dependendo da Docline.
+
 ## [0.4.0] — Fase 4: Pipeline SDR — 2026-10-09
 
 Aceite da fase (MVP M07 e M08) coberto por jornadas E2E que rodam com o worker de verdade. Totais: 293 testes unitários, 129 de integração e 26 jornadas E2E.

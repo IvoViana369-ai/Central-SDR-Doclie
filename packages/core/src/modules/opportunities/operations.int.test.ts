@@ -110,6 +110,28 @@ describe('fila, transferência ao Comercial e avisos (M10, M15, F5-11, F5-13)', 
     expect((await getMyQueue(deps, manager, { userId: sdr.id })).userId).toBe(sdr.id);
   });
 
+  it('Minha Fila: lead transferido, mesmo quente e sem contato, fica só em oportunidades', async () => {
+    const { id } = await createLead(deps, sdr, make('Escritório Jatobá'));
+    await db.lead.update({ where: { id }, data: { score: 90, scoreBand: 'PRIORITY' } });
+    const hot = (await getMyQueue(deps, sdr, {})).sections.find((s) => s.key === 'HOT_LEADS')!;
+    expect(hot.items.map((i) => i.lead.id)).toEqual([id]);
+
+    await handoffToSales(deps, sdr, {
+      leadId: id,
+      salesOwnerId: sales.id,
+      qualification: QUALIFICATION,
+    });
+    // Sem tarefa nem atividade há dias: não vira "esquecido" para o SDR.
+    at('2026-10-30T12:00:00Z');
+    await db.task.updateMany({ where: { leadId: id }, data: { status: 'DONE' } });
+    await db.lead.update({ where: { id }, data: { nextActionAt: null } });
+    const queue = await getMyQueue(deps, sdr, {});
+    const shownIn = queue.sections
+      .filter((s) => s.items.some((i) => i.lead.id === id))
+      .map((s) => s.key);
+    expect(shownIn).toEqual(['OPEN_OPPORTUNITIES']);
+  });
+
   it('transferência: checklist, oportunidade, aviso e aceite; o comercial passa a ver o lead', async () => {
     const { id } = await createLead(deps, sdr, make('Escritório Tamarindo'));
     await enrollLead(deps, sdr, { leadId: id });

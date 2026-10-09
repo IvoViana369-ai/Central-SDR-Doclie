@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DEFAULT_TIME_ZONE, localDayBounds } from '../../../shared/calendar';
 import { ForbiddenError } from '../../../shared/errors';
 import { defineUseCase } from '../../../shared/use-case';
+import { PRE_CONTACT_STAGE_KEYS } from '../../engagement';
 import { formatLeadCode } from '../../leads';
 import { loadContactRules } from '../../settings';
 import {
@@ -100,6 +101,10 @@ export const getMyQueue = defineUseCase({
       contactStatus: { notIn: ['OPTED_OUT', 'BLOCKED'] },
     };
     const openStage: Prisma.LeadWhereInput = { stage: { category: { in: ['OPEN', 'PARKED'] } } };
+    // Lead transferido ao Comercial fica em "Oportunidades abertas", não nas seções de prospecção.
+    const noOpenOpportunity: Prisma.LeadWhereInput = {
+      opportunities: { none: { status: 'OPEN' } },
+    };
 
     const [
       replyCandidates,
@@ -164,7 +169,9 @@ export const getMyQueue = defineUseCase({
         where: {
           ownerId: userId,
           ...activeLead,
-          ...openStage,
+          ...noOpenOpportunity,
+          // Quentes ainda não trabalhados: antes do primeiro contato.
+          stage: { key: { in: PRE_CONTACT_STAGE_KEYS } },
           scoreBand: { in: ['HOT', 'PRIORITY'] },
           firstContactAt: null,
         },
@@ -187,6 +194,7 @@ export const getMyQueue = defineUseCase({
         where: {
           ownerId: userId,
           ...activeLead,
+          ...noOpenOpportunity,
           stage: { category: 'OPEN' },
           nextActionAt: null,
           lastActivityAt: { lt: new Date(now.getTime() - rules.forgottenAfterDays * DAY_MS) },

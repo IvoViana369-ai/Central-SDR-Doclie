@@ -382,9 +382,11 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 ### 9.2 Endpoints por módulo
 
-> **Implementado até a Fase 4** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`** (Fase 2); importação (`imports`: upload multipart, lote, `mapping`, `preview`, `rows/{rowId}`, **`decisions`** — mesma decisão para todas as linhas de uma situação —, `commit`, `report` e **`cancel`**) e duplicados (`duplicates`, comparação, `merge`, `keep-separate`, `ignore` e `scan`), na Fase 3. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. O upload confere o tamanho antes de ler o corpo; `commit` e `scan` respondem `202` (o trabalho segue no worker). **`POST /exports`** devolve o CSV na própria resposta (`text/csv`, separador `;`, BOM UTF-8). Erros possíveis: `429 RATE_LIMITED` (5 exportações em 24 h) e `422` (seleção vazia ou acima de 20.000 leads). Não implementadas: `/import-mapping-templates` (o modelo é salvo no `mapping` e sugerido pelo cabeçalho) e `/normalize/preview` (a prévia da importação cobre).
+> **Implementado até a Fase 5** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`** (Fase 2); importação (`imports`: upload multipart, lote, `mapping`, `preview`, `rows/{rowId}`, **`decisions`** — mesma decisão para todas as linhas de uma situação —, `commit`, `report` e **`cancel`**) e duplicados (`duplicates`, comparação, `merge`, `keep-separate`, `ignore` e `scan`), na Fase 3. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. O upload confere o tamanho antes de ler o corpo; `commit` e `scan` respondem `202` (o trabalho segue no worker). **`POST /exports`** devolve o CSV na própria resposta (`text/csv`, separador `;`, BOM UTF-8). Erros possíveis: `429 RATE_LIMITED` (5 exportações em 24 h) e `422` (seleção vazia ou acima de 20.000 leads). Não implementadas: `/import-mapping-templates` (o modelo é salvo no `mapping` e sugerido pelo cabeçalho) e `/normalize/preview` (a prévia da importação cobre).
 >
 > **Fase 4:** `GET /pipelines`, `GET /pipelines/{id}` e `PUT /pipelines/{id}/stages` (`default` aponta para o pipeline padrão); `POST /pipelines/{id}/board` e **`POST /pipelines/{id}/board/cards`** (próxima página de uma coluna); `POST /leads/{id}/stage` (com `version`; conflito → `409`), `GET /leads/{id}/stage-history`, **`GET /leads/{id}/score`** (explicação por critério e histórico) e **`GET /loss-reasons`**; `GET /scoring/models/active`, **`GET /scoring/models`**, `POST /scoring/models` (abre o rascunho ou devolve o aberto), **`PUT` e `DELETE /scoring/models/{id}`** (salvar e descartar o rascunho), `simulate` e `activate`; **`GET/POST /priority-cities`** e **`DELETE /priority-cities/{code}`**. O quadro é `POST`, e não `GET`, porque recebe a mesma seleção da lista de leads (DSL e busca) no corpo.
+>
+> **Fase 5:** `GET /queue` (Minha Fila; `?userId=` para gestor e ADMIN); `POST /tasks`, `PATCH /tasks/{id}` (reagendar) e `POST /tasks/{id}/complete|cancel|skip` (pular passo de cadência); `GET /leads/{id}/tasks`; `POST /leads/{id}/activities`; `POST /leads/{id}/messages/assisted` (prepara o envio assistido e devolve o link), `POST /leads/{id}/messages/logged` (envio feito fora do sistema), `GET /leads/{id}/messages`, **`GET /messages?view=pending|sent|replies|unclassified`** e `POST /messages/{id}/confirm|cancel|classify`; `POST /leads/{id}/replies` (resposta recebida, com a detecção de opt-out); `GET/POST /leads/{id}/cadence` e `POST /leads/{id}/cadence/pause|resume|stop`; `GET/POST /cadences` (`?all=1` inclui as inativas), `PUT /cadences/{id}` e **`POST /cadences/{id}/default`**; `POST /leads/{id}/handoff`, `GET /leads/{id}/opportunities`, **`GET /opportunities`** e `POST /opportunities/{id}/accept|won|lost`; **`GET /sales-owners`**; **`GET /notifications`** e **`POST /notifications/read`**; `GET/PUT /settings/contact-rules`; **`POST /leads/pull`** (puxar do pool do território). As rotas seguem o recurso do lead em vez de `/enrollments/{id}` e `/messages/inbound`, porque cada lead tem no máximo uma inscrição em andamento e a resposta sempre pertence a um lead. Ficam para a Fase 6: `/message-templates`, `/approaches` e `/ai/*`.
 >
 > **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
 
@@ -397,7 +399,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /me` | Usuário atual, perfil e permissões efetivas | MVP |
 | `GET/POST /users`, `PATCH /users/{id}` | Gestão de usuários (convite, perfil, ativar/desativar) | MVP |
 | `GET/PUT /users/{id}/territories` | Territórios (UF/cidade) do usuário | 2 (estrutura) |
-| `GET/PUT /settings/{key}` | Configurações de negócio (horários, limites, palavras de opt-out…) | MVP |
+| `GET/PUT /settings/contact-rules` | Regras de contato: janela, limites, prazos da fila, palavras de opt-out (ADMIN altera) | MVP |
 | `GET/POST/PATCH/DELETE /saved-views` | Visões e filtros salvos | MVP |
 | `GET /audit-logs` | Consulta de auditoria (ADMIN) | MVP |
 | `GET /health` | Health check (sem autenticação, sem dados) | MVP |
@@ -423,7 +425,9 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /leads/{id}/stage` | Mover de etapa (motivo obrigatório em perdas) | MVP |
 | `GET /leads/{id}/contactability` | Resultado do gate por canal | MVP |
 | `POST /leads/{id}/activities` | Registrar contato (ligação, reunião, visita) | MVP |
+| `POST /leads/pull` | Puxar os próximos leads do pool do território (com trava) | MVP |
 | `POST /leads/{id}/handoff` | Qualificar e transferir ao Comercial (cria oportunidade) | MVP |
+| `GET /opportunities`, `POST /opportunities/{id}/accept\|won\|lost` | Oportunidades: aceite, ganho e perda | MVP |
 | `POST /leads/bulk` | Ação em massa por ids ou filtro (`dryRun` obrigatório antes) | MVP |
 | `GET/POST/PATCH /tags`, `GET /lead-sources`, `GET /segments` | Cadastros auxiliares | MVP |
 
@@ -458,11 +462,11 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /scoring/models` | Nova versão (rascunho) | MVP |
 | `POST /scoring/models/{id}/simulate` | Impacto na distribuição de faixas antes de ativar | MVP |
 | `POST /scoring/models/{id}/activate` | Ativar e recalcular tudo (job) | MVP |
-| `GET /queue/me` | "Minha Fila SDR" com seções e prioridade | MVP |
-| `GET/POST /tasks`, `PATCH /tasks/{id}` | Tarefas: criar, concluir, reagendar | MVP |
+| `GET /queue` | "Minha Fila SDR" com seções e prioridade | MVP |
+| `POST /tasks`, `PATCH /tasks/{id}`, `POST /tasks/{id}/complete\|cancel\|skip` | Tarefas: criar, reagendar, concluir, cancelar, pular passo | MVP |
 | `GET/POST /cadences`, `PUT /cadences/{id}` | Cadências (ADMIN) | MVP |
-| `POST /leads/{id}/enrollments` | Inscrever lead em cadência | MVP |
-| `POST /enrollments/{id}/pause\|resume\|stop` | Controle da inscrição | MVP |
+| `POST /leads/{id}/cadence` | Inscrever lead em cadência | MVP |
+| `POST /leads/{id}/cadence/pause\|resume\|stop` | Controle da inscrição | MVP |
 
 **Mensagens, IA e conformidade**
 
@@ -474,10 +478,11 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /ai/generations/{id}/discard` | Descartar com motivo | MVP |
 | `POST /ai/classify-reply` | Sugerir classificação para uma resposta recebida | MVP (SHOULD) |
 | `GET /leads/{id}/messages` | Histórico de mensagens | MVP |
-| `POST /messages` | Criar mensagem (modo `ASSISTED` no MVP; `API` na Fase 7) | MVP |
-| `POST /messages/{id}/confirm-sent` | Confirmar envio feito pelo humano (modo assistido) | MVP |
-| `POST /leads/{id}/messages/inbound` | Registrar resposta recebida manualmente | MVP |
-| `GET/POST /message-templates`, `GET/POST /approaches` | Templates internos e abordagens | MVP |
+| `POST /leads/{id}/messages/assisted` | Preparar envio assistido (gate, link `wa.me`/Instagram/e-mail); `API` na Fase 7 | MVP |
+| `POST /messages/{id}/confirm\|cancel` | Confirmar ou cancelar o envio feito pelo humano (modo assistido) | MVP |
+| `POST /leads/{id}/replies`, `POST /messages/{id}/classify` | Registrar resposta recebida manualmente e classificá-la | MVP |
+| `GET /notifications`, `POST /notifications/read` | Avisos no app | MVP |
+| `GET/POST /message-templates`, `GET/POST /approaches` | Templates internos e abordagens | MVP (Fase 6) |
 | `GET/POST /suppressions`, `POST /suppressions/{id}/revoke` | Lista Não Contatar (revogação só ADMIN, com motivo) | MVP |
 | `POST /leads/{id}/opt-out` | Registrar opt-out (todos os canais ou um) | MVP |
 | `PUT /leads/{id}/permissions/{channel}` | Base legal e opt-in por canal | MVP |
@@ -515,8 +520,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `score.recompute-lead` | Ações em massa de tags (lotes de 1.000 leads). As mudanças de um lead só (contatos, cidade, tipo, tags) recalculam na própria transação | Recalcula o score; grava histórico e o evento `score.changed` quando o score ou a faixa mudam | 4 |
 | `score.recompute-all` | Ativação de modelo, inclusão ou retirada de cidade prioritária (só os leads da cidade) e subida do worker com leads sem score | Recalcula a base em lotes de 500 leads por transação | 4 |
 | `cadence.tick` | A cada 5 min | Conclui as cadências sem resposta no prazo (lead em `NO_RESPONSE`), retoma pausas vencidas e recria a tarefa de um passo que ficou sem tarefa. Cada passo vira tarefa já na inscrição e a cada passo executado (modo assistido); envios automáticos só na Fase 7 | 5 |
-| `tasks.overdue-scan` | De hora em hora | Marca atrasos, recalcula prioridade, notifica | 5 |
-| `leads.forgotten-scan` | Diário | Marca leads sem atividade há N dias em etapas abertas | 5 |
+| `tasks.overdue-scan` | De hora em hora (minuto 7) | Avisa cada pessoa das tarefas que atrasaram (uma vez por tarefa) e os gestores das transferências sem aceite no prazo. A prioridade da fila é calculada na leitura | 5 |
+| `leads.forgotten-scan` | Diário (10:20 UTC, 07:20 em Fortaleza) | Avisa cada responsável de quantos leads estão esquecidos: etapa aberta, sem próxima ação e sem atividade há N dias (regras de contato) | 5 |
 | `retention.enforce` | Diário | Anonimiza conforme a política de retenção (as `import_rows` têm job próprio, `import.purge`) | 5+ |
 | `ai.generate-batch` | Agendado (opcional) | Pré-gera rascunhos para a fila do dia seguinte (Batch API, custo menor) | 6+ |
 | `webhook.process` | Webhook recebido | Processa eventos da Meta (status, mensagens, opt-out) | 7 |
