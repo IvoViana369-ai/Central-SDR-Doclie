@@ -44,3 +44,29 @@ export async function recordSignIn(
     }),
   });
 }
+
+/** Eventos da verificação em duas etapas (docs/SECURITY.md §3). */
+export type TwoFactorEvent = 'enabled' | 'disabled' | 'challenge' | 'backup_codes_regenerated';
+
+const TWO_FACTOR_ACTIONS: Record<TwoFactorEvent, string> = {
+  enabled: 'auth.2fa_enabled',
+  disabled: 'auth.2fa_disabled',
+  /** Senha certa; falta o código do aplicativo (o login só é registrado depois dele). */
+  challenge: 'auth.2fa_challenge',
+  backup_codes_regenerated: 'auth.2fa_backup_codes',
+};
+
+export async function recordTwoFactorEvent(
+  db: DbClient,
+  meta: RequestMeta,
+  event: { type: TwoFactorEvent; userId: string },
+): Promise<void> {
+  await db.auditLog.create({
+    data: auditData({ kind: 'anonymous' }, meta, {
+      action: TWO_FACTOR_ACTIONS[event.type],
+      entityType: 'user',
+      entityId: event.userId,
+      actorOverride: { type: 'USER', id: event.userId },
+    }),
+  });
+}

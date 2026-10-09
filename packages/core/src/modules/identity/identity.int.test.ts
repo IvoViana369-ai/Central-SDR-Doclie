@@ -25,6 +25,7 @@ import {
   listUsers,
   recordSignIn,
   resendInvitation,
+  resetUserTwoFactor,
   resolveActor,
   setUserStatus,
 } from '.';
@@ -282,6 +283,40 @@ describe('gestão de usuários', () => {
     const sdrActor = await resolveActor(db, sdr.id);
     expect(sdrActor).toMatchObject({ kind: 'user', status: 'INACTIVE' });
     await expect(getCurrentUser(deps, sdrActor!, {})).rejects.toThrow(UnauthenticatedError);
+  });
+
+  it('ADMIN redefine a 2FA de quem perdeu o celular: segredo apagado, sessões encerradas, auditado', async () => {
+    const { actor } = await createUser('ADMIN', 'admin@example.com');
+    const { actor: managerActor, user: manager } = await createUser(
+      'MANAGER',
+      'gestor@example.com',
+    );
+    await db.user.update({ where: { id: manager.id }, data: { twoFactorEnabled: true } });
+    await db.twoFactor.create({
+      data: { userId: manager.id, secret: 'cifrado', backupCodes: 'cifrados' },
+    });
+    await db.session.create({
+      data: {
+        userId: manager.id,
+        token: 'sessao-2fa',
+        expiresAt: new Date('2026-12-01T00:00:00Z'),
+      },
+    });
+
+    await expect(resetUserTwoFactor(deps, managerActor, { userId: manager.id })).rejects.toThrow(
+      ForbiddenError,
+    );
+    const updated = await resetUserTwoFactor(deps, actor, { userId: manager.id });
+    expect(updated.twoFactorEnabled).toBe(false);
+    expect(await db.twoFactor.count()).toBe(0);
+    expect(await db.session.count({ where: { userId: manager.id } })).toBe(0);
+    const audit = await db.auditLog.findFirstOrThrow({ where: { action: 'user.2fa_reset' } });
+    expect(audit).toMatchObject({ entityId: manager.id, metadata: { revokedSessions: 1 } });
+
+    // Sem 2FA ativa, não há o que redefinir.
+    await expect(resetUserTwoFactor(deps, actor, { userId: manager.id })).rejects.toThrow(
+      BusinessRuleError,
+    );
   });
 
   it('lista usuários com filtros e devolve permissões do usuário atual', async () => {

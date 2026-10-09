@@ -1,6 +1,7 @@
 'use client';
 
 import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useState } from 'react';
@@ -29,16 +30,23 @@ export function UserMenu({ name, roleLabel }: { name: string; roleLabel: string 
 
   return (
     <div className="flex items-center gap-3 border-t border-white/10 pt-4">
-      <div
-        className="grid size-8 shrink-0 place-items-center rounded-full bg-sidebar-active text-xs font-semibold"
-        aria-hidden
+      <Link
+        href="/conta"
+        className="-m-1 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 hover:bg-sidebar-active"
+        title="Minha conta"
+        aria-label={`Minha conta (${name})`}
       >
-        {initials(name)}
-      </div>
-      <div className="min-w-0 flex-1 leading-tight">
-        <p className="truncate text-sm font-medium">{name}</p>
-        <p className="truncate text-xs text-sidebar-muted">{roleLabel}</p>
-      </div>
+        <span
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-sidebar-active text-xs font-semibold"
+          aria-hidden
+        >
+          {initials(name)}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-sm font-medium">{name}</span>
+          <span className="block truncate text-xs text-sidebar-muted">{roleLabel}</span>
+        </span>
+      </Link>
       <button
         type="button"
         onClick={() => setTheme(next.value)}

@@ -1,6 +1,7 @@
 export {
   ROLES,
   ROLE_LABELS,
+  TWO_FACTOR_ROLES,
   USER_STATUSES,
   USER_STATUS_LABELS,
   type Role,
@@ -27,8 +28,19 @@ export {
   resendInvitation,
   type InvitationResult,
 } from './application/invitations';
-export { changeUserRole, getCurrentUser, listUsers, setUserStatus } from './application/users';
-export { recordSignIn, resolveActor } from './application/session';
+export {
+  changeUserRole,
+  getCurrentUser,
+  listUsers,
+  resetUserTwoFactor,
+  setUserStatus,
+} from './application/users';
+export {
+  recordSignIn,
+  recordTwoFactorEvent,
+  resolveActor,
+  type TwoFactorEvent,
+} from './application/session';
 export { invitationEmail, loginAlertEmail, passwordResetEmail } from './application/emails';
 export { LOGIN_THROTTLE, formatWait, throttleDelaySeconds } from './domain/login-throttle';
 export {

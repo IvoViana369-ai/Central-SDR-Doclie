@@ -1,4 +1,4 @@
-import { permissionsOf, ROLE_LABELS } from '@docline/core';
+import { permissionsOf, ROLE_LABELS, TWO_FACTOR_ROLES } from '@docline/core';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AppShell } from '@/components/layout/app-shell';
@@ -13,6 +13,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
     <AppShell
       user={{ name: user.name, roleLabel: ROLE_LABELS[user.actor.role] }}
       permissions={permissionsOf(user.actor.role)}
+      twoFactorPending={TWO_FACTOR_ROLES.includes(user.actor.role) && !user.twoFactorEnabled}
     >
       {children}
     </AppShell>

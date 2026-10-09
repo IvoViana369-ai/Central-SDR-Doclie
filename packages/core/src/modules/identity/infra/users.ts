@@ -11,6 +11,7 @@ export const publicUserSelect = {
   teamId: true,
   timezone: true,
   lastLoginAt: true,
+  twoFactorEnabled: true,
   createdAt: true,
 } as const;
 

@@ -62,8 +62,19 @@
 | Sessão | Cookie `HttpOnly`, `Secure`, `SameSite=Lax`; expiração por inatividade; renovação; revogação ao desativar usuário ou trocar senha |
 | Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos (por conta desde a Fase 2, ver §12) |
 | Redefinição de senha | Token de uso único, curto (≤ 30 min), invalida sessões anteriores |
-| 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9) |
+| 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9). *Desde a Fase 2:* disponível para todos em "Minha conta"; ADMIN/GESTOR sem 2FA veem um lembrete em todas as telas (ver nota abaixo) |
 | SSO | Opcional futuro: Google Workspace da Docline |
+
+**Verificação em duas etapas (Fase 2, F2-16).** Plugin `two-factor` do Better Auth, só com aplicativo autenticador (TOTP: SHA-1, 30 s, 6 dígitos). Não há código por e-mail.
+
+| Etapa | Como funciona |
+|---|---|
+| Ativar | Em "Minha conta": senha → QR code (desenhado em SVG, sem imagem externa) ou chave → primeiro código válido. Só então a verificação passa a valer. Ficam 10 códigos de recuperação, cada um de uso único e mostrados uma única vez. |
+| Login | A senha certa abre um desafio de 10 min (cookie assinado), e a sessão só é criada com o código do aplicativo ou um código de recuperação. 10 códigos errados seguidos bloqueiam a verificação da conta por 15 min; isso exige saber a senha, então não serve para trancar um colega. |
+| Armazenamento | Segredo e códigos de recuperação cifrados com `BETTER_AUTH_SECRET` na tabela `two_factors`. **Trocar esse segredo invalida a 2FA de todos**, que precisarão reativar. |
+| Auditoria | `auth.2fa_enabled`, `auth.2fa_disabled`, `auth.2fa_backup_codes` e `auth.2fa_challenge` (senha certa, aguardando código). O `auth.login` só é gravado depois do segundo fator. Código errado vira `auth.login_failed` com motivo `2FA_…`. |
+| Desativar | Exige a senha e fica auditado. |
+| Perda do celular | Usa-se um código de recuperação. Sem eles, a redefinição da 2FA é manual pelo ADMIN no banco (procedimento a definir antes da Fase 7). |
 
 ---
 
@@ -312,7 +323,7 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - [x] Exportação restrita, auditada e protegida contra CSV injection (Fase 2: só ADMIN/GESTOR, 5 por dia, até 20.000 leads, contatos só quando pedidos e nunca os da Lista Não Contatar).
 - [ ] Guardrails de IA e cotas.
 - [ ] Backups e restauração testados antes do go-live.
-- [ ] 2FA para ADMIN/GESTOR (SHOULD).
+- [x] 2FA para ADMIN/GESTOR (SHOULD): TOTP com códigos de recuperação e lembrete persistente (Fase 2). O bloqueio de acesso sem 2FA fica para antes da Fase 7.
 
 **Fases 7+ — Integrações**
 - [ ] 2FA obrigatório para ADMIN/GESTOR.

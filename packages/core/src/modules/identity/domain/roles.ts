@@ -16,3 +16,9 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   ACTIVE: 'Ativo',
   INACTIVE: 'Inativo',
 };
+
+/**
+ * Perfis para os quais a verificação em duas etapas é exigida
+ * (docs/SECURITY.md §3: SHOULD no MVP, MUST antes das Fases 7–9).
+ */
+export const TWO_FACTOR_ROLES: readonly Role[] = ['ADMIN', 'MANAGER'];

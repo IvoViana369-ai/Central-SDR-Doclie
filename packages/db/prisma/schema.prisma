@@ -46,23 +46,26 @@ enum UserStatus {
 
 /// Usuário interno. Campos base exigidos pelo Better Auth + campos do domínio.
 model User {
-  id            String     @id @default(uuid(7)) @db.Uuid
-  name          String
-  email         String     @unique
-  emailVerified Boolean    @default(false) @map("email_verified")
-  image         String?
-  role          UserRole   @default(SDR)
-  status        UserStatus @default(INVITED)
-  teamId        String?    @map("team_id") @db.Uuid
-  timezone      String     @default("America/Fortaleza")
-  lastLoginAt   DateTime?  @map("last_login_at") @db.Timestamptz(3)
-  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String     @id @default(uuid(7)) @db.Uuid
+  name             String
+  email            String     @unique
+  emailVerified    Boolean    @default(false) @map("email_verified")
+  image            String?
+  role             UserRole   @default(SDR)
+  status           UserStatus @default(INVITED)
+  teamId           String?    @map("team_id") @db.Uuid
+  timezone         String     @default("America/Fortaleza")
+  lastLoginAt      DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  /// Verificação em duas etapas (TOTP) ativa (Better Auth, plugin two-factor).
+  twoFactorEnabled Boolean    @default(false) @map("two_factor_enabled")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   team               Team?        @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
   managedTeams       Team[]       @relation("TeamManager")
   sessions           Session[]
   accounts           Account[]
+  twoFactors         TwoFactor[]
   invitations        Invitation[] @relation("InvitationUser")
   createdInvitations Invitation[] @relation("InvitationCreator")
 
@@ -131,6 +134,24 @@ model Verification {
 
   @@index([identifier])
   @@map("verifications")
+}
+
+/// Segundo fator TOTP (Better Auth, plugin two-factor). Segredo e códigos de
+/// recuperação ficam cifrados com o segredo da aplicação (BETTER_AUTH_SECRET).
+model TwoFactor {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id") @db.Uuid
+  /// Falso até o primeiro código válido (a ativação exige confirmar no aplicativo).
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factors")
 }
 
 /// Limites de taxa do Better Auth persistidos no banco (valem entre instâncias).

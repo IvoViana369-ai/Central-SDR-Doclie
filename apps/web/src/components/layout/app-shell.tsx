@@ -1,7 +1,8 @@
 'use client';
 
 import type { Permission } from '@docline/core';
-import { Menu, X } from 'lucide-react';
+import { Menu, ShieldAlert, X } from 'lucide-react';
+import Link from 'next/link';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { Brand } from './brand';
@@ -11,6 +12,8 @@ import { UserMenu } from './user-menu';
 interface AppShellProps {
   user: { name: string; roleLabel: string };
   permissions: Permission[];
+  /** ADMIN/GESTOR sem verificação em duas etapas: mostra o lembrete. */
+  twoFactorPending?: boolean;
   children: ReactNode;
 }
 
@@ -18,7 +21,7 @@ function SidebarBody({
   user,
   permissions,
   onNavigate,
-}: Omit<AppShellProps, 'children'> & { onNavigate?: () => void }) {
+}: Omit<AppShellProps, 'children' | 'twoFactorPending'> & { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 bg-sidebar px-3 py-5 text-sidebar-foreground">
       <Brand className="px-2" />
@@ -31,7 +34,7 @@ function SidebarBody({
 }
 
 /** Layout autenticado: menu lateral fixo no desktop, gaveta no celular. */
-export function AppShell({ user, permissions, children }: AppShellProps) {
+export function AppShell({ user, permissions, twoFactorPending, children }: AppShellProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -69,7 +72,24 @@ export function AppShell({ user, permissions, children }: AppShellProps) {
       </DialogPrimitive.Root>
 
       <main id="conteudo" className="min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto max-w-6xl">{children}</div>
+        <div className="mx-auto max-w-6xl">
+          {twoFactorPending ? (
+            <p
+              role="status"
+              className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm"
+            >
+              <ShieldAlert className="size-4 shrink-0" aria-hidden />
+              <span className="flex-1">
+                Proteja sua conta: ative a verificação em duas etapas. Ela é exigida para
+                administradores e gestores.
+              </span>
+              <Link href="/conta" className="font-medium text-primary hover:underline">
+                Ativar agora
+              </Link>
+            </p>
+          ) : null}
+          {children}
+        </div>
       </main>
     </div>
   );

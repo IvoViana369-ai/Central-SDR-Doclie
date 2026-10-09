@@ -2,7 +2,12 @@ import { BusinessRuleError } from '../../../shared/errors';
 import { diffFields } from '../../../shared/diff';
 import { defineUseCase } from '../../../shared/use-case';
 import { permissionsOf } from '../domain/permissions';
-import { changeUserRoleInput, listUsersInput, setUserStatusInput } from '../contracts/schemas';
+import {
+  changeUserRoleInput,
+  listUsersInput,
+  setUserStatusInput,
+  userIdInput,
+} from '../contracts/schemas';
 import {
   countActiveAdmins,
   getUserOrThrow,
@@ -120,6 +125,40 @@ export const setUserStatus = defineUseCase({
       entityId: user.id,
       changes: diffFields(user, updated, ['status']),
       metadata: input.status === 'INACTIVE' ? { revokedSessions } : null,
+    });
+    return updated;
+  },
+});
+
+/**
+ * Redefine a verificação em duas etapas de quem perdeu o celular e os códigos
+ * de recuperação (ADMIN). Apaga o segredo, encerra as sessões e fica
+ * auditado; a pessoa entra só com a senha e ativa a 2FA de novo.
+ */
+export const resetUserTwoFactor = defineUseCase({
+  name: 'identity.resetUserTwoFactor',
+  access: 'user.manage',
+  input: userIdInput,
+  async run(ctx, input) {
+    if (ctx.actor.kind === 'user' && ctx.actor.id === input.userId) {
+      throw new BusinessRuleError('Para a sua própria conta, use "Minha conta".');
+    }
+    const user = await getUserOrThrow(ctx.tx, input.userId);
+    if (!user.twoFactorEnabled) {
+      throw new BusinessRuleError(`${user.name} não usa verificação em duas etapas.`);
+    }
+    await ctx.tx.twoFactor.deleteMany({ where: { userId: user.id } });
+    const updated = await ctx.tx.user.update({
+      where: { id: user.id },
+      data: { twoFactorEnabled: false },
+      select: publicUserSelect,
+    });
+    const revokedSessions = (await ctx.tx.session.deleteMany({ where: { userId: user.id } })).count;
+    await ctx.audit({
+      action: 'user.2fa_reset',
+      entityType: 'user',
+      entityId: user.id,
+      metadata: { revokedSessions },
     });
     return updated;
   },

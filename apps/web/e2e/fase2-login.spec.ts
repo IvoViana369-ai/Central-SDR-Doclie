@@ -1,15 +1,53 @@
-import { expect, test, type Browser } from '@playwright/test';
+import { createHmac } from 'node:crypto';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { baseURL } from '../playwright.config';
-import { appAlert, signIn } from './helpers';
+import { ADMIN, appAlert, lastInviteLinkFor, setPassword, signIn } from './helpers';
 
 /**
- * Limite de login por conta (F2-18; docs/SECURITY.md §12). Roda depois da
- * suíte da API (usa a SDR criada lá). O IP vem do X-Forwarded-For com um
- * único IP, aceito quando TRUSTED_PROXIES está vazio.
+ * Limite de login por conta (F2-18; docs/SECURITY.md §12) e verificação em
+ * duas etapas (F2-16). Roda depois da suíte da API (usa a SDR criada lá). O IP
+ * vem do X-Forwarded-For com um único IP, aceito quando TRUSTED_PROXIES está vazio.
  */
 test.describe.configure({ mode: 'serial' });
 
 const OWNER = { email: 'carla@e2e.example', password: 'girassol-trem-azul-nuvem' };
+const MANAGER = {
+  name: 'Gil Gestor',
+  email: 'gil@e2e.example',
+  password: 'pipoca-lua-cadeira-trem',
+};
+
+/** TOTP (RFC 6238, SHA-1, 30 s, 6 dígitos), como o aplicativo autenticador faz. */
+function totp(base32Secret: string, at = Date.now()): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const bytes: number[] = [];
+  for (const char of base32Secret.replace(/[\s=]/g, '').toUpperCase()) {
+    value = (value << 5) | alphabet.indexOf(char);
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
+  const hash = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
+  const offset = hash[hash.length - 1]! & 0xf;
+  return String((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+/** Código de um intervalo de 30 s ainda não usado (o mesmo código não vale duas vezes). */
+async function freshTotp(page: Page, secret: string, used: Set<string>): Promise<string> {
+  let code = totp(secret);
+  while (used.has(code)) {
+    await page.waitForTimeout(1_000);
+    code = totp(secret);
+  }
+  used.add(code);
+  return code;
+}
 
 async function browserFrom(browser: Browser, ip: string) {
   const context = await browser.newContext({
@@ -51,4 +89,79 @@ test('quem erra a senha espera cada vez mais; a dona da conta continua entrando'
   await signIn(owner.page, OWNER.email, OWNER.password);
 
   await Promise.all([attacker.context.close(), owner.context.close(), sameIp.context.close()]);
+});
+
+test('gestor ativa a verificação em duas etapas e entra com o código ou com um código de recuperação', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  // Administradora convida o gestor.
+  const admin = await browser.newContext({ baseURL });
+  const adminPage = await admin.newPage();
+  await signIn(adminPage, ADMIN.email, ADMIN.password);
+  const invited = await adminPage.request.post('/api/v1/users', {
+    data: { name: MANAGER.name, email: MANAGER.email, role: 'MANAGER' },
+    headers: { origin: baseURL },
+  });
+  expect(invited.status()).toBe(201);
+
+  const manager = await browser.newContext({ baseURL });
+  const page = await manager.newPage();
+  await page.goto(lastInviteLinkFor(MANAGER.email));
+  await setPassword(page, MANAGER.password);
+  await page.getByRole('button', { name: 'Definir senha e entrar' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(
+    page.getByText('Proteja sua conta: ative a verificação em duas etapas'),
+  ).toBeVisible();
+
+  // Ativação: senha, QR/chave, código do aplicativo e códigos de recuperação.
+  await page.getByRole('link', { name: 'Ativar agora' }).click();
+  await page.getByRole('button', { name: 'Ativar verificação em duas etapas' }).click();
+  await page.getByLabel('Confirme sua senha').fill(MANAGER.password);
+  await page.getByRole('button', { name: 'Continuar' }).click();
+  await expect(
+    page.getByRole('img', { name: 'QR code para o aplicativo autenticador' }),
+  ).toBeVisible();
+  const secret = (await page.getByTestId('totp-secret').innerText()).replace(/\s/g, '');
+  const used = new Set<string>();
+  await page.getByLabel('Código do aplicativo').fill(await freshTotp(page, secret, used));
+  await page.getByRole('button', { name: 'Confirmar e ativar' }).click();
+  await expect(page.getByText('Verificação em duas etapas ativada.')).toBeVisible();
+  const codes = await page
+    .getByRole('list', { name: 'Códigos de recuperação' })
+    .getByRole('listitem')
+    .allInnerTexts();
+  expect(codes).toHaveLength(10);
+  await page.getByRole('button', { name: 'Concluir' }).click();
+  await expect(page.getByText('Ativada', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proteja sua conta')).toHaveCount(0);
+
+  // Novo login: a senha sozinha não basta; código errado é recusado.
+  await manager.clearCookies();
+  await signIn(page, MANAGER.email, MANAGER.password, { expectSuccess: false });
+  await expect(page).toHaveURL(/\/login\/verificacao/);
+  await page.getByLabel('Código do aplicativo').fill('000000');
+  await page.getByRole('button', { name: 'Verificar e entrar' }).click();
+  await expect(appAlert(page)).toContainText('Código incorreto');
+  await page.getByLabel('Código do aplicativo').fill(await freshTotp(page, secret, used));
+  await page.getByRole('button', { name: 'Verificar e entrar' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Sem o celular: código de recuperação (vale uma vez).
+  await manager.clearCookies();
+  await signIn(page, MANAGER.email, MANAGER.password, { expectSuccess: false });
+  await expect(page).toHaveURL(/\/login\/verificacao/);
+  await page.getByRole('button', { name: /usar código de recuperação/ }).click();
+  await page.getByLabel('Código de recuperação').fill(codes[0]!);
+  await page.getByRole('button', { name: 'Verificar e entrar' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // A auditoria registra a ativação.
+  await adminPage.goto('/configuracoes/auditoria');
+  await expect(
+    adminPage.getByRole('cell', { name: 'Verificação em duas etapas ativada' }).first(),
+  ).toBeVisible();
+
+  await Promise.all([admin.close(), manager.close()]);
 });

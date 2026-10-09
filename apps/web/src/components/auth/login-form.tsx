@@ -22,7 +22,7 @@ export function LoginForm() {
     const form = new FormData(event.currentTarget);
     setLoading(true);
     setError(null);
-    const { error: signInError } = await authClient.signIn.email({
+    const { data, error: signInError } = await authClient.signIn.email({
       email: String(form.get('email') ?? '').trim(),
       password: String(form.get('password') ?? ''),
     });
@@ -31,7 +31,13 @@ export function LoginForm() {
       setLoading(false);
       return;
     }
-    router.replace(safeNextPath(params.get('next')));
+    const next = safeNextPath(params.get('next'));
+    // Conta com verificação em duas etapas: falta o código do aplicativo.
+    if (data && 'twoFactorRedirect' in data && data.twoFactorRedirect) {
+      router.replace(`/login/verificacao?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    router.replace(next);
     router.refresh();
   }
 

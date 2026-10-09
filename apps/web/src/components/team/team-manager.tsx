@@ -29,6 +29,7 @@ export interface TeamUser {
   role: Role;
   status: UserStatus;
   lastLoginAt: Date | string | null;
+  twoFactorEnabled: boolean;
 }
 
 type Notice = { variant: 'success' | 'error' | 'info'; text: string } | null;
@@ -89,6 +90,20 @@ export function TeamManager({
       user.id,
       () => api(`/users/${user.id}`, { method: 'PATCH', body: { status } }),
       status === 'INACTIVE' ? `${user.name} foi desativado.` : `${user.name} foi reativado.`,
+    );
+  };
+
+  const resetTwoFactor = (user: TeamUser) => {
+    if (
+      !window.confirm(
+        `Redefinir a verificação em duas etapas de ${user.name}? Use só se a pessoa perdeu o celular e os códigos de recuperação. As sessões dela serão encerradas e ela entrará só com a senha até ativar de novo.`,
+      )
+    )
+      return;
+    return run(
+      user.id,
+      () => api(`/users/${user.id}/reset-two-factor`, { method: 'POST' }),
+      `Verificação em duas etapas de ${user.name} redefinida.`,
     );
   };
 
@@ -216,6 +231,15 @@ export function TeamManager({
                       <Badge variant={STATUS_VARIANT[user.status]}>
                         {USER_STATUS_LABELS[user.status]}
                       </Badge>
+                      {user.twoFactorEnabled ? (
+                        <Badge
+                          variant="muted"
+                          className="ml-1"
+                          title="Verificação em duas etapas ativa"
+                        >
+                          2FA
+                        </Badge>
+                      ) : null}
                     </Td>
                     <Td className="hidden text-muted-foreground md:table-cell">
                       {formatDateTime(user.lastLoginAt)}
@@ -224,6 +248,16 @@ export function TeamManager({
                       <Td className="space-x-2 whitespace-nowrap text-right">
                         {user.role === 'SDR' && user.status !== 'INACTIVE' ? (
                           <TerritoriesDialog user={user} />
+                        ) : null}
+                        {!self && user.twoFactorEnabled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => resetTwoFactor(user)}
+                          >
+                            Redefinir 2FA
+                          </Button>
                         ) : null}
                         {self ? null : user.status === 'INVITED' ? (
                           <Button

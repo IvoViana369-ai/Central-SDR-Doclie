@@ -10,12 +10,14 @@ import {
   passwordResetEmail,
   recordLoginFailure,
   recordSignIn,
+  recordTwoFactorEvent,
   type LoginAttempt,
 } from '@docline/core';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
+import { twoFactor } from 'better-auth/plugins';
 import { getContainer } from './container';
 import { ipAddressOptions, requestMetaFrom } from './request-meta';
 
@@ -23,6 +25,8 @@ const SESSION_DAYS = 7;
 /** Cookie de dispositivo conhecido (limite de login por conta, docs/SECURITY.md §12). */
 const DEVICE_COOKIE = 'docline.login_device';
 const DEVICE_COOKIE_DAYS = 365;
+/** Verificação do código no login (com o desafio aberto pela senha) ou na ativação. */
+const TWO_FACTOR_VERIFY = new Set(['/two-factor/verify-totp', '/two-factor/verify-backup-code']);
 
 function createAuth() {
   const { env, deps, logger } = getContainer();
@@ -146,47 +150,110 @@ function createAuth() {
           if (problems.length > 0) throw new APIError('BAD_REQUEST', { message: problems[0] });
         }
       }),
-      // Auditoria de login (sucesso e falha, com e-mail mascarado).
+      // Auditoria de login (sucesso e falha, com e-mail mascarado) e da verificação em duas etapas.
+      // Este hook roda antes dos hooks do plugin two-factor.
       after: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== '/sign-in/email') return;
         const meta = requestMetaFrom(ctx.headers ?? new Headers(), ipOptions);
+        const failed = ctx.context.returned instanceof APIError;
+        const deviceCookie = ctx.getCookie(DEVICE_COOKIE);
+
+        /** Login concluído: auditoria, contador zerado e navegador marcado como conhecido. */
+        async function completeSignIn(user: { id: string; email: string }) {
+          await recordSignIn(deps.db, meta, { success: true, userId: user.id });
+          await clearLoginThrottle(deps, {
+            email: user.email,
+            ip: meta.ip,
+            deviceId: deviceIdFromToken(deps, authSecret, user.email, deviceCookie),
+          });
+          ctx.setCookie(DEVICE_COOKIE, issueDeviceToken(deps, authSecret, user.email), {
+            httpOnly: true,
+            secure: secureCookies,
+            sameSite: 'strict',
+            path: '/api/auth',
+            maxAge: DEVICE_COOKIE_DAYS * 24 * 60 * 60,
+          });
+        }
+
+        function failureReason() {
+          const returned = ctx.context.returned;
+          return returned instanceof APIError
+            ? String(returned.body?.code ?? returned.status)
+            : 'UNKNOWN';
+        }
+
         try {
-          const newSession = ctx.context.newSession;
-          const attempt = loginAttempt(ctx);
-          if (newSession) {
-            await recordSignIn(deps.db, meta, { success: true, userId: newSession.user.id });
-            if (attempt) {
-              await clearLoginThrottle(deps, attempt);
-              // Este navegador passa a ter contador próprio para esta conta.
-              ctx.setCookie(DEVICE_COOKIE, issueDeviceToken(deps, authSecret, attempt.email), {
-                httpOnly: true,
-                secure: secureCookies,
-                sameSite: 'strict',
-                path: '/api/auth',
-                maxAge: DEVICE_COOKIE_DAYS * 24 * 60 * 60,
+          if (ctx.path === '/sign-in/email') {
+            const newSession = ctx.context.newSession;
+            const attempt = loginAttempt(ctx);
+            if (!newSession) {
+              if (attempt) await recordLoginFailure(deps, attempt, meta);
+              await recordSignIn(deps.db, meta, {
+                success: false,
+                email: attempt?.email ?? '',
+                reason: failureReason(),
+              });
+            } else if ((newSession.user as { twoFactorEnabled?: boolean }).twoFactorEnabled) {
+              // Senha certa, mas o login só termina com o código do aplicativo.
+              if (attempt) await clearLoginThrottle(deps, attempt);
+              await recordTwoFactorEvent(deps.db, meta, {
+                type: 'challenge',
+                userId: newSession.user.id,
+              });
+            } else {
+              await completeSignIn(newSession.user);
+            }
+            return;
+          }
+
+          if (TWO_FACTOR_VERIFY.has(ctx.path)) {
+            const challenge = ctx.getCookie(ctx.context.createAuthCookie('two_factor').name);
+            const newSession = ctx.context.newSession;
+            if (challenge) {
+              if (newSession) await completeSignIn(newSession.user);
+              else {
+                await recordSignIn(deps.db, meta, {
+                  success: false,
+                  email: '',
+                  reason: `2FA_${failureReason()}`,
+                });
+              }
+            } else if (newSession && !failed) {
+              // Primeiro código válido depois de "ativar": a verificação passa a valer.
+              await recordTwoFactorEvent(deps.db, meta, {
+                type: 'enabled',
+                userId: newSession.user.id,
               });
             }
-          } else {
-            if (attempt) await recordLoginFailure(deps, attempt, meta);
-            const returned = ctx.context.returned;
-            const reason =
-              returned instanceof APIError
-                ? String(returned.body?.code ?? returned.status)
-                : 'UNKNOWN';
-            const email = (ctx.body as { email?: unknown } | undefined)?.email;
-            await recordSignIn(deps.db, meta, {
-              success: false,
-              email: typeof email === 'string' ? email : '',
-              reason,
-            });
+            return;
+          }
+
+          const sessionUser = ctx.context.session?.user;
+          if (!failed && sessionUser) {
+            if (ctx.path === '/two-factor/disable') {
+              await recordTwoFactorEvent(deps.db, meta, {
+                type: 'disabled',
+                userId: sessionUser.id,
+              });
+            } else if (ctx.path === '/two-factor/generate-backup-codes') {
+              await recordTwoFactorEvent(deps.db, meta, {
+                type: 'backup_codes_regenerated',
+                userId: sessionUser.id,
+              });
+            }
           }
         } catch (error) {
-          logger.error({ err: error }, 'Falha ao auditar login');
+          logger.error({ err: error }, 'Falha ao auditar autenticação');
         }
       }),
     },
 
-    plugins: [nextCookies()],
+    plugins: [
+      // Verificação em duas etapas por aplicativo autenticador (TOTP), com códigos de
+      // recuperação. Segredos cifrados com BETTER_AUTH_SECRET (docs/SECURITY.md §3).
+      twoFactor({ issuer: 'Docline SDR' }),
+      // Precisa ser o último plugin.
+      nextCookies(),
+    ],
   });
 }
 
