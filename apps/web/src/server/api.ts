@@ -101,7 +101,12 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-function toProblem(error: unknown, meta: RequestMeta, logger: Logger): Response {
+function toProblem(
+  error: unknown,
+  meta: RequestMeta,
+  logger: Logger,
+  report: (error: unknown) => void,
+): Response {
   if (error instanceof OriginError) {
     return problem(403, 'FORBIDDEN', 'Origem da requisição não permitida.', meta.requestId);
   }
@@ -112,11 +117,14 @@ function toProblem(error: unknown, meta: RequestMeta, logger: Logger): Response 
         : error instanceof PossibleDuplicateError
           ? { duplicates: error.duplicates }
           : {};
-    if (error.status >= 500)
+    if (error.status >= 500) {
       logger.error({ err: error, requestId: meta.requestId }, 'Erro de domínio');
+      report(error);
+    }
     return problem(error.status, error.code, error.message, meta.requestId, extra);
   }
   logger.error({ err: error, requestId: meta.requestId }, 'Erro inesperado na API');
+  report(error);
   return problem(
     500,
     'INTERNAL',
@@ -131,7 +139,7 @@ export function apiHandler<P extends Record<string, string> = Record<string, nev
   options: ApiOptions = {},
 ) {
   return async (request: Request, context?: { params?: Promise<P> }): Promise<Response> => {
-    const { deps, logger, env } = getContainer();
+    const { deps, logger, env, errors } = getContainer();
     const meta = requestMetaFrom(request.headers, ipAddressOptions(env.TRUSTED_PROXIES));
     try {
       if (MUTATING.has(request.method)) assertSameOrigin(request, env.APP_URL, env.APP_ENV);
@@ -161,7 +169,9 @@ export function apiHandler<P extends Record<string, string> = Record<string, nev
         headers: { 'cache-control': 'no-store', 'x-request-id': meta.requestId ?? '' },
       });
     } catch (error) {
-      return toProblem(error, meta, logger);
+      return toProblem(error, meta, logger, (err) =>
+        errors.capture(err, { requestId: meta.requestId, route: new URL(request.url).pathname }),
+      );
     }
   };
 }

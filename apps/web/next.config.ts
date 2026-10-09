@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     'pg-boss',
     'pino',
     'nodemailer',
+    '@sentry/node',
   ],
   async headers() {
     // CSP com nonce é aplicada no proxy.ts; aqui ficam os cabeçalhos estáticos.

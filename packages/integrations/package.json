@@ -16,6 +16,7 @@
     "@docline/config": "workspace:*",
     "@docline/core": "workspace:*",
     "@docline/db": "workspace:*",
+    "@sentry/node": "10.75.3",
     "nodemailer": "^10.0.14",
     "pg-boss": "^12.36.0",
     "pino": "^10.4.0"

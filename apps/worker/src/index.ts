@@ -3,7 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { getServerEnv } from '@docline/config';
 import { JOBS } from '@docline/core';
 import { createDbClient } from '@docline/db';
-import { assertProvidersImplemented, createLogger, startPgBoss } from '@docline/integrations';
+import {
+  assertProvidersImplemented,
+  createErrorReporter,
+  createLogger,
+  startPgBoss,
+} from '@docline/integrations';
 import { recordHeartbeat } from './jobs/heartbeat';
 
 // Em desenvolvimento, usa o .env da raiz do monorepo.
@@ -13,6 +18,24 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const env = getServerEnv();
 const logger = createLogger({ service: 'worker', level: env.LOG_LEVEL, appEnv: env.APP_ENV });
 assertProvidersImplemented(env);
+// Sentry, se `SENTRY_DSN` estiver configurado (senão, não envia nada).
+const errors = createErrorReporter({
+  dsn: env.SENTRY_DSN,
+  environment: env.APP_ENV,
+  service: 'worker',
+});
+
+/** Falha de job vai para o Sentry e volta para o pg-boss (que faz a retentativa). */
+function reported<T>(job: string, handler: () => Promise<T>) {
+  return async () => {
+    try {
+      return await handler();
+    } catch (error) {
+      errors.capture(error, { job });
+      throw error;
+    }
+  };
+}
 
 const startedAt = new Date();
 const db = createDbClient(env.DATABASE_URL, { maxConnections: 5 });
@@ -24,9 +47,10 @@ const boss = await startPgBoss({
 });
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------
-await boss.work(JOBS.heartbeat.name, async () => {
-  await recordHeartbeat(db, startedAt);
-});
+await boss.work(
+  JOBS.heartbeat.name,
+  reported(JOBS.heartbeat.name, () => recordHeartbeat(db, startedAt)),
+);
 await boss.schedule(JOBS.heartbeat.name, JOBS.heartbeat.cron);
 // Sinal imediato, sem esperar o primeiro minuto do cron.
 await recordHeartbeat(db, startedAt);
@@ -42,6 +66,7 @@ async function shutdown(signal: string) {
   try {
     await boss.stop({ graceful: true, timeout: 30_000 });
     await db.$disconnect();
+    await errors.flush();
     process.exit(0);
   } catch (error) {
     logger.error({ err: error }, 'Falha ao encerrar o worker');

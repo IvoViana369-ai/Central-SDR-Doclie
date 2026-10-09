@@ -109,8 +109,18 @@ describe('status das integrações', () => {
       ai: 'simulated',
       email: 'simulated',
       crm: 'disabled',
+      errors: 'disabled',
     });
     expect(() => assertProvidersImplemented(parseServerEnv(baseEnv))).not.toThrow();
+  });
+
+  it('monitoramento de erros fica ativo com o DSN do Sentry', () => {
+    const env = parseServerEnv({ ...baseEnv, SENTRY_DSN: 'https://chave@o1.ingest.sentry.io/1' });
+    expect(integrationStatuses(env).find((s) => s.key === 'errors')).toMatchObject({
+      provider: 'sentry',
+      state: 'active',
+    });
+    expect(() => assertProvidersImplemented(env)).not.toThrow();
   });
 
   it('falha na inicialização se um provedor de fase futura for configurado', () => {

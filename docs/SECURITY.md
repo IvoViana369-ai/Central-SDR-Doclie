@@ -303,7 +303,7 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - [x] RBAC com matriz testada; auditoria append-only.
 - [x] Cabeçalhos de segurança, CSP, CSRF.
 - [x] Logs com mascaramento.
-- [ ] Sentry para erros (F2-17; depende da conta da Docline).
+- [x] Sentry para erros (F2-17): pronto e opcional por `SENTRY_DSN`, sem dados pessoais; falta só criar a conta da Docline e configurar o DSN.
 - [ ] Staging: configurar `TRUSTED_PROXIES` após conferir o `X-Forwarded-For` da hospedagem (§12).
 
 **Fases 2–6 — MVP (MUST)**

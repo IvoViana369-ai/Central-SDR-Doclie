@@ -24,7 +24,7 @@ export function createEmailProvider(env: ServerEnv, logger: Logger): EmailProvid
 }
 
 export type IntegrationKey =
-  'whatsapp' | 'instagram' | 'places' | 'companyRegistry' | 'ai' | 'email' | 'crm';
+  'whatsapp' | 'instagram' | 'places' | 'companyRegistry' | 'ai' | 'email' | 'crm' | 'errors';
 
 export interface IntegrationStatus {
   key: IntegrationKey;
@@ -36,7 +36,16 @@ export interface IntegrationStatus {
 }
 
 /** Provedores reais já implementados nesta versão. */
-const IMPLEMENTED = new Set(['assisted', 'fake', 'disabled', 'console', 'file', 'smtp', 'resend']);
+const IMPLEMENTED = new Set([
+  'assisted',
+  'fake',
+  'disabled',
+  'console',
+  'file',
+  'smtp',
+  'resend',
+  'sentry',
+]);
 
 export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {
   const entry = (
@@ -67,6 +76,7 @@ export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {
     entry('ai', 'IA (SDR AI)', env.AI_PROVIDER, 6),
     entry('email', 'E-mail transacional', env.EMAIL_PROVIDER, 1),
     entry('crm', 'CRM Docline', env.CRM_PROVIDER, 12),
+    entry('errors', 'Monitoramento de erros', env.SENTRY_DSN ? 'sentry' : 'disabled', 2),
   ];
 }
 

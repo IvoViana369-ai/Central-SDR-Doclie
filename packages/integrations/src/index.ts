@@ -4,6 +4,12 @@ export {
   type AppLogger,
   type CreateLoggerOptions,
 } from './observability/logger';
+export {
+  createErrorReporter,
+  scrubText,
+  type ErrorContext,
+  type ErrorReporter,
+} from './observability/error-reporter';
 export { ConsoleEmailProvider } from './email/console';
 export { FileEmailProvider } from './email/file';
 export { SmtpEmailProvider } from './email/smtp';

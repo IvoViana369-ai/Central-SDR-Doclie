@@ -52,7 +52,7 @@ envVarGroups:
       - key: EMAIL_FROM
         sync: false
       - key: SENTRY_DSN
-        sync: false # reservada: a integração com o Sentry entra na F2-17
+        sync: false # opcional: DSN do Sentry (erros do web e do worker, sem dados pessoais)
       # Integrações externas permanecem desligadas/assistidas até as fases 6–9.
       - key: WHATSAPP_PROVIDER
         value: assisted

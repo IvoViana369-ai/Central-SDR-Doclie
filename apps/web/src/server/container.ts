@@ -5,8 +5,10 @@ import { getDb } from '@docline/db';
 import {
   assertProvidersImplemented,
   createEmailProvider,
+  createErrorReporter,
   createLogger,
   type AppLogger,
+  type ErrorReporter,
 } from '@docline/integrations';
 import { hashPassword } from 'better-auth/crypto';
 
@@ -14,6 +16,8 @@ export interface WebContainer {
   env: ServerEnv;
   logger: AppLogger;
   deps: CoreDeps;
+  /** Sentry, se `SENTRY_DSN` estiver configurado (senão, não envia nada). */
+  errors: ErrorReporter;
 }
 
 const globalForContainer = globalThis as unknown as { __doclineWeb?: WebContainer };
@@ -38,6 +42,11 @@ export function getContainer(): WebContainer {
     identifiers: createIdentifierHasher(env.SUPPRESSION_HASH_PEPPER),
     appUrl: env.APP_URL,
   };
-  globalForContainer.__doclineWeb = { env, logger, deps };
+  const errors = createErrorReporter({
+    dsn: env.SENTRY_DSN,
+    environment: env.APP_ENV,
+    service: 'web',
+  });
+  globalForContainer.__doclineWeb = { env, logger, deps, errors };
   return globalForContainer.__doclineWeb;
 }

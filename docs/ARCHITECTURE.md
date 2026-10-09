@@ -130,7 +130,11 @@ Ajustes em relação à análise acima, decididos durante a implementação:
 - **Ponto de atenção (pg 9):** dentro de transações, o Prisma 7 com o adaptador `pg` carrega relações de um mesmo `select` em consultas paralelas na mesma conexão; o pg 8 as enfileira (resultado correto) e emite um aviso de *deprecation*. Antes de atualizar para o pg 9, avaliar `relationLoadStrategy: 'join'` (recurso `relationJoins`) nas leituras com muitas relações, como o detalhe do lead.
 - **Índices parciais** (Fase 2) declarados no schema com o recurso `partialIndexes` do Prisma, ainda em *preview*: assim a checagem de drift do CI os cobre. Se o recurso mudar, a alternativa é SQL manual na migração, perdendo essa checagem.
 - **Componentes de UI** escritos no próprio projeto sobre Radix (no estilo shadcn/ui), sem depender do gerador do shadcn.
-- **Sentry ainda não integrado:** a variável `SENTRY_DSN` está reservada; a integração ficou para F2-17 (depende da conta da Docline). Até lá, erros aparecem nos logs pino com `requestId`.
+- **Sentry (Fase 2, F2-17):** opcional, ativado por `SENTRY_DSN`. Usa `@sentry/node` 10 sem instrumentação automática, sem tracing e sem breadcrumbs: só envia o que a aplicação captura.
+  - **Web:** erros 5xx da API v1 (`apiHandler`) e erros de páginas e server actions (`onRequestError` em `instrumentation.ts`), com `requestId` e rota.
+  - **Worker:** falhas de job, com o nome do job; o pg-boss segue fazendo a retentativa.
+  - **Sem dados pessoais:** nada de usuário, cookies, cabeçalhos ou corpo; e-mails e sequências de 8 ou mais dígitos viram marcadores em toda mensagem.
+  - **Sem DSN:** nada é enviado, e os erros continuam nos logs pino com `requestId`.
 - **IP do cliente:** lido só do `X-Forwarded-For`, com a lista `TRUSTED_PROXIES` (CIDR) definindo quais saltos são confiáveis; a mesma regra serve ao rate limit e à auditoria ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)).
 - **Cadeia de suprimentos:** `minimumReleaseAge` de 24 h no pnpm (já barrou uma versão publicada no mesmo dia) e sobrescritas de versão para dependências transitivas vulneráveis (`pnpm-workspace.yaml`).
 
