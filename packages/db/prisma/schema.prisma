@@ -143,6 +143,22 @@ model RateLimit {
   @@map("rate_limits")
 }
 
+/// Falhas de login recentes (docs/SECURITY.md §12). Chave "pair:<hmac do e-mail>:<ip>"
+/// (atraso progressivo só para quem errou, sem trancar o dono da conta) ou
+/// "account:<hmac do e-mail>" (alerta ao ADMIN em picos). Linhas paradas há mais
+/// de 1 dia são apagadas a cada nova falha.
+model LoginThrottle {
+  key             String    @id
+  failures        Int       @default(0)
+  windowStartedAt DateTime  @map("window_started_at") @db.Timestamptz(3)
+  blockedUntil    DateTime? @map("blocked_until") @db.Timestamptz(3)
+  alertedAt       DateTime? @map("alerted_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([updatedAt])
+  @@map("login_throttles")
+}
+
 model Team {
   id        String   @id @default(uuid(7)) @db.Uuid
   name      String   @unique

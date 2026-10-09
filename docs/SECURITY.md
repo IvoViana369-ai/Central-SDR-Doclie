@@ -60,7 +60,7 @@
 | Cadastro | **Sem cadastro público.** Só por convite do ADMIN, com link de uso único e expiração |
 | Senhas | Mínimo de 12 caracteres; sem regras de composição forçada; verificação contra senhas comuns/vazadas; hash forte (scrypt/argon2, padrão da biblioteca) |
 | Sessão | Cookie `HttpOnly`, `Secure`, `SameSite=Lax`; expiração por inatividade; renovação; revogação ao desativar usuário ou trocar senha |
-| Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos *(Fase 1: limite por IP; por conta em F2-18 — ver §12)* |
+| Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos (por conta desde a Fase 2, ver §12) |
 | Redefinição de senha | Token de uso único, curto (≤ 30 min), invalida sessões anteriores |
 | 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9) |
 | SSO | Opcional futuro: Google Workspace da Docline |
@@ -218,7 +218,18 @@ MVP com uma instância: limites em memória ou no PostgreSQL. Com várias instâ
 | `/reset-password` | 10 / 15 min |
 | Demais rotas de autenticação | 100 / min, ou o padrão mais restrito da biblioteca (ex.: troca de senha, 3 / 10 s) |
 
-O limite **por conta** (5 / 15 min) ainda não existe (F2-18). Ele precisa ser desenhado para não virar ferramenta de bloqueio: quem souber o e-mail de um colega não pode trancá-lo para fora (atraso progressivo em vez de bloqueio rígido, alerta ao ADMIN).
+**Limite por conta (Fase 2, F2-18).** Não vira ferramenta de bloqueio: quem souber o e-mail de um colega não consegue trancá-lo para fora.
+
+| Regra | Como funciona |
+|---|---|
+| Contador | Por **conta + IP**. Se o navegador já entrou nessa conta antes, o contador é **daquele dispositivo**: um cookie assinado (`docline.login_device`, HttpOnly, só em `/api/auth`, 1 ano) é emitido após login bem-sucedido. Assim, nem um colega no mesmo escritório (mesmo IP público) atrasa o dono da conta. |
+| Atraso progressivo | Até 4 falhas em 15 min, sem espera. Da 5ª em diante: 30 s, 1 min, 2 min, 4 min, 8 min e no máximo 15 min entre tentativas. Durante a espera a senha nem é conferida, e a tentativa barrada é auditada (`auth.login_failed`, motivo `THROTTLED`) sem somar no contador. |
+| Sem bloqueio rígido | A espera nunca passa de 15 min, e login certo zera o contador. |
+| Alerta | 20 falhas na mesma conta em 15 min, somando todos os IPs e dispositivos, geram auditoria `auth.login_alert` e e-mail aos ADMIN ativos, uma vez por janela, com o e-mail da conta mascarado. |
+| Sem enumeração | Vale igual para e-mails que não existem. |
+| Armazenamento | Tabela `login_throttles`, com chaves derivadas do HMAC do e-mail (nunca o e-mail em claro). Linhas paradas há mais de 1 dia são apagadas. |
+
+Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem está errando a senha, espera junto (no máximo 15 min). O alerta ao ADMIN cobre esse caso.
 
 **IP do cliente.** O limite por IP só funciona se o IP não puder ser forjado. Regra única, usada pelo rate limit e pela auditoria (`apps/web/src/server/request-meta.ts`):
 
@@ -288,7 +299,7 @@ O limite **por conta** (5 / 15 min) ainda não existe (F2-18). Ele precisa ser d
 **Fase 1 — Fundação (MUST)**
 - [x] `.env.example` sem segredos; `.gitignore` com `.env*`; gitleaks no CI.
 - [x] Validação de variáveis de ambiente na inicialização.
-- [x] Better Auth com convite, política de senha, rate limit de login (por IP; por conta em F2-18), cookies seguros.
+- [x] Better Auth com convite, política de senha, rate limit de login (por IP e, desde a Fase 2, por conta com atraso progressivo), cookies seguros.
 - [x] RBAC com matriz testada; auditoria append-only.
 - [x] Cabeçalhos de segurança, CSP, CSRF.
 - [x] Logs com mascaramento.

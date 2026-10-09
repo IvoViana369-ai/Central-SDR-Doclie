@@ -29,4 +29,13 @@ export {
 } from './application/invitations';
 export { changeUserRole, getCurrentUser, listUsers, setUserStatus } from './application/users';
 export { recordSignIn, resolveActor } from './application/session';
-export { invitationEmail, passwordResetEmail } from './application/emails';
+export { invitationEmail, loginAlertEmail, passwordResetEmail } from './application/emails';
+export { LOGIN_THROTTLE, formatWait, throttleDelaySeconds } from './domain/login-throttle';
+export {
+  clearLoginThrottle,
+  deviceIdFromToken,
+  issueDeviceToken,
+  loginRetryAfter,
+  recordLoginFailure,
+  type LoginAttempt,
+} from './application/login-throttle';

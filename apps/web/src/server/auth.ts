@@ -1,6 +1,17 @@
 import 'server-only';
 import { newId } from '@docline/db';
-import { passwordProblems, passwordResetEmail, recordSignIn } from '@docline/core';
+import {
+  clearLoginThrottle,
+  deviceIdFromToken,
+  formatWait,
+  issueDeviceToken,
+  loginRetryAfter,
+  passwordProblems,
+  passwordResetEmail,
+  recordLoginFailure,
+  recordSignIn,
+  type LoginAttempt,
+} from '@docline/core';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
@@ -9,12 +20,31 @@ import { getContainer } from './container';
 import { ipAddressOptions, requestMetaFrom } from './request-meta';
 
 const SESSION_DAYS = 7;
+/** Cookie de dispositivo conhecido (limite de login por conta, docs/SECURITY.md §12). */
+const DEVICE_COOKIE = 'docline.login_device';
+const DEVICE_COOKIE_DAYS = 365;
 
 function createAuth() {
   const { env, deps, logger } = getContainer();
   const secureCookies = env.APP_ENV === 'staging' || env.APP_ENV === 'production';
   // Mesma resolução de IP para o rate limit do Better Auth e para a auditoria.
   const ipOptions = ipAddressOptions(env.TRUSTED_PROXIES);
+  const authSecret = env.BETTER_AUTH_SECRET;
+
+  /** Tentativa de login (e-mail, IP e dispositivo conhecido) a partir do contexto do Better Auth. */
+  function loginAttempt(ctx: {
+    body?: unknown;
+    headers?: Headers;
+    getCookie: (key: string) => string | null;
+  }): LoginAttempt | null {
+    const email = (ctx.body as { email?: unknown } | undefined)?.email;
+    if (typeof email !== 'string' || email.trim() === '') return null;
+    return {
+      email,
+      ip: requestMetaFrom(ctx.headers ?? new Headers(), ipOptions).ip,
+      deviceId: deviceIdFromToken(deps, authSecret, email, ctx.getCookie(DEVICE_COOKIE)),
+    };
+  }
 
   return betterAuth({
     appName: 'Docline SDR',
@@ -89,8 +119,27 @@ function createAuth() {
     },
 
     hooks: {
-      // Política de senha completa também na redefinição (o Better Auth só checa o tamanho).
       before: createAuthMiddleware(async (ctx) => {
+        // Limite por conta: quem errou demais espera antes de tentar de novo
+        // (a senha nem é conferida). Tentativa barrada não soma no contador.
+        if (ctx.path === '/sign-in/email') {
+          const attempt = loginAttempt(ctx);
+          if (!attempt) return;
+          const wait = await loginRetryAfter(deps, attempt);
+          if (wait > 0) {
+            const meta = requestMetaFrom(ctx.headers ?? new Headers(), ipOptions);
+            await recordSignIn(deps.db, meta, {
+              success: false,
+              email: attempt.email,
+              reason: 'THROTTLED',
+            }).catch((error: unknown) => logger.error({ err: error }, 'Falha ao auditar login'));
+            throw new APIError('TOO_MANY_REQUESTS', {
+              code: 'ACCOUNT_THROTTLED',
+              message: `Muitas tentativas com senha errada. Tente de novo em ${formatWait(wait)}.`,
+            });
+          }
+        }
+        // Política de senha completa também na redefinição (o Better Auth só checa o tamanho).
         if (ctx.path === '/reset-password') {
           const password = (ctx.body as { newPassword?: unknown } | undefined)?.newPassword;
           const problems = typeof password === 'string' ? passwordProblems(password) : [];
@@ -103,9 +152,22 @@ function createAuth() {
         const meta = requestMetaFrom(ctx.headers ?? new Headers(), ipOptions);
         try {
           const newSession = ctx.context.newSession;
+          const attempt = loginAttempt(ctx);
           if (newSession) {
             await recordSignIn(deps.db, meta, { success: true, userId: newSession.user.id });
+            if (attempt) {
+              await clearLoginThrottle(deps, attempt);
+              // Este navegador passa a ter contador próprio para esta conta.
+              ctx.setCookie(DEVICE_COOKIE, issueDeviceToken(deps, authSecret, attempt.email), {
+                httpOnly: true,
+                secure: secureCookies,
+                sameSite: 'strict',
+                path: '/api/auth',
+                maxAge: DEVICE_COOKIE_DAYS * 24 * 60 * 60,
+              });
+            }
           } else {
+            if (attempt) await recordLoginFailure(deps, attempt, meta);
             const returned = ctx.context.returned;
             const reason =
               returned instanceof APIError

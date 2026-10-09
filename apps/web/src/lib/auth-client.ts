@@ -18,6 +18,8 @@ export function authErrorMessage(
       return 'A senha deve ter pelo menos 12 caracteres.';
     case 'PASSWORD_TOO_LONG':
       return 'A senha deve ter no máximo 128 caracteres.';
+    case 'ACCOUNT_THROTTLED':
+      return error.message ?? 'Muitas tentativas com senha errada. Aguarde e tente novamente.';
   }
   if (error.status === 429) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
   if (error.status === 403 && error.message) return error.message;

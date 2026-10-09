@@ -66,3 +66,37 @@ export function passwordResetEmail(params: {
     category: 'password_reset',
   };
 }
+
+/** Alerta aos administradores: pico de falhas de login em uma conta (docs/SECURITY.md §12). */
+export function loginAlertEmail(params: {
+  to: string;
+  name: string;
+  maskedEmail: string;
+  failures: number;
+  sources: number;
+  windowMinutes: number;
+  auditUrl: string;
+}): TransactionalEmail {
+  const firstName = params.name.split(' ')[0] ?? params.name;
+  const summary = `${params.failures} tentativas de login com senha errada na conta ${params.maskedEmail} nos últimos ${params.windowMinutes} minutos, de ${params.sources} origem(ns).`;
+  const text = [
+    `Olá, ${firstName}!`,
+    '',
+    `O Docline SDR registrou ${summary}`,
+    '',
+    'A conta não foi bloqueada: quem erra a senha passa a esperar cada vez mais entre as tentativas. Se não reconhecer o movimento, confira a auditoria e combine com a pessoa a troca da senha.',
+    '',
+    `Auditoria: ${params.auditUrl}`,
+  ].join('\n');
+  const html = `<p>Olá, ${escapeHtml(firstName)}!</p>
+<p>O <strong>Docline SDR</strong> registrou ${escapeHtml(summary)}</p>
+<p>A conta não foi bloqueada: quem erra a senha passa a esperar cada vez mais entre as tentativas. Se não reconhecer o movimento, confira a auditoria e combine com a pessoa a troca da senha.</p>
+<p><a href="${escapeHtml(params.auditUrl)}">Abrir a auditoria</a></p>`;
+  return {
+    to: params.to,
+    subject: 'Alerta de segurança: tentativas de login — Docline SDR',
+    text,
+    html,
+    category: 'notification',
+  };
+}

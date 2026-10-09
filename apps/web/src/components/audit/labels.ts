@@ -10,6 +10,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.status_changed': 'Status alterado',
   'auth.login': 'Login',
   'auth.login_failed': 'Falha de login',
+  'auth.login_alert': 'Alerta: muitas falhas de login',
   'access.denied': 'Acesso negado',
   'user.territories_changed': 'Territórios alterados',
   'lead.create': 'Lead cadastrado',
@@ -107,6 +108,8 @@ const FIELD_LABELS: Record<string, string> = {
   changed: 'Alterados',
   bulkAction: 'Ação',
   scope: 'Abrangência',
+  failures: 'Falhas',
+  sources: 'Origens',
 };
 
 const PERMISSION_LABELS: Record<Permission, string> = {
