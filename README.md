@@ -2,16 +2,17 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 a 5 concluídas.**
+> **Status: Fases 1 a 6 concluídas — MVP pronto no código.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
 > - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
 > - **Fase 4 (pipeline SDR):** Kanban com as 17 etapas, regras de movimentação, motivo de perda e histórico com duração; lista por etapa no celular; lead scoring explicável, com versões, simulação e cidades prioritárias.
 > - **Fase 5 (fila e follow-ups):** Minha Fila SDR com prioridade e ações rápidas; cadência D0/D2/D5/D10 configurável, em dias úteis e com parada automática; contato assistido (`wa.me`, Instagram, e-mail, `tel:`) com confirmação de envio; registro de respostas com detecção de opt-out; limites de horário e de frequência; transferência ao Comercial com checklist; avisos no app.
+> - **Fase 6 (IA e fechamento do MVP):** "Gerar com IA" no contato assistido, com avisos, edição, aprovação humana e envio assistido; guardrails e cotas; sugestão de classificação de respostas; base de conhecimento, abordagens e custos da IA; avaliação offline com rubrica; dashboard e relatórios com exportação; teste de desempenho com 100 mil leads. A IA real fica desligada (`AI_PROVIDER=fake`) até a decisão da Docline.
 >
-> **Pendências:** subir o staging na Render (depende da conta e das credenciais da Docline) e configurar o DSN do Sentry ([ROADMAP](docs/ROADMAP.md#fase-5--fila-e-follow-ups)).
+> **Pendências para o piloto:** staging na Render (conta e credenciais da Docline), DSN do Sentry, validação jurídica, transferência internacional e decisão sobre ligar a IA. O caminho até o go-live está em [docs/GO-LIVE.md](docs/GO-LIVE.md).
 >
-> **Próxima:** Fase 6 (IA de prospecção e fechamento do MVP). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próximo:** UAT e go-live do piloto; depois, Fase 7 (WhatsApp oficial). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -49,6 +50,7 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Portas e adaptadores; WhatsApp, Instagram, Google, dados abertos CNPJ, IA, CRM |
 | [docs/LGPD.md](docs/LGPD.md) | Bases legais, opt-in × base legal, opt-out, direitos dos titulares, retenção, incidentes |
 | [docs/SECURITY.md](docs/SECURITY.md) | Autenticação, RBAC, segredos, uploads, webhooks, IA, auditoria, checklist por fase |
+| [docs/GO-LIVE.md](docs/GO-LIVE.md) | Roteiro de UAT, treinamento, importação da base real, go-live do piloto e volta à planilha |
 | [.env.example](.env.example) | Variáveis de ambiente (sem segredos) |
 | [CHANGELOG.md](CHANGELOG.md) | O que foi entregue em cada fase |
 
@@ -175,5 +177,6 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 
 ## Próximo passo recomendado
 
-1. **Aprovar a Fase 6 — IA de prospecção e fechamento do MVP** ([backlog F6](docs/ROADMAP.md#fase-6--ia-de-prospecção-e-fechamento-do-mvp)). A IA gera abordagens que uma pessoa edita e aprova antes do envio assistido, com guardrails, registro de custo e avaliação offline. A fase traz também o dashboard e os relatórios básicos, o endurecimento (E2E das jornadas, desempenho com 100 mil leads, revisão de segurança) e a preparação do piloto (UAT e importação da base real).
-2. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).
+1. **Piloto (F6-11):** seguir o [roteiro de go-live](docs/GO-LIVE.md): staging na Render, validação jurídica, UAT com 1–2 SDRs e o gestor, treinamento, importação da base real em produção e decisão sobre ligar a IA real (com a avaliação offline e o DPA do provedor).
+2. **Aprovar a Fase 7 — WhatsApp oficial** ([backlog F7](docs/ROADMAP.md#fase-7--integração-whatsapp)): Cloud API só para leads com opt-in, webhooks de status e respostas, janela de atendimento e modelos aprovados pela Meta. O código pode avançar em paralelo ao piloto; a ativação depende da verificação da empresa na Meta.
+3. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

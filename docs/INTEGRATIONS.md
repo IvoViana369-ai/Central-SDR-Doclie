@@ -127,7 +127,7 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 | `INSTAGRAM_PROVIDER` | `assisted`, `fake`, `meta_graph` | `assisted` | `assisted` → `meta_graph` (Fase 8) |
 | `PLACES_PROVIDER` | `disabled`, `fake`, `google_places` | `fake` | `disabled` até validação jurídica |
 | `COMPANY_REGISTRY_PROVIDER` | `disabled`, `fake`, `receita_open_data`, `brasilapi` | `fake` | `disabled` → Fase 9 |
-| `AI_PROVIDER` | `fake`, `anthropic` | `fake` | `anthropic` (Fase 6) |
+| `AI_PROVIDER` | `fake`, `anthropic` | `fake` | `fake` até a decisão da Docline sobre a transferência internacional; depois `anthropic` |
 | `EMAIL_PROVIDER` | `console`, `smtp`, `resend` | `console` | `smtp`/`resend` |
 | `CRM_PROVIDER` | `disabled`, `fake`, `webhook`, `docline` | `disabled` | Fase 12 |
 
@@ -261,6 +261,13 @@ Verificar se há dados abertos ou API oficial de organizações contábeis regis
 ## 10. IA
 
 Porta `AiProvider`, adaptador padrão Anthropic (SDK oficial), configuração por `AI_*`. Detalhes de modelos, saídas estruturadas, cache, custos e privacidade em [AI-SDR](./AI-SDR.md).
+
+> **Implementação (Fase 6).**
+> - **Porta** em `packages/core/src/ports/ai.ts`; **provedor falso** (determinístico, sem custo e sem dados para terceiros) no core, usado em desenvolvimento, testes, CI e E2E; **adaptador Anthropic** em `packages/integrations/src/ai/anthropic.ts` (`@anthropic-ai/sdk`), o único lugar que conhece o SDK.
+> - **Variáveis:** `AI_PROVIDER` (`fake`/`anthropic`), `AI_API_KEY` (obrigatória com `anthropic`; nunca no código), `AI_MODEL` (padrão `claude-opus-5-5`), `AI_MODEL_CLASSIFICATION` (padrão: o mesmo), `AI_EFFORT_GENERATION` (`medium`), `AI_EFFORT_CLASSIFICATION` (`low`), `AI_MAX_GENERATIONS_PER_USER_PER_DAY` (200) e `AI_MONTHLY_BUDGET_USD` (opcional).
+> - **Pedido:** saída estruturada validada por Zod, esforço explícito, cache no prompt de sistema, *fallback* de recusa do lado do servidor, tempo limite de 60 s e duas novas tentativas do SDK; `stop_reason` conferido antes de ler a resposta. Erros viram `AiProviderError` (sem tipos do SDK fora do adaptador).
+> - **Testes** do adaptador contra um servidor local que imita a API (sem rede e sem custo). Antes de ligar ou trocar modelo, rode a avaliação offline com o modelo real (`pnpm ai:eval`, AI-SDR §14.1).
+> - A tela Integrações mostra a IA como "simulada" com o provedor falso e "ativa" com o real.
 
 ---
 

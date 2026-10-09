@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas das Fases 1 a 5 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-5)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 a 6 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-6)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 5
+### 4.11 Implementação até a Fase 6
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -459,6 +459,16 @@ Diferenças em relação às seções acima:
 - **`opportunities`:** `accept_due_at` (prazo de aceite pelo comercial), `sla_alerted_at`, `conversion_type` (`PARTNER`, `CUSTOMER`) e `notes`. Uma oportunidade `OPEN` por lead (único parcial).
 - **Modelos de mensagem e abordagens** (`message_templates`, `approaches`) ficam para a Fase 6, junto com a IA; na Fase 5 o SDR escreve o texto do contato assistido.
 - **Regras de contato** (janela, limites de frequência, palavras de opt-out, dias para "esquecido", SLAs) ficam em `app_settings`; sem linha gravada, valem os padrões do código.
+
+**Fase 6 (IA e indicadores):** `ai_generations`, `ai_knowledge_items` e `approaches`, como nas seções acima, mais:
+
+- **`ai_generations`:** sem `message_id`. O vínculo é `messages.ai_generation_id`, com único parcial "um envio ativo por rascunho" (`status <> 'CANCELED'`): cancelar o envio permite preparar de novo. Ganha `cached_input_tokens`, `stop_reason`, `error_code` (código da falha do provedor; `IN_PROGRESS` enquanto a chamada corre fora da transação) e `source_message_id` (a resposta que foi classificada). `kind` ainda sem `INSIGHT` (Fase 11).
+- **`ai_knowledge_items`:** `approved_at`; a versão sobe quando o conteúdo muda, e cada geração grava as versões usadas no contexto. **Sem seed:** os fatos sobre a Docline são cadastrados e aprovados pela própria Docline.
+- **`approaches`:** `guidance` (orientação enviada à IA) e `created_by_id`. `message_templates` não foi criada: a IA com abordagens cobre o MVP, e os modelos aprovados da Meta entram com a Fase 7.
+- **`messages`:** ganha `ai_generation_id`, `approach_id`, `approved_by_id`, `approved_at` e o índice `(approach_id, sent_at)`.
+- **Regras da IA** (limites por tipo, opt-out exigido, termos proibidos, personalização mínima, parecença) em `app_settings` (`ai.rules`); sem linha gravada, valem os padrões do código.
+- **Mesclagem** leva os rascunhos para o sobrevivente; **anonimização** apaga contexto, saída, textos, comentário e motivo de descarte dos rascunhos do lead.
+- **Indicadores** sem `daily_metrics`: consultas agregadas ao vivo, medidas com 100 mil leads ([ARCHITECTURE §13](./ARCHITECTURE.md#13-escalabilidade)).
 
 **Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts` e `sdr-operation-schema.int.test.ts`):
 

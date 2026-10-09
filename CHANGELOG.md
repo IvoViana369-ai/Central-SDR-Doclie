@@ -4,6 +4,55 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.6.0] — Fase 6: IA de prospecção e fechamento do MVP — 2026-10-09
+
+Aceite da fase (MVP M12 e M16) coberto pela jornada E2E `fase6.spec.ts` e pelas suítes da IA, da avaliação offline e dos indicadores. Totais: 356 testes unitários, 170 de integração e 36 jornadas E2E. Com esta fase, as histórias MUST do MVP estão concluídas no código; o go-live do piloto segue o roteiro de [GO-LIVE](docs/GO-LIVE.md).
+
+### Adicionado
+
+- **Banco:** `ai_generations` (pedido, contexto mínimo enviado, saída, texto gerado e aprovado, edição, avisos, custo, tokens, latência, motivo de descarte e nota), `ai_knowledge_items` (fatos aprovados, com versão) e `approaches`; `messages` ganha o rascunho, a abordagem e quem aprovou, com um envio ativo por rascunho.
+- **Porta da IA e provedores (F6-01):**
+  - provedor de demonstração determinístico (padrão: nada sai para terceiros);
+  - adaptador Anthropic com o SDK oficial: saída estruturada, esforço explícito, cache do prompt de sistema e *fallback* de recusa do lado do servidor;
+  - testes do adaptador contra um servidor local, sem rede e sem custo.
+- **Contexto e prompts (F6-02):** contexto por lista branca (sem CNPJ, endereço, contatos ou observações), telefones, e-mails e links mascarados, texto de terceiros entre marcas que não podem ser fechadas, prompts versionados e base de conhecimento com versões.
+- **Gerar, editar, aprovar e enviar (F6-03, M12):** os 8 tipos de mensagem; o rascunho aparece com os avisos e as suposições a conferir; editar confere de novo; aprovar prepara o contato assistido com o texto aprovado; descartar com motivo; gerar de novo; nota de 1 a 5.
+- **Guardrails (F6-04):** antes (gate de contato: Lista Não Contatar e base legal) e depois (termo proibido, dado de contato e valor fora dos fatos bloqueiam a aprovação; tamanho, opt-out, nome fora do contexto, mensagem genérica e texto repetido são avisos). Regras editáveis pelo ADMIN.
+- **Registro, cotas e orçamento (F6-05):** cada pedido fica em `ai_generations` com custo estimado; cota diária por pessoa e orçamento mensal, com aviso aos administradores em 80%.
+- **Sugestão de classificação de respostas (F6-06):** classe, confiança, justificativa e próximo passo; só vale quando a pessoa usa a sugestão.
+- **Avaliação offline (F6-07):** 50 leads fictícios × 8 tipos e 32 respostas, com os casos difíceis (injeção, sem responsável, objeção, presença local); verificações automáticas, rubrica humana de 6 critérios e comparação entre versões; `pnpm ai:eval` (o provedor real só roda com `--yes` e mostra o custo antes).
+- **Dashboard (F6-08, M16):** indicadores do período com definição única, evolução diária, funil da coorte, funil por etapa e quebras por cidade, origem e SDR; atalhos de período e filtro por pessoa.
+- **Relatórios (F6-09, M16):** tela Relatórios com cada quebra completa e exportação CSV por relatório, registrada na auditoria; tela de uso e custos da IA.
+- **Configuração da IA:** `/configuracoes/ia` (base de conhecimento, abordagens e regras dos rascunhos).
+- **Desempenho (F6-10):** `pnpm perf:100k`, com carga fictícia de 100 mil leads e medição das leituras principais.
+- **Roteiro de UAT e go-live (F6-11):** papéis, decisões da Docline, checklist de ambiente, cenários de homologação por critério, treinamento, importação da base real e volta à planilha.
+- **API v1:** `/ai/generations` (+ `approve`, `discard`, `rate`), `/ai/classify-reply`, `/ai/knowledge`, `/ai/rules`, `/ai/usage`, `/approaches`, `/leads/{id}/ai-generations` e `/analytics/overview`, `funnel`, `breakdown`, `timeseries` e `export`.
+
+### Alterado
+
+- **Depois da transferência ao Comercial, o SDR só consulta o lead** (toda escrita é recusada; a ficha avisa). Opt-out e pedidos de titular continuam possíveis.
+- **Kanban:** o card mostra a próxima ação, em destaque quando atrasada.
+- **Palavras de opt-out padrão:** formas coloquiais achadas pela avaliação e pela revisão do roteiro de UAT ("para de me mandar", "me tire da sua lista", "me tirar da lista", "não precisa mais mandar").
+- **Dashboard** substitui a página de boas-vindas; **Relatórios** saem do "em breve" e ficam para ADMIN e GESTOR (`report.read`).
+- **Diálogos longos** rolam dentro da tela (os botões ficavam fora do alcance com os avisos do rascunho).
+
+### Decidido
+
+- **IA real desligada por padrão** até a Docline resolver a transferência internacional com o provedor; o sistema funciona com o provedor de demonstração, que avisa na tela.
+- **A chamada à IA corre fora da transação** do banco; falhas ficam registradas e contam na cota.
+- **Nada da IA vale sozinho:** rascunho só sai com aprovação e envio de uma pessoa; sugestão de classificação só com confirmação.
+- **Indicadores ao vivo, sem rollups:** medidos com 100 mil leads, o pior caso (366 dias) leva ~1,2 s depois da otimização com `GROUPING SETS`.
+- **Taxas** pela coorte do primeiro contato no período, com aviso de amostra pequena abaixo de 20.
+
+### Pendente
+
+- **Go-live do piloto:** staging na Render, validação jurídica, UAT, treinamento e importação da base real ([GO-LIVE](docs/GO-LIVE.md)).
+- **Ligar a IA real:** DPA do provedor e avaliação com o modelo real.
+- **Purga automática de `ai_generations`** pelos prazos de retenção (hoje vale a anonimização).
+- **Quebras por canal e abordagem, intervalo de confiança e rollups diários:** Fase 11.
+- **Modelos de mensagem:** com os modelos aprovados da Meta, na Fase 7.
+
+
 ## [0.5.0] — Fase 5: Fila e follow-ups — 2026-10-09
 
 Aceite da fase (MVP M10, M11, M13, M14 e M15) coberto pela jornada E2E `fase5.spec.ts` e pelas suítes de cadência e opt-out. Totais: 317 testes unitários, 155 de integração e 30 jornadas E2E.

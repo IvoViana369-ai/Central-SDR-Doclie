@@ -109,7 +109,10 @@
 | Ações em massa | ✅ | ✅ | ⚙️ (nos próprios leads) | ❌ |
 | Criar e editar tags (aplicar tags existentes: todos) | ✅ | ✅ | ❌ | ❌ |
 | Decidir duplicados (mesclar) | ✅ | ✅ | ⚙️ | ❌ |
-| Gerar e aprovar mensagens com IA | ✅ | ✅ | ✅ | ✅ |
+| Gerar e aprovar mensagens com IA; pedir sugestão de classificação | ✅ | ✅ | ✅ | ✅ |
+| Ver o dashboard (SDR e Comercial: só os próprios números) | ✅ | ✅ | ✅ | ✅ |
+| Relatórios da equipe, exportação CSV dos relatórios e custos da IA (`report.read`) | ✅ | ✅ | ❌ | ❌ |
+| Configurar a IA (base de conhecimento, abordagens, regras dos rascunhos) | ✅ | ❌ | ❌ | ❌ |
 | Registrar opt-out | ✅ | ✅ | ✅ | ✅ |
 | Consultar a Lista Não Contatar (valores mascarados) | ✅ | ✅ | ❌ | ❌ |
 | **Revogar** item da Lista Não Contatar | ✅ | ❌ | ❌ | ❌ |
@@ -117,7 +120,7 @@
 | Exportar leads | ✅ | ✅ | ❌ | ❌ |
 | Mover leads entre etapas abertas, para perda (com motivo) e reativar "Sem resposta" | ✅ | ✅ | ✅ | ✅ |
 | Mover para etapas das automações, converter ou reabrir lead ganho/perdido (auditado como correção) | ✅ | ✅ | ❌ | ❌ |
-| Registrar contatos, respostas e tarefas; inscrever em cadência; transferir ao Comercial | ✅ | ✅ | ✅ | ✅ |
+| Registrar contatos, respostas e tarefas; inscrever em cadência; transferir ao Comercial | ✅ | ✅ | ✅ (só consulta depois da transferência) | ✅ |
 | Aceitar a transferência e marcar ganho ou perda | ✅ | ✅ | ❌ | ✅ (as dele) |
 | Ver a Minha Fila de outra pessoa (só consulta) | ✅ | ✅ | ❌ | ❌ |
 | Configurar pipeline, score, cadência e regras de contato (horário, limites, palavras de opt-out) | ✅ | ❌ | ❌ | ❌ |

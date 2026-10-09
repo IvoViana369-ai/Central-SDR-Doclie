@@ -25,6 +25,7 @@ describe('detecção de opt-out nas respostas (suíte de opt-out)', () => {
     for (const text of [
       'Para de me mandar mensagem, por favor.',
       'Por favor, me tire da sua lista.',
+      'Pode me tirar da lista, obrigado.',
       'Não tenho interesse e não precisa mais mandar nada.',
     ]) {
       expect(detect(text), text).toMatchObject({ level: 'CERTAIN' });

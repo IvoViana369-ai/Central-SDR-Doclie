@@ -272,6 +272,8 @@ Hospedagem fora do Brasil (ex.: Render nos EUA/Europa), provedor de IA, Sentry e
 
 ---
 
+> **Implementação (Fase 6).** A IA nasce **desligada** (`AI_PROVIDER=fake`): os rascunhos vêm de um modelo fixo e nenhum dado de lead sai do sistema. Ligar o provedor real é decisão da Docline, depois das cláusulas-padrão com o fornecedor e da avaliação offline com dados fictícios (AI-SDR §14.1). O que foi enviado a cada geração fica em `ai_generations.input_snapshot`; a purga automática pelos prazos da §12 ainda não está implementada (hoje vale a anonimização).
+
 ## 17. Registro das operações de tratamento
 
 Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
@@ -319,11 +321,12 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 
 **Fase 5–6 (contato e IA)**
 - [x] Gate em todas as ações de contato (Fase 5).
-- [ ] Gate nas ações de geração com IA (Fase 6).
+- [x] Gate nas ações de geração com IA (Fase 6): lead na Lista Não Contatar ou sem base legal não chega à IA.
 - [x] Palavras de opt-out ativas nas respostas registradas (Fase 5).
 - [ ] Confirmação de descadastro ao titular (depende do jurídico; ver §8).
 - [x] Limites de frequência e janela de horário (Fase 5).
-- [ ] IA com contexto mínimo; DPA do provedor revisado.
+- [x] IA com contexto mínimo (Fase 6): lista branca de campos, só o primeiro nome do responsável, telefones, e-mails e links mascarados; anonimizar o lead limpa contexto, saída e textos dos rascunhos.
+- [ ] DPA do provedor de IA revisado (antes de ligar `AI_PROVIDER=anthropic`; até lá, o provedor de demonstração não envia nada a terceiros).
 
 **Go-live do MVP**
 - [ ] Itens da §20 validados.

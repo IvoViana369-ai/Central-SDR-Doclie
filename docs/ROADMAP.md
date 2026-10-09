@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 5 concluídas · próxima: Fase 6 (IA de prospecção e fechamento do MVP) · **Última revisão:** 2026-10-09
+> **Status:** Fases 1 a 6 concluídas no código (MVP) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), depois a Fase 7 · **Última revisão:** 2026-10-09
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -26,7 +26,7 @@
 | 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ✅ concluída (2026-10-09) | MVP |
 | 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ✅ concluída (2026-10-09) | MVP |
 | 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ✅ concluída (2026-10-09) | MVP |
-| 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ~3,5 semanas | MVP |
+| 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ✅ concluída no código (2026-10-09); UAT e go-live com a Docline | MVP |
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ~2,5 semanas + prazos da Meta | Canais |
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ~1,5 semana + App Review | Canais |
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ~2 semanas | Captação |
@@ -342,6 +342,30 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** SDR AI (geração com aprovação humana), conjunto de avaliação, dashboard e relatórios básicos, testes E2E, UAT e go-live do piloto.
 **Aceite:** critérios M12 e M16 do MVP e [critérios de lançamento](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto).
+
+**Situação (2026-10-09):** ✅ concluída no código; F6-01 a F6-10 entregues. F6-11 (UAT, treinamento, importação da base real e go-live) tem o roteiro em [GO-LIVE](./GO-LIVE.md) e depende da Docline: staging na Render, validação jurídica e decisão sobre ligar a IA real.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase6.spec.ts` e pelas suítes `ai-sdr.int.test.ts`, `analytics.int.test.ts`, `ai-domain.test.ts`, `eval.test.ts`, `analytics-domain.test.ts` e `anthropic.test.ts`:
+
+| Critério | O que a jornada comprova |
+|---|---|
+| M12 | No contato assistido, "Gerar com IA" traz o rascunho com os avisos (contexto fraco, suposições). Um termo proibido acrescentado na edição bloqueia a aprovação até ser corrigido. O texto aprovado é o que vai no link do WhatsApp; a confirmação registra o envio e marca o rascunho como enviado, com a nota do SDR. Na resposta recebida, "Sugerir com IA" mostra a classe e a confiança, e só "Usar sugestão" classifica. |
+| M16 | O dashboard mostra os indicadores do período, a evolução diária (com tabela), os funis e as quebras por cidade, origem e SDR; atalhos de período e filtro por pessoa ficam na URL; período inválido volta ao padrão com aviso. Relatórios exportam CSV (registrado na auditoria). O SDR vê só os próprios números e não acessa Relatórios. |
+
+Decisões e pendências:
+
+- **IA desligada por padrão** (`AI_PROVIDER=fake`): rascunhos de um modelo fixo, com aviso na tela, e nenhum dado para terceiros até a Docline decidir a transferência internacional ([LGPD §16](./LGPD.md#16-transferência-internacional)). O adaptador Anthropic está pronto e testado contra um servidor local: `claude-opus-5-5`, esforço explícito, saída estruturada, cache do prompt de sistema e *fallback* de recusa do lado do servidor.
+- **A chamada à IA corre fora da transação** do banco: o pedido é registrado, o provedor responde e o resultado (ou a falha) é gravado em outra transação. Falhas contam na cota; saída fora do formato tem uma nova tentativa.
+- **Guardrails:** bloqueiam a aprovação termo proibido, telefone, e-mail ou link e valor fora dos fatos aprovados; os demais são avisos (tamanho, opt-out, nome fora do contexto, mensagem genérica, texto parecido com o de outros leads). Lead na Lista Não Contatar ou sem base legal não chega à IA.
+- **Aprovar prepara o contato assistido** com o texto aprovado (gate de novo); um envio ativo por rascunho, e cancelar o envio permite preparar de novo.
+- **Cota diária por pessoa e orçamento mensal**, com aviso aos administradores em 80%.
+- **Avaliação offline** com 400 casos fictícios e 32 respostas, na CI com o provedor falso. A primeira rodada achou formas coloquiais de opt-out que a regra determinística não pegava; elas entraram nas palavras padrão.
+- **Indicadores** com definição única (SDR-FLOW §11), ao vivo, medidos com 100 mil leads (ARCHITECTURE §13). O dashboard caiu de 4,6 s para 0,5 s (30 dias) com agregação por lead e `GROUPING SETS`.
+- **Pendências da Fase 5 resolvidas:** SDR só consulta o lead depois da transferência; próxima ação no card do Kanban.
+- **Fora desta fase:** modelos de mensagem (`message_templates`) ficam com os modelos aprovados da Meta (Fase 7); quebras por canal e abordagem, intervalo de confiança e *rollups* diários na Fase 11; purga automática de `ai_generations` pelos prazos de retenção depois do go-live.
+- **Staging:** continua dependendo da conta da Docline na Render.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|

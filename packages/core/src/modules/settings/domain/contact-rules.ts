@@ -61,6 +61,7 @@ export const DEFAULT_OPT_OUT_KEYWORDS = [
   'me tire da lista',
   'me tire da sua lista',
   'me tira da lista',
+  'me tirar da lista',
   'me remova',
   // Formas coloquiais achadas pela avaliação da IA (docs/AI-SDR.md §14).
   'para de me mandar',

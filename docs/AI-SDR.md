@@ -1,6 +1,6 @@
 # SDR AI — IA de Prospecção
 
-> **Status:** Fase 0 (desenho) · Implementação na **Fase 6** (geração) e Fases 7/11 (classificação automática e insights).
+> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. Classificação automática e insights nas Fases 7 e 11.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SDR-FLOW](./SDR-FLOW.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md)
 
 ## Sumário

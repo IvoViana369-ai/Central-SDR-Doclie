@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 4 implementadas · **Última revisão:** 2026-10-09
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP) · **Última revisão:** 2026-10-09
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
