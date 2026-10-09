@@ -19,6 +19,7 @@ const cardSelect = {
   scoreBand: true,
   stageEnteredAt: true,
   lastActivityAt: true,
+  nextActionAt: true,
   hasWhatsapp: true,
   hasInstagram: true,
   contactStatus: true,
@@ -49,6 +50,9 @@ function toCard(lead: CardRow, now: Date, slaHours: number | null) {
     daysInStage: Math.floor(inStageMs / DAY_MS),
     /** Passou do SLA configurado para a etapa. */
     overdue: slaHours !== null && inStageMs > slaHours * 3_600_000,
+    /** Próxima ação agendada (tarefa aberta mais próxima), e se já venceu. */
+    nextActionAt: lead.nextActionAt,
+    nextActionOverdue: lead.nextActionAt !== null && lead.nextActionAt < now,
     hasWhatsapp: lead.hasWhatsapp,
     hasInstagram: lead.hasInstagram,
     contactStatus: lead.contactStatus,

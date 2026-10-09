@@ -88,7 +88,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         optOutKeywords: rules.optOutKeywords,
         userId: actor.id,
         privileged,
-        canEdit: can('lead.update'),
+        canEdit: can('lead.update') && !lead.readOnlyReason,
       }}
       options={{
         tags,
@@ -97,7 +97,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       permissions={{
         userId: actor.id,
         isAdmin: actor.role === 'ADMIN',
-        canEdit: can('lead.update'),
+        canEdit: can('lead.update') && !lead.readOnlyReason,
         canAssign: can('lead.assign'),
         canClaim: actor.role === 'SDR' && lead.ownerId === null && lead.status === 'ACTIVE',
         canOptOut: can('optout.register'),

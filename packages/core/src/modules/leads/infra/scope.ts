@@ -1,6 +1,6 @@
 import type { DbTransaction, Prisma } from '@docline/db';
 import type { Actor } from '../../../shared/actor';
-import { ConflictError, NotFoundError } from '../../../shared/errors';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../../shared/errors';
 import { auditData, type UseCaseContext } from '../../../shared/use-case';
 
 /**
@@ -78,6 +78,24 @@ export async function requireLeadInScope<S extends Prisma.LeadSelect>(
   throw new NotFoundError('Lead não encontrado.');
 }
 
+/**
+ * Depois da transferência ao Comercial (oportunidade aberta ou ganha), o SDR
+ * continua vendo o lead, mas só para consulta (docs/SDR-FLOW.md §8.2): quem
+ * recebeu, a gestão e o ADMIN seguem editando. Opt-out e pedidos de titular
+ * não passam por aqui.
+ */
+export async function handoffReadOnlyReason(
+  tx: DbTransaction,
+  actor: Actor,
+  leadId: string,
+): Promise<string | null> {
+  if (actor.kind !== 'user' || actor.role !== 'SDR') return null;
+  const handedOff = await tx.opportunity.count({
+    where: { leadId, status: { in: ['OPEN', 'WON'] } },
+  });
+  return handedOff > 0 ? 'Lead transferido ao Comercial: para o SDR, fica só para consulta.' : null;
+}
+
 /** Lead no escopo e ainda editável (mesclados e anonimizados são só leitura). */
 export async function requireEditableLead<S extends Prisma.LeadSelect>(
   ctx: UseCaseContext,
@@ -89,5 +107,7 @@ export async function requireEditableLead<S extends Prisma.LeadSelect>(
   if (status === 'MERGED' || status === 'ANONYMIZED') {
     throw new ConflictError('Este lead não pode mais ser editado.');
   }
+  const readOnly = await handoffReadOnlyReason(ctx.tx, ctx.actor, leadId);
+  if (readOnly) throw new ForbiddenError(readOnly);
   return lead;
 }

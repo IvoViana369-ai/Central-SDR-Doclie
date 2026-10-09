@@ -11,6 +11,7 @@
     "admin:create": "tsx scripts/create-admin.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
     "ai:eval": "tsx scripts/ai-eval.ts",
+    "perf:100k": "tsx scripts/perf-100k.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

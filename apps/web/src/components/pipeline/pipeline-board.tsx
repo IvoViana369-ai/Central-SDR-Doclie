@@ -2,7 +2,7 @@
 
 import { checkTransition } from '@docline/core/pipeline-domain';
 import { SCORE_BAND_LABELS } from '@docline/core/scoring-domain';
-import { AtSign, MessageCircle, MoveRight, Search } from 'lucide-react';
+import { AtSign, CalendarClock, MessageCircle, MoveRight, Search } from 'lucide-react';
 import Link from 'next/link';
 import {
   useCallback,
@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, Select } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import {
   CONFLICT_MESSAGE,
   MoveStageDialog,
@@ -51,6 +51,8 @@ export interface BoardCard {
   ownerName: string | null;
   daysInStage: number;
   overdue: boolean;
+  nextActionAt: string | Date | null;
+  nextActionOverdue: boolean;
   hasWhatsapp: boolean;
   hasInstagram: boolean;
   doNotContact: boolean;
@@ -439,6 +441,18 @@ export function PipelineBoard({
           />
         ) : null}
       </div>
+      {card.nextActionAt ? (
+        <p
+          className={cn(
+            'mt-2 flex items-center gap-1 text-xs',
+            card.nextActionOverdue ? 'font-medium text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          <CalendarClock className="size-3.5" aria-hidden />
+          Próxima ação: {formatDateTime(card.nextActionAt)}
+          {card.nextActionOverdue ? ' (atrasada)' : ''}
+        </p>
+      ) : null}
       <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="truncate">{card.ownerName ?? 'Sem responsável'}</span>
         <span className={cn('shrink-0', card.overdue && 'font-medium text-destructive')}>

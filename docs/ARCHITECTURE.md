@@ -644,6 +644,20 @@ O volume de **leads** é pequeno para o PostgreSQL. O que cresce são **eventos,
 | ~500 mil | Particionamento mensal de `lead_events`, `messages`, `audit_logs`; réplica de leitura para analytics; filas por prioridade; avaliar Redis só para cache e rate limit distribuído |
 | > 500 mil / BI | Exportação incremental para um armazém analítico (BigQuery, ClickHouse ou DuckDB/Parquet) alimentado pelos eventos |
 
+**Medição (Fase 6, `pnpm perf:100k`).** Banco próprio (`*_perf`) com 100 mil leads fictícios, ~116 mil mensagens, 3,3 mil oportunidades, tarefas e opt-outs; mediana de 5 leituras pelos casos de uso da aplicação, num contêiner de desenvolvimento com Postgres local:
+
+| Leitura | Mediana |
+|---|---:|
+| Lista de leads (50) · lista filtrada · busca por nome · ficha | 6–11 ms |
+| Contagem total | 25 ms |
+| Minha Fila (SDR) | 68 ms |
+| Kanban | 212 ms |
+| Dashboard da equipe: 30 / 90 / 366 dias | 0,5 / 0,7 / 1,2 s |
+| Dashboard do SDR (30 dias) | 186 ms |
+| Relatório por cidade (366 dias) · exportação diária (366 dias) | 111 ms · 482 ms |
+
+A primeira versão do dashboard levava 4,6 s (30 dias) e 6,9 s (366 dias): uma passada pelos leads por dimensão e subconsultas por lead. Agora respostas, interesse e oportunidades são agregados por lead antes (hash join) e o total, a cidade, a origem e o SDR saem de uma passada só (`GROUPING SETS`). Com isso, os *rollups* diários ficam para quando o volume ou a medição pedirem.
+
 Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em listas; colunas de busca normalizadas e indexadas (o `unaccent` não é `IMMUTABLE`, então a normalização é feita na aplicação e gravada em `name_search`); contagens com filtros indexados; Kanban carrega contagem por coluna e pagina os cards de cada uma.
 
 ---

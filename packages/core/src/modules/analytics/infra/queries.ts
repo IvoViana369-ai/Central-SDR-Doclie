@@ -3,7 +3,7 @@ import type { AnalyticsPeriod } from '../domain/period';
 
 /**
  * Consultas dos indicadores (docs/SDR-FLOW.md §11) em SQL agregado, ao vivo
- * (docs/ARCHITECTURE.md §15: até ~50 mil leads; rollups diários depois).
+ * (docs/ARCHITECTURE.md §13), medidas com 100 mil leads (pnpm perf:100k).
  *
  * Filtro por pessoa (`userId`):
  * - indicadores do lead (novos, coorte, cidade, origem): leads de que ela é responsável;
@@ -24,14 +24,13 @@ const ownerClause = (f: AnalyticsFilter, alias = 'l') =>
   f.userId ? Prisma.sql`AND ${Prisma.raw(alias)}.owner_id = ${f.userId}::uuid` : Prisma.empty;
 
 /** Dimensões permitidas (lista fechada: nada vem do usuário para o SQL). */
-const DIMENSIONS = {
-  none: Prisma.sql`NULL::text`,
-  city: Prisma.sql`b.municipality_code::text`,
-  source: Prisma.sql`b.origin_source_id::text`,
-  owner: Prisma.sql`b.owner_id::text`,
+const DIMENSION_COLUMNS = {
+  city: 'municipality_code',
+  source: 'origin_source_id',
+  owner: 'owner_id',
 } as const;
 
-export type LeadDimension = keyof typeof DIMENSIONS;
+export type LeadDimension = 'none' | keyof typeof DIMENSION_COLUMNS;
 
 export interface LeadMetricsRow {
   key: string | null;
@@ -42,63 +41,106 @@ export interface LeadMetricsRow {
   interestedCohort: number;
   opportunitiesCohort: number;
   wonCohort: number;
-  medianHoursToFirstContact: number | null;
 }
 
 /**
- * Indicadores por lead, agrupados por uma dimensão: novos no período, ativos
- * agora e a coorte do primeiro contato (com resposta, interesse, oportunidade
- * e ganho acompanhados até hoje).
+ * Indicadores por lead, numa passada só para todas as dimensões pedidas
+ * (GROUPING SETS): novos no período, ativos agora e a coorte do primeiro
+ * contato, com resposta, interesse, oportunidade e ganho acompanhados até
+ * hoje. Respostas, interesse e oportunidades são agregados por lead antes e
+ * entram por hash join (sem subconsulta por lead).
  */
 export async function leadMetrics(
   tx: DbTransaction,
   f: AnalyticsFilter,
-  dimension: LeadDimension,
-): Promise<LeadMetricsRow[]> {
+  dimensions: readonly LeadDimension[],
+): Promise<Map<LeadDimension, LeadMetricsRow[]>> {
   const { start, end } = f.period;
-  return tx.$queryRaw<LeadMetricsRow[]>`
-    WITH base AS (
-      SELECT l.id, l.status, l.municipality_code, l.origin_source_id, l.owner_id,
-             l.created_at, l.first_contact_at,
-             (l.created_at >= ${start} AND l.created_at < ${end}) AS is_new,
-             (l.first_contact_at >= ${start} AND l.first_contact_at < ${end}) AS in_cohort
-      FROM leads l
-      WHERE l.status <> 'MERGED' ${ownerClause(f)}
+  const grouped = dimensions.filter((d) => d !== 'none');
+  const columns = grouped.map((d) => `f.${DIMENSION_COLUMNS[d]}`);
+  const sets = Prisma.join(
+    dimensions.map((d) =>
+      d === 'none' ? Prisma.sql`()` : Prisma.sql`(${Prisma.raw(`f.${DIMENSION_COLUMNS[d]}`)})`,
     ),
-    cohort AS (
-      SELECT b.id,
-        EXISTS (
-          SELECT 1 FROM messages m
-          WHERE m.lead_id = b.id AND m.direction = 'INBOUND' AND m.status <> 'CANCELED'
-            AND COALESCE(m.received_at, m.created_at) >= b.first_contact_at
-        ) OR EXISTS (
-          SELECT 1 FROM activities a
-          WHERE a.lead_id = b.id AND a.direction = 'INBOUND' AND a.occurred_at >= b.first_contact_at
-        ) AS replied,
-        EXISTS (
-          SELECT 1 FROM messages m WHERE m.lead_id = b.id AND m.classification = 'INTERESTED'
-        ) AS interested,
-        EXISTS (SELECT 1 FROM opportunities o WHERE o.lead_id = b.id) AS has_opportunity,
-        EXISTS (SELECT 1 FROM opportunities o WHERE o.lead_id = b.id AND o.status = 'WON') AS won
-      FROM base b
-      WHERE b.in_cohort
+  );
+  // grouping(c1, …, cn): bit 1 para cada coluna fora do conjunto (a primeira é o bit mais alto).
+  const all = (1 << columns.length) - 1;
+  const bitsOf = (d: LeadDimension) =>
+    d === 'none' ? all : all - (1 << (columns.length - 1 - grouped.indexOf(d)));
+  const groupingExpr = columns.length
+    ? Prisma.raw(`grouping(${columns.join(', ')})::int`)
+    : Prisma.raw('0');
+  const keyExpr = columns.length
+    ? Prisma.raw(`COALESCE(${columns.map((c) => `${c}::text`).join(', ')})`)
+    : Prisma.raw('NULL::text');
+  const rows = await tx.$queryRaw<(LeadMetricsRow & { grouping: number })[]>`
+    WITH inbound AS (
+      SELECT m.lead_id, max(COALESCE(m.received_at, m.created_at)) AS last_at
+      FROM messages m
+      WHERE m.direction = 'INBOUND' AND m.status <> 'CANCELED'
+      GROUP BY m.lead_id
+    ),
+    inbound_calls AS (
+      SELECT a.lead_id, max(a.occurred_at) AS last_at
+      FROM activities a WHERE a.direction = 'INBOUND' GROUP BY a.lead_id
+    ),
+    interested AS (
+      SELECT DISTINCT m.lead_id FROM messages m WHERE m.classification = 'INTERESTED'
+    ),
+    opps AS (
+      SELECT o.lead_id, bool_or(o.status = 'WON') AS won FROM opportunities o GROUP BY o.lead_id
+    ),
+    flags AS (
+      SELECT l.municipality_code, l.origin_source_id, l.owner_id, l.status,
+        (l.created_at >= ${start} AND l.created_at < ${end}) AS is_new,
+        (l.first_contact_at >= ${start} AND l.first_contact_at < ${end}) AS in_cohort,
+        -- Resposta depois do primeiro contato: mensagem recebida ou ligação de entrada.
+        (i.last_at >= l.first_contact_at OR c.last_at >= l.first_contact_at) AS replied,
+        it.lead_id IS NOT NULL AS interested,
+        o.lead_id IS NOT NULL AS has_opportunity,
+        COALESCE(o.won, false) AS won
+      FROM leads l
+      LEFT JOIN inbound i ON i.lead_id = l.id
+      LEFT JOIN inbound_calls c ON c.lead_id = l.id
+      LEFT JOIN interested it ON it.lead_id = l.id
+      LEFT JOIN opps o ON o.lead_id = l.id
+      WHERE l.status <> 'MERGED' ${ownerClause(f)}
     )
-    SELECT ${DIMENSIONS[dimension]} AS key,
-      count(*) FILTER (WHERE b.status = 'ACTIVE')::int AS "active",
-      count(*) FILTER (WHERE b.is_new)::int AS "newLeads",
-      count(c.id)::int AS "firstContacts",
-      count(*) FILTER (WHERE c.replied)::int AS "responded",
-      count(*) FILTER (WHERE c.interested)::int AS "interestedCohort",
-      count(*) FILTER (WHERE c.has_opportunity)::int AS "opportunitiesCohort",
-      count(*) FILTER (WHERE c.won)::int AS "wonCohort",
-      -- Contato registrado com data anterior ao cadastro conta como zero.
-      (percentile_cont(0.5) WITHIN GROUP (
-        ORDER BY GREATEST(0, extract(epoch FROM b.first_contact_at - b.created_at)) / 3600.0
-      ) FILTER (WHERE b.in_cohort))::float8 AS "medianHoursToFirstContact"
-    FROM base b
-    LEFT JOIN cohort c ON c.id = b.id
-    GROUP BY 1
+    SELECT ${groupingExpr} AS grouping, ${keyExpr} AS key,
+      count(*) FILTER (WHERE f.status = 'ACTIVE')::int AS "active",
+      count(*) FILTER (WHERE f.is_new)::int AS "newLeads",
+      count(*) FILTER (WHERE f.in_cohort)::int AS "firstContacts",
+      count(*) FILTER (WHERE f.in_cohort AND f.replied)::int AS "responded",
+      count(*) FILTER (WHERE f.in_cohort AND f.interested)::int AS "interestedCohort",
+      count(*) FILTER (WHERE f.in_cohort AND f.has_opportunity)::int AS "opportunitiesCohort",
+      count(*) FILTER (WHERE f.in_cohort AND f.won)::int AS "wonCohort"
+    FROM flags f
+    GROUP BY GROUPING SETS (${sets})
   `;
+  const result = new Map<LeadDimension, LeadMetricsRow[]>(dimensions.map((d) => [d, []]));
+  for (const { grouping, ...row } of rows) {
+    const dimension = dimensions.find((d) => bitsOf(d) === grouping);
+    if (dimension) result.get(dimension)!.push(row);
+  }
+  return result;
+}
+
+/** Mediana (horas) do cadastro ao primeiro contato, nos primeiros contatos do período. */
+export async function medianHoursToFirstContact(
+  tx: DbTransaction,
+  f: AnalyticsFilter,
+): Promise<number | null> {
+  const { start, end } = f.period;
+  const [row] = await tx.$queryRaw<{ hours: number | null }[]>`
+    -- Contato registrado com data anterior ao cadastro conta como zero.
+    SELECT (percentile_cont(0.5) WITHIN GROUP (
+      ORDER BY GREATEST(0, extract(epoch FROM l.first_contact_at - l.created_at)) / 3600.0
+    ))::float8 AS hours
+    FROM leads l
+    WHERE l.status <> 'MERGED' AND l.first_contact_at >= ${start} AND l.first_contact_at < ${end}
+      ${ownerClause(f)}
+  `;
+  return row?.hours ?? null;
 }
 
 export interface ContactRow {

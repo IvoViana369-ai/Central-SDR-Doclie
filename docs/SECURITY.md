@@ -95,6 +95,7 @@
 - **Pool do SDR** = leads ativos e sem responsável nas UFs ou cidades dos seus territórios (`user_territories`, definidos pelo ADMIN na tela Equipe). **Sem território, não há pool**: o SDR vê só os leads atribuídos a ele. Ao "puxar do pool", o lead passa a ser dele (atribuição `CLAIM`, com proteção contra dois SDRs puxarem o mesmo lead).
 - "Leads que transferiu (somente leitura)" entra com a transferência ao Comercial (Fase 5).
 - **Fase 5:** o **COMERCIAL** vê os leads atribuídos a ele e os leads das oportunidades em que é o comercial responsável. O SDR continua responsável pelo lead depois da transferência e mantém o acesso; o bloqueio de edição (somente leitura) fica para a Fase 6. Aceitar, ganhar e perder a oportunidade são ações do comercial dela, do gestor e do ADMIN.
+- **Fase 6:** com oportunidade aberta ou ganha, o **SDR fica só com consulta** no lead (`handoffReadOnlyReason`, conferido em toda escrita por `requireEditableLead`); a ficha avisa e esconde as ações. Opt-out e pedidos de titular continuam possíveis. Se a oportunidade for perdida, o SDR volta a editar.
 - **Fora do escopo, o lead parece não existir** (404, sem revelar que existe) e a tentativa é registrada como `access.denied` na auditoria, gravada fora da transação para sobreviver ao rollback. Na verificação de duplicidade, um lead fora do escopo aparece só com o código, para evitar o cadastro duplicado sem expor os dados.
 
 ### 4.2 Matriz de permissões (inicial)
@@ -274,6 +275,13 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - Prompts e respostas não vão para logs de aplicação.
 - Detalhes em [AI-SDR §9](./AI-SDR.md#9-guardrails).
 
+> **Implementação (Fase 6).**
+> - O provedor real fica **desligado por padrão** (`AI_PROVIDER=fake`): nenhum dado sai para terceiros até a Docline decidir (transferência internacional, [LGPD](./LGPD.md)). A chave vem só de `AI_API_KEY`.
+> - Contexto por lista branca; telefones, e-mails e links do histórico e das instruções do SDR são trocados por marcadores antes de ir ao modelo. Texto de terceiros entra entre marcas e não consegue fechá-las (`<` e `>` viram `‹` e `›`).
+> - Guardrails bloqueantes (termo proibido, dado de contato, valor fora dos fatos) impedem aprovar; o texto aprovado passa de novo pelo gate de contato. A sugestão de classificação nunca altera a resposta sozinha.
+> - O conjunto de avaliação (AI-SDR §14) mede injeção obedecida, marcador vazado e presença local inventada; a CI roda com o provedor falso, e o real só com `--yes` e dados fictícios.
+> - Cota diária por pessoa (falhas contam), orçamento mensal com aviso em 80% e bloqueio em 100%; tudo registrado em `ai_generations` e na auditoria.
+
 ---
 
 ## 14. Auditoria e monitoramento
@@ -331,12 +339,20 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - [ ] Staging: configurar `TRUSTED_PROXIES` após conferir o `X-Forwarded-For` da hospedagem (§12).
 
 **Fases 2–6 — MVP (MUST)**
-- [ ] Escopo por perfil em todas as listas e detalhes (testes de IDOR).
-- [ ] Upload seguro (limites, zip bomb, sem persistência).
+- [x] Escopo por perfil em todas as listas e detalhes (testes de IDOR): leads, listas, exportação, pipeline, tarefas, oportunidades, IA e indicadores; acesso fora do escopo responde 404 e fica na auditoria.
+- [x] Upload seguro (limites, zip bomb, sem persistência): Fase 3, com testes do leitor de planilhas.
 - [x] Exportação restrita, auditada e protegida contra CSV injection (Fase 2: só ADMIN/GESTOR, 5 por dia, até 20.000 leads, contatos só quando pedidos e nunca os da Lista Não Contatar).
-- [ ] Guardrails de IA e cotas.
+- [x] Guardrails de IA e cotas (Fase 6, §13).
 - [ ] Backups e restauração testados antes do go-live.
 - [x] 2FA para ADMIN/GESTOR (SHOULD): TOTP com códigos de recuperação e lembrete persistente (Fase 2). O bloqueio de acesso sem 2FA fica para antes da Fase 7.
+
+**Revisão de segurança da Fase 6 (F6-10)**
+- Rotas novas (`/ai/*`, `/approaches`, `/analytics/*`) passam pelo `apiHandler` (sessão, CSRF nas que alteram, Zod) e pelos casos de uso com permissão e escopo; o SDR vê só os próprios números, e gestão e ADMIN filtram por pessoa.
+- Depois da transferência ao Comercial, o SDR fica só com consulta no lead (§4.1); opt-out e pedidos de titular continuam possíveis.
+- A exportação de relatórios é um `GET` com efeito só de auditoria: sem dado pessoal além do nome de quem trabalha na equipe, células protegidas contra CSV injection e nome de arquivo só ASCII.
+- Consultas de indicadores medidas com 100 mil leads (ARCHITECTURE §13): até ~1,3 s no pior caso (366 dias), aceitável para usuários autenticados sem limite próprio de taxa por enquanto.
+- Script de desempenho só aceita bancos `*_perf` (nome com padrão fechado, porque entra em `DROP DATABASE`).
+- `pnpm audit --prod` sem vulnerabilidades altas; o SDK da Anthropic entra só no pacote de integrações.
 
 **Fases 7+ — Integrações**
 - [ ] 2FA obrigatório para ADMIN/GESTOR.

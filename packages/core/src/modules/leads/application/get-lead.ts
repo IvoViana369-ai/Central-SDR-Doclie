@@ -5,7 +5,7 @@ import { formatCnpj, formatPhone, whatsappLink } from '../../normalization';
 import { leadIdInput } from '../contracts/schemas';
 import { formatLeadCode } from '../domain/lead';
 import { loadLeadSuppressions } from '../../compliance';
-import { requireLeadInScope } from '../infra/scope';
+import { handoffReadOnlyReason, requireLeadInScope } from '../infra/scope';
 
 export const leadDetailSelect = {
   id: true,
@@ -161,6 +161,8 @@ export async function loadLeadDetail(ctx: UseCaseContext, leadId: string) {
   return {
     ...rest,
     codeLabel: formatLeadCode(lead.code),
+    /** Motivo de só consulta para quem está vendo (ex.: SDR depois da transferência). */
+    readOnlyReason: await handoffReadOnlyReason(ctx.tx, ctx.actor, lead.id),
     mergedInto: mergedInto
       ? { id: mergedInto.id, codeLabel: formatLeadCode(mergedInto.code) }
       : null,

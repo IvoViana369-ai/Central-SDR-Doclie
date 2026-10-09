@@ -175,9 +175,26 @@ describe('fila, transferência ao Comercial e avisos (M10, M15, F5-11, F5-13)', 
       unread: 1,
       items: [expect.objectContaining({ type: 'handoff.created' })],
     });
-    await expect(getLead(deps, sales, { leadId: id })).resolves.toMatchObject({ id });
+    await expect(getLead(deps, sales, { leadId: id })).resolves.toMatchObject({
+      id,
+      readOnlyReason: null,
+    });
+    // Depois da transferência, o SDR só consulta (SDR-FLOW §8.2); gestão segue editando.
+    await expect(getLead(deps, sdr, { leadId: id })).resolves.toMatchObject({
+      readOnlyReason: expect.stringMatching(/só para consulta/),
+    });
     await expect(
       handoffToSales(deps, sdr, {
+        leadId: id,
+        salesOwnerId: sales.id,
+        qualification: QUALIFICATION,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      createTask(deps, sdr, { leadId: id, title: 'Ligar de novo', dueAt: '2026-10-20T13:00:00Z' }),
+    ).rejects.toThrow(/só para consulta/);
+    await expect(
+      handoffToSales(deps, manager, {
         leadId: id,
         salesOwnerId: sales.id,
         qualification: QUALIFICATION,

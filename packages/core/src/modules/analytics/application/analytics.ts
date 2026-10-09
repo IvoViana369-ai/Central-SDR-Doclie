@@ -16,6 +16,7 @@ import {
   dailySeries,
   interestedInPeriod,
   leadMetrics,
+  medianHoursToFirstContact,
   optOutsInPeriod,
   outcomeMetrics,
   stageCounts,
@@ -63,12 +64,15 @@ const emptyLeadRow: LeadMetricsRow = {
   interestedCohort: 0,
   opportunitiesCohort: 0,
   wonCohort: 0,
-  medianHoursToFirstContact: null,
 };
 
-async function overview(ctx: UseCaseContext, filter: AnalyticsFilter) {
-  const [[leads = emptyLeadRow], [contacts], [outcomes], interested, optOuts] = await Promise.all([
-    leadMetrics(ctx.tx, filter, 'none'),
+/** Indicadores do período; `leadRow` vem pronto quando o dashboard já calculou tudo. */
+async function overview(ctx: UseCaseContext, filter: AnalyticsFilter, leadRow?: LeadMetricsRow) {
+  const [leads, median, [contacts], [outcomes], interested, optOuts] = await Promise.all([
+    leadRow
+      ? Promise.resolve(leadRow)
+      : leadMetrics(ctx.tx, filter, ['none']).then((m) => m.get('none')![0] ?? emptyLeadRow),
+    medianHoursToFirstContact(ctx.tx, filter),
     contactMetrics(ctx.tx, filter, false),
     outcomeMetrics(ctx.tx, filter, false),
     interestedInPeriod(ctx.tx, filter),
@@ -91,10 +95,7 @@ async function overview(ctx: UseCaseContext, filter: AnalyticsFilter) {
       customers: outcomes?.customers ?? 0,
       conversionRate: ratio(leads.wonCohort, leads.firstContacts),
       optOuts,
-      medianHoursToFirstContact:
-        leads.medianHoursToFirstContact === null
-          ? null
-          : Math.round(leads.medianHoursToFirstContact * 10) / 10,
+      medianHoursToFirstContact: median === null ? null : Math.round(median * 10) / 10,
       smallSample: isSmallSample(leads.firstContacts),
     },
     /** Funil da coorte: dos primeiros contatos do período, até onde chegaram (até hoje). */
@@ -154,8 +155,11 @@ async function breakdown(
   filter: AnalyticsFilter,
   dimension: BreakdownDimension,
   limit: number,
+  precomputed?: LeadMetricsRow[],
 ) {
-  const leadRows = await leadMetrics(ctx.tx, filter, DIMENSION_OF[dimension]);
+  const leadRows =
+    precomputed ??
+    (await leadMetrics(ctx.tx, filter, [DIMENSION_OF[dimension]])).get(DIMENSION_OF[dimension])!;
   const [contacts, outcomes] =
     dimension === 'sdr'
       ? await Promise.all([
@@ -225,13 +229,19 @@ export const getDashboard = defineUseCase({
   async run(ctx, input) {
     const { filter, scope } = await resolveFilter(ctx, input);
     const teamView = scope.canSeeTeam && !filter.userId;
+    // Uma passada nos leads para o total e as três quebras (GROUPING SETS).
+    const leads = await leadMetrics(
+      ctx.tx,
+      filter,
+      teamView ? ['none', 'city', 'source', 'owner'] : ['none', 'city', 'source'],
+    );
     const [summary, stages, daily, cities, sources, sdrs] = await Promise.all([
-      overview(ctx, filter),
+      overview(ctx, filter, leads.get('none')![0] ?? emptyLeadRow),
       funnel(ctx, filter),
       dailySeries(ctx.tx, filter),
-      breakdown(ctx, filter, 'city', 8),
-      breakdown(ctx, filter, 'source', 8),
-      teamView ? breakdown(ctx, filter, 'sdr', 50) : Promise.resolve(null),
+      breakdown(ctx, filter, 'city', 8, leads.get('city')),
+      breakdown(ctx, filter, 'source', 8, leads.get('source')),
+      teamView ? breakdown(ctx, filter, 'sdr', 50, leads.get('owner')) : Promise.resolve(null),
     ]);
     return { scope, ...summary, stages, daily, cities, sources, sdrs };
   },

@@ -27,6 +27,7 @@
     "db:seed:dev": "pnpm --filter @docline/web seed:dev",
     "admin:create": "pnpm --filter @docline/web admin:create",
     "ai:eval": "pnpm --filter @docline/web ai:eval",
+    "perf:100k": "pnpm --filter @docline/web perf:100k",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "db:check": "pnpm --filter @docline/db migrate:check"
   },

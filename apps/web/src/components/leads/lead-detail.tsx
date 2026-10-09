@@ -32,6 +32,8 @@ export interface LeadDetailView {
   status: 'ACTIVE' | 'ARCHIVED' | 'MERGED' | 'ANONYMIZED';
   /** Para leads mesclados: o lead que reuniu os dados. */
   mergedInto: { id: string; codeLabel: string } | null;
+  /** Só consulta para quem está vendo (ex.: SDR depois da transferência ao Comercial). */
+  readOnlyReason: string | null;
   displayName: string;
   companyName: string | null;
   tradeName: string | null;
@@ -265,6 +267,7 @@ export function LeadDetail({
           . Este registro fica só para consulta; nada foi excluído.
         </Alert>
       ) : null}
+      {lead.readOnlyReason ? <Alert title="Só consulta">{lead.readOnlyReason}</Alert> : null}
       {lead.organizationSuppressions.length > 0 ? (
         <Alert variant="error" title="Lead na Lista Não Contatar">
           Desde {formatDate(lead.organizationSuppressions[0]!.since)}

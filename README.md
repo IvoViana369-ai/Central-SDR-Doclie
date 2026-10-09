@@ -163,6 +163,7 @@ pnpm dev
 | `pnpm db:seed:dev` | ~2.000 empresas fictícias com duplicados propositais (só `APP_ENV=development`; não roda duas vezes) |
 | `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
 | `pnpm ai:eval` | Avaliação offline da IA com o conjunto fictício (provedor falso por padrão; real só com `--yes`) — [AI-SDR §14](docs/AI-SDR.md#14-avaliação-de-qualidade) |
+| `pnpm perf:100k` | Teste de desempenho com 100 mil leads fictícios num banco próprio (`DATABASE_URL_PERF`, nome terminado em `_perf`, recriado do zero) — [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-escalabilidade) |
 
 Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TEST` e se recusam a rodar se o nome não terminar em `_test`.
 
