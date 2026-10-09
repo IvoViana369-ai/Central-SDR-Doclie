@@ -6,6 +6,7 @@ import { asData } from './outreach-message';
  * confirma.
  */
 export const REPLY_CLASSIFICATION_PROMPT = { id: 'reply_classification', version: 1 } as const;
+export const CLASSIFICATION_MAX_OUTPUT_TOKENS = 4096;
 
 export const REPLY_CLASSIFICATION_SYSTEM = `Você ajuda SDRs da Docline Tecnologia a classificar respostas de escritórios de contabilidade a mensagens de prospecção B2B. Uma pessoa confirma cada classificação.
 

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "admin:create": "tsx scripts/create-admin.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
+    "ai:eval": "tsx scripts/ai-eval.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -48,6 +48,9 @@ jobs:
       - run: pnpm typecheck
       - name: Testes unitários
         run: pnpm test
+      # Conjunto fictício com o provedor falso: sem custo e sem chave (docs/AI-SDR.md §14).
+      - name: Avaliação offline da IA (provedor falso)
+        run: pnpm ai:eval --out .ai-eval/ci
       - name: Testes de integração (PostgreSQL)
         run: pnpm test:int
       - name: Schema e migrações em sincronia

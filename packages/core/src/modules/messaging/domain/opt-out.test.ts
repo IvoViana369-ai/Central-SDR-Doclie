@@ -22,6 +22,13 @@ describe('detecção de opt-out nas respostas (suíte de opt-out)', () => {
     });
     expect(detect('REMOVA MEU NÚMERO')).toMatchObject({ level: 'CERTAIN' });
     expect(detect('não me procure mais')).toMatchObject({ level: 'CERTAIN' });
+    for (const text of [
+      'Para de me mandar mensagem, por favor.',
+      'Por favor, me tire da sua lista.',
+      'Não tenho interesse e não precisa mais mandar nada.',
+    ]) {
+      expect(detect(text), text).toMatchObject({ level: 'CERTAIN' });
+    }
   });
 
   it('palavra solta num texto maior é só uma possibilidade: a pessoa decide', () => {

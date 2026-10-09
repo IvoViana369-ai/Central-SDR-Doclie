@@ -59,7 +59,15 @@ export const DEFAULT_OPT_OUT_KEYWORDS = [
   'remova meu contato',
   'tire meu numero',
   'me tire da lista',
+  'me tire da sua lista',
+  'me tira da lista',
   'me remova',
+  // Formas coloquiais achadas pela avaliação da IA (docs/AI-SDR.md §14).
+  'para de me mandar',
+  'pare de me mandar',
+  'para de mandar',
+  'pare de mandar',
+  'nao precisa mais mandar',
 ] as const;
 
 export const DEFAULT_CONTACT_RULES: ContactRules = {

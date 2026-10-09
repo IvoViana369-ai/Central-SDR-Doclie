@@ -10,6 +10,7 @@ import { estimateCostUsd } from '../domain/cost';
 import { checkReplyClassification, clampConfidence } from '../domain/guardrails';
 import { replyClassificationSchema, type ReplyClassificationOutput } from '../domain/schemas';
 import {
+  CLASSIFICATION_MAX_OUTPUT_TOKENS,
   REPLY_CLASSIFICATION_PROMPT,
   REPLY_CLASSIFICATION_SYSTEM,
   replyClassificationUserMessage,
@@ -19,7 +20,6 @@ import { callProvider, IN_PROGRESS, usageColumns } from './generate';
 
 const REPLY_MAX = 2000;
 const CONTEXT_MAX = 280;
-const CLASSIFICATION_MAX_OUTPUT_TOKENS = 4096;
 
 const truncate = (text: string, max: number) =>
   text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;

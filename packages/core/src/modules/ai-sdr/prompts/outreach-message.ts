@@ -9,6 +9,8 @@ import type { OutreachContext } from '../domain/context';
  * valer entre leads e pessoas; tudo que muda por pedido vai na mensagem do usuário.
  */
 export const OUTREACH_PROMPT = { id: 'outreach_message', version: 1 } as const;
+/** Teto de saída por pedido (o raciocínio do modelo conta aqui). */
+export const OUTREACH_MAX_OUTPUT_TOKENS = 16_000;
 
 export interface KnowledgeFact {
   key: string;

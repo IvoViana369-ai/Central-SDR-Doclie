@@ -34,6 +34,8 @@ blob-report/
 /data/
 .data/
 /exports/
+# Saídas da avaliação offline da IA (pnpm ai:eval)
+.ai-eval/
 *.sql.gz
 *.dump
 

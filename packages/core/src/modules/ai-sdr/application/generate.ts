@@ -27,7 +27,12 @@ import { buildOutreachContext } from '../domain/context';
 import { estimateCostUsd } from '../domain/cost';
 import { checkOutreachText, type GuardrailFlag } from '../domain/guardrails';
 import { outreachMessageSchema, type OutreachMessage } from '../domain/schemas';
-import { OUTREACH_PROMPT, outreachSystemPrompt, outreachUserMessage } from '../prompts';
+import {
+  OUTREACH_MAX_OUTPUT_TOKENS,
+  OUTREACH_PROMPT,
+  outreachSystemPrompt,
+  outreachUserMessage,
+} from '../prompts';
 import {
   alertBudget,
   assertAiAllowance,
@@ -39,8 +44,6 @@ import {
 import { describeGeneration, generationSelect, type StoredContext } from './view';
 
 const CHANNEL_LABELS = { WHATSAPP: 'WhatsApp', INSTAGRAM: 'Instagram', EMAIL: 'E-mail' } as const;
-/** Teto de saída por pedido (o raciocínio do modelo conta aqui). */
-export const OUTREACH_MAX_OUTPUT_TOKENS = 16_000;
 /** Marca de geração em andamento (a chamada à IA corre fora da transação). */
 export const IN_PROGRESS = 'IN_PROGRESS';
 
