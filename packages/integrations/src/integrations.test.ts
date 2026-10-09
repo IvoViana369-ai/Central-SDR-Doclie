@@ -7,7 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { FileEmailProvider } from './email/file';
 import { ResendEmailProvider } from './email/resend';
 import { createLogger } from './observability/logger';
-import { assertProvidersImplemented, createEmailProvider, integrationStatuses } from './registry';
+import {
+  assertProvidersImplemented,
+  createEmailProvider,
+  createWhatsappProvider,
+  integrationStatuses,
+  whatsappWebhookConfig,
+} from './registry';
 
 const baseEnv = {
   DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
@@ -126,15 +132,48 @@ describe('status das integrações', () => {
   it('falha na inicialização se um provedor de fase futura for configurado', () => {
     const env = parseServerEnv({
       ...baseEnv,
+      INSTAGRAM_PROVIDER: 'meta_graph',
+      META_APP_SECRET: 's',
+      META_ACCESS_TOKEN: 't',
+      META_GRAPH_API_VERSION: 'v26.0',
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: '1',
+    });
+    expect(() => assertProvidersImplemented(env)).toThrow(
+      /Instagram="meta_graph" \(previsto para a Fase 8\)/,
+    );
+  });
+
+  it('WhatsApp: assistido sem provedor; simulado; Cloud API ativa (Fase 7)', () => {
+    expect(createWhatsappProvider(parseServerEnv(baseEnv))).toBeNull();
+    expect(whatsappWebhookConfig(parseServerEnv(baseEnv))).toBeNull();
+
+    const fake = parseServerEnv({ ...baseEnv, WHATSAPP_PROVIDER: 'fake' });
+    expect(createWhatsappProvider(fake)?.name).toBe('fake');
+    // Simulado sem segredos: o endpoint de webhooks não aceita nada.
+    expect(whatsappWebhookConfig(fake)).toBeNull();
+    expect(
+      whatsappWebhookConfig(
+        parseServerEnv({
+          ...baseEnv,
+          WHATSAPP_PROVIDER: 'fake',
+          META_APP_SECRET: 'segredo-de-teste',
+          META_WEBHOOK_VERIFY_TOKEN: 'verificacao-de-teste',
+        }),
+      ),
+    ).toEqual({ appSecret: 'segredo-de-teste', verifyToken: 'verificacao-de-teste' });
+
+    const cloud = parseServerEnv({
+      ...baseEnv,
       WHATSAPP_PROVIDER: 'meta_cloud',
       META_APP_SECRET: 's',
       META_ACCESS_TOKEN: 't',
-      META_GRAPH_API_VERSION: 'v23.0',
+      META_GRAPH_API_VERSION: 'v26.0',
       META_WEBHOOK_VERIFY_TOKEN: 'v',
-      WHATSAPP_PHONE_NUMBER_ID: '1',
+      WHATSAPP_BUSINESS_ACCOUNT_ID: '1',
+      WHATSAPP_PHONE_NUMBER_ID: '2',
     });
-    expect(() => assertProvidersImplemented(env)).toThrow(
-      /WhatsApp="meta_cloud" \(previsto para a Fase 7\)/,
-    );
+    expect(() => assertProvidersImplemented(cloud)).not.toThrow();
+    expect(createWhatsappProvider(cloud)?.name).toBe('meta_cloud');
+    expect(integrationStatuses(cloud).find((s) => s.key === 'whatsapp')?.state).toBe('active');
   });
 });

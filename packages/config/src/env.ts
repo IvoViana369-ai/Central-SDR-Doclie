@@ -100,7 +100,7 @@ export const serverEnvShape = {
   META_APP_ID: optional(z.string()),
   META_APP_SECRET: optional(z.string()),
   META_ACCESS_TOKEN: optional(z.string()),
-  META_GRAPH_API_VERSION: optional(z.string().regex(/^v\d+\.\d+$/, 'formato esperado: v23.0')),
+  META_GRAPH_API_VERSION: optional(z.string().regex(/^v\d+\.\d+$/, 'formato esperado: v26.0')),
   META_WEBHOOK_VERIFY_TOKEN: optional(z.string()),
   WHATSAPP_BUSINESS_ACCOUNT_ID: optional(z.string()),
   WHATSAPP_PHONE_NUMBER_ID: optional(z.string()),
@@ -161,6 +161,7 @@ export const serverEnvSchema = z.object(serverEnvShape).superRefine((env, ctx) =
       'META_ACCESS_TOKEN',
       'META_GRAPH_API_VERSION',
       'META_WEBHOOK_VERIFY_TOKEN',
+      'WHATSAPP_BUSINESS_ACCOUNT_ID',
       'WHATSAPP_PHONE_NUMBER_ID',
     ]);
   }

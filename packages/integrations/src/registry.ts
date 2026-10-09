@@ -1,12 +1,15 @@
 import type { ServerEnv } from '@docline/config';
 import {
   FakeAiProvider,
+  FakeWhatsappProvider,
   type AiLimits,
   type AiProvider,
   type EmailProvider,
   type Logger,
+  type WhatsappProvider,
 } from '@docline/core';
 import { AnthropicAiProvider } from './ai/anthropic';
+import { MetaCloudWhatsappProvider } from './whatsapp/meta-cloud';
 import { ConsoleEmailProvider } from './email/console';
 import { FileEmailProvider } from './email/file';
 import { ResendEmailProvider } from './email/resend';
@@ -48,6 +51,37 @@ export function createAiProvider(env: ServerEnv): AiProvider {
   }
 }
 
+/**
+ * WhatsApp pela API (docs/INTEGRATIONS.md §6.2): `assisted` (padrão) não tem
+ * provedor, só o link `wa.me`; `fake` simula sem enviar nada; `meta_cloud` usa
+ * a Cloud API e, fora de produção, só envia com ALLOW_REAL_SENDS=true.
+ */
+export function createWhatsappProvider(env: ServerEnv): WhatsappProvider | null {
+  switch (env.WHATSAPP_PROVIDER) {
+    case 'assisted':
+      return null;
+    case 'fake':
+      return new FakeWhatsappProvider();
+    case 'meta_cloud':
+      return new MetaCloudWhatsappProvider({
+        accessToken: env.META_ACCESS_TOKEN!,
+        apiVersion: env.META_GRAPH_API_VERSION!,
+        phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID!,
+        businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID!,
+        allowSends: env.APP_ENV === 'production' || env.ALLOW_REAL_SENDS,
+      });
+  }
+}
+
+/** Segredos dos webhooks da Meta, ou `null` se o endpoint não deve aceitar nada. */
+export function whatsappWebhookConfig(
+  env: ServerEnv,
+): { appSecret: string; verifyToken: string } | null {
+  if (env.WHATSAPP_PROVIDER === 'assisted') return null;
+  if (!env.META_APP_SECRET || !env.META_WEBHOOK_VERIFY_TOKEN) return null;
+  return { appSecret: env.META_APP_SECRET, verifyToken: env.META_WEBHOOK_VERIFY_TOKEN };
+}
+
 export function aiLimitsFromEnv(env: ServerEnv): AiLimits {
   return {
     effortGeneration: env.AI_EFFORT_GENERATION,
@@ -80,6 +114,7 @@ const IMPLEMENTED = new Set([
   'resend',
   'sentry',
   'anthropic',
+  'meta_cloud',
 ]);
 
 export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {

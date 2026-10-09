@@ -83,6 +83,7 @@ describe('parseServerEnv', () => {
     expect(problems).toEqual(
       expect.arrayContaining([
         'META_ACCESS_TOKEN: obrigatória quando WHATSAPP_PROVIDER=meta_cloud',
+        'WHATSAPP_BUSINESS_ACCOUNT_ID: obrigatória quando WHATSAPP_PROVIDER=meta_cloud',
         'WHATSAPP_PHONE_NUMBER_ID: obrigatória quando WHATSAPP_PROVIDER=meta_cloud',
         'AI_API_KEY: obrigatória quando AI_PROVIDER=anthropic',
       ]),
@@ -91,7 +92,7 @@ describe('parseServerEnv', () => {
 
   it('valida a versão da Graph API', () => {
     expect(problemsOf({ ...minimal, META_GRAPH_API_VERSION: '23' })).toEqual([
-      'META_GRAPH_API_VERSION: formato esperado: v23.0',
+      'META_GRAPH_API_VERSION: formato esperado: v26.0',
     ]);
   });
 

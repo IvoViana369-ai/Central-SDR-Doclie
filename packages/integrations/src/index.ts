@@ -23,12 +23,16 @@ export {
   type PgBossOptions,
 } from './queue/pg-boss';
 export { AnthropicAiProvider, type AnthropicAiConfig } from './ai/anthropic';
+export { MetaCloudWhatsappProvider, type MetaCloudConfig } from './whatsapp/meta-cloud';
+export { signMetaPayload, verifyMetaSignature, verifyWebhookChallenge } from './whatsapp/signature';
 export {
   aiLimitsFromEnv,
   assertProvidersImplemented,
   createAiProvider,
   createEmailProvider,
+  createWhatsappProvider,
   integrationStatuses,
+  whatsappWebhookConfig,
   type IntegrationKey,
   type IntegrationStatus,
 } from './registry';
