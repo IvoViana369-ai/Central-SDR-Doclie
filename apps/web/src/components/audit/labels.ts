@@ -28,8 +28,21 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'lead.note.remove': 'Observação removida',
   'lead.tag.add': 'Tag aplicada',
   'lead.tag.remove': 'Tag retirada',
+  'lead.optout': 'Opt-out registrado',
+  'lead.permission': 'Base legal do canal alterada',
+  'lead.anonymize': 'Lead anonimizado',
+  'lead.bulk': 'Ação em massa',
+  'lead.export': 'Leads exportados',
   'tag.create': 'Tag criada',
   'tag.update': 'Tag alterada',
+  'view.create': 'Visão salva',
+  'view.update': 'Visão alterada',
+  'view.delete': 'Visão excluída',
+  'suppression.add': 'Incluído na Lista Não Contatar',
+  'suppression.revoke': 'Supressão revogada',
+  'dsr.create': 'Solicitação de titular registrada',
+  'dsr.update': 'Solicitação de titular atualizada',
+  'legal_basis_assessment.create': 'Avaliação de base legal registrada',
 };
 
 export function auditActionLabel(action: string): string {
@@ -84,6 +97,16 @@ const FIELD_LABELS: Record<string, string> = {
   territories: 'Territórios',
   subjectId: 'Item',
   duplicatesAcknowledged: 'Duplicados confirmados',
+  count: 'Quantidade',
+  filter: 'Filtro',
+  q: 'Busca',
+  includeContacts: 'Com contatos',
+  omittedContacts: 'Contatos fora (Não Contatar)',
+  target: 'Alvo',
+  selected: 'Selecionados',
+  changed: 'Alterados',
+  bulkAction: 'Ação',
+  scope: 'Abrangência',
 };
 
 const PERMISSION_LABELS: Record<Permission, string> = {

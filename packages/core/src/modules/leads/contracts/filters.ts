@@ -79,6 +79,11 @@ export const searchLeadsInput = leadSelectionInput.extend({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+export const exportLeadsInput = leadSelectionInput.extend({
+  /** Telefone, WhatsApp, e-mail e Instagram. Fora por padrão (minimização, LGPD). */
+  includeContacts: z.boolean().default(false),
+});
+
 export const BULK_ACTIONS = ['assign', 'addTag', 'removeTag'] as const;
 
 export const bulkLeadsInput = z.object({

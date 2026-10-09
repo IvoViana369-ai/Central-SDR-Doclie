@@ -378,7 +378,9 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 ### 9.2 Endpoints por módulo
 
-> **Implementado até a Fase 2** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`**. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. A exportação (`POST /exports`) entra na etapa seguinte da Fase 2.
+> **Implementado até a Fase 2** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`**. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. **`POST /exports`** devolve o CSV na própria resposta (`text/csv`, separador `;`, BOM UTF-8). Erros possíveis: `429 RATE_LIMITED` (5 exportações em 24 h) e `422` (seleção vazia ou acima de 20.000 leads).
+>
+> **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
 
 > Legenda de fase: **MVP** = Fases 1–6. Números indicam fases posteriores.
 
@@ -489,7 +491,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /analytics/insights` | Insights da carteira | 11+ |
 | `POST /prospecting/searches`, `GET /prospecting/searches/{id}/results`, `POST /prospecting/searches/{id}/approve` | Busca em fontes autorizadas, comparação com a base, aprovação | 9 |
 | `GET/POST/PATCH /campaigns`, `POST /campaigns/{id}/build`, `POST /campaigns/{id}/activate\|pause`, `GET /campaigns/{id}/metrics` | Campanhas | 10 |
-| `POST /exports` | Exportação assíncrona e auditada (ADMIN/GESTOR) | 2 |
+| `POST /exports` | Exportação auditada (ADMIN/GESTOR); síncrona no MVP, ver nota acima | 2 |
 | `GET /integrations`, `POST /integrations/{provider}/test` | Status e teste de conexões | 7+ |
 
 ---

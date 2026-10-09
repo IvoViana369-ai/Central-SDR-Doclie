@@ -52,6 +52,7 @@ export default async function LeadsPage() {
         canBulk: roleHasPermission(actor.role, 'lead.bulk'),
         canAssign,
         canManageTags: roleHasPermission(actor.role, 'tag.manage'),
+        canExport: roleHasPermission(actor.role, 'lead.export'),
       }}
     />
   );

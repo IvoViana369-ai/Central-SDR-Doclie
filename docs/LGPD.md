@@ -222,7 +222,13 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 ## 14. Controle de acesso, exportação e auditoria
 
 - Perfis e escopos em [SECURITY §4](./SECURITY.md#4-autorização-rbac): o SDR vê só seus leads e o pool do seu território.
-- **Exportação** de leads só para ADMIN/GESTOR, assíncrona, auditada (quem, quando, filtro, quantidade) e protegida contra injeção de fórmulas em CSV.
+- **Exportação** de leads só para ADMIN/GESTOR, auditada (quem, quando, filtro, quantidade) e protegida contra injeção de fórmulas em CSV.
+  > **Implementado na Fase 2:**
+  > - **Minimização:** contatos (telefone, WhatsApp, e-mail, Instagram) só entram quando marcados.
+  > - **Lista Não Contatar:** contatos que estão na lista nunca saem, nem os de leads ou CNPJs que estão nela.
+  > - **Limites:** 5 exportações por usuário em 24 h e até 20.000 leads por arquivo.
+  > - **Auditoria:** a busca livre é registrada mascarada.
+  > - **Sem arquivo guardado:** o arquivo é gerado na hora e entregue na resposta; nada fica no servidor. A versão assíncrona fica para quando o volume exigir (ARCHITECTURE §9.2).
 - `audit_logs` imutável: alterações de leads, decisões de duplicados, mudanças de permissão/base legal, revogações de supressão, exportações, logins.
 - Relatório periódico de acessos e exportações para o encarregado.
 

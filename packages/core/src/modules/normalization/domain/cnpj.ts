@@ -27,6 +27,12 @@ function checkDigit(base: string, weights: number[]): number {
   return remainder < 2 ? 0 : 11 - remainder;
 }
 
+/** Os 2 dígitos verificadores das 12 primeiras posições (números ou letras maiúsculas). */
+export function cnpjCheckDigits(base: string): string {
+  const first = checkDigit(base, FIRST_WEIGHTS);
+  return `${first}${checkDigit(base.slice(0, 12) + String(first), SECOND_WEIGHTS)}`;
+}
+
 export function normalizeCnpj(raw: string): Normalized<NormalizedCnpj> {
   const cnpj = raw.replace(/[\s./-]/g, '').toUpperCase();
   if (cnpj.length === 0) return fail('EMPTY', 'Informe o CNPJ.');
@@ -38,9 +44,7 @@ export function normalizeCnpj(raw: string): Normalized<NormalizedCnpj> {
   }
   if (/^(.)\1{13}$/.test(cnpj)) return fail('INVALID_CHECK_DIGIT', 'CNPJ inválido.');
 
-  const first = checkDigit(cnpj, FIRST_WEIGHTS);
-  const second = checkDigit(cnpj.slice(0, 12) + String(first), SECOND_WEIGHTS);
-  if (cnpj.slice(12) !== `${first}${second}`) {
+  if (cnpj.slice(12) !== cnpjCheckDigits(cnpj)) {
     return fail('INVALID_CHECK_DIGIT', 'CNPJ inválido (dígitos verificadores não conferem).');
   }
   return ok({ cnpj, root: cnpj.slice(0, 8), isAlphanumeric: /[A-Z]/.test(cnpj) });

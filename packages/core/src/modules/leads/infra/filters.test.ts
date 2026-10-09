@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Actor } from '../../../shared/actor';
 import { ValidationError } from '../../../shared/errors';
-import { compileLeadSelection, compileSearch } from './filters';
+import { compileLeadSelection, compileSearch, maskSearchText } from './filters';
 
 const actor: Actor = {
   kind: 'user',
@@ -116,5 +116,16 @@ describe('busca livre', () => {
         some: { type: 'INSTAGRAM', valueNormalized: 'contabil.x', status: { not: 'REMOVED' } },
       },
     });
+  });
+});
+
+describe('busca na auditoria', () => {
+  it('mascara telefone, e-mail, CNPJ e Instagram; nome fica como está', () => {
+    expect(maskSearchText('(88) 99999-1111')).toBe('+55 88 9****-1111');
+    expect(maskSearchText('fulano@exemplo.com')).not.toContain('fulano');
+    expect(maskSearchText('12.345.678/0001-95')).toBe('**********0195');
+    expect(maskSearchText('@contabil.x')).toBe('@co***');
+    expect(maskSearchText('Contábil São')).toBe('Contábil São');
+    expect(maskSearchText('  ')).toBeNull();
   });
 });

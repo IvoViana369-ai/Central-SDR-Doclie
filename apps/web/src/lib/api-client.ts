@@ -12,18 +12,16 @@ export class ApiError extends Error {
   }
 }
 
-/** Chamada à API v1 a partir de componentes cliente. */
-export async function api<T>(
-  path: string,
-  init: { method?: string; body?: unknown } = {},
-): Promise<T> {
-  const response = await fetch(`/api/v1${path}`, {
+function request(path: string, init: { method?: string; body?: unknown }) {
+  return fetch(`/api/v1${path}`, {
     method: init.method ?? 'GET',
     headers: init.body !== undefined ? { 'content-type': 'application/json' } : undefined,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     credentials: 'same-origin',
   });
-  if (response.ok) return (await response.json()) as T;
+}
+
+async function toApiError(response: Response): Promise<ApiError> {
   let detail = 'Não foi possível concluir a operação.';
   let code = 'UNKNOWN';
   let errors: { path: string; message: string }[] = [];
@@ -45,5 +43,34 @@ export async function api<T>(
     detail = 'Sua sessão expirou. Recarregue a página e entre novamente.';
     errors = [];
   }
-  throw new ApiError(response.status, code, errors[0]?.message ?? detail, errors, body);
+  return new ApiError(response.status, code, errors[0]?.message ?? detail, errors, body);
+}
+
+/** Chamada à API v1 a partir de componentes cliente. */
+export async function api<T>(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const response = await request(path, init);
+  if (response.ok) return (await response.json()) as T;
+  throw await toApiError(response);
+}
+
+/** Baixa um arquivo da API v1 (ex.: exportação) e o entrega ao navegador. */
+export async function apiDownload(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Headers> {
+  const response = await request(path, init);
+  if (!response.ok) throw await toApiError(response);
+  const fileName =
+    /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'arquivo';
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  // Revogar na hora pode cancelar o download em alguns navegadores.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return response.headers;
 }

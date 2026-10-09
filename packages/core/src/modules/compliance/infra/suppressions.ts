@@ -24,10 +24,17 @@ export async function findActiveSuppressions(
 ): Promise<Map<string, ActiveSuppression[]>> {
   const result = new Map<string, ActiveSuppression[]>();
   if (identifiers.length === 0) return result;
+  // Um `IN` por tipo: a exportação consulta milhares de identificadores de uma vez.
+  const byType = new Map<SuppressionType, string[]>();
+  for (const i of identifiers) {
+    const hashes = byType.get(i.type);
+    if (hashes) hashes.push(i.valueHash);
+    else byType.set(i.type, [i.valueHash]);
+  }
   const rows = await tx.suppressionEntry.findMany({
     where: {
       revokedAt: null,
-      OR: identifiers.map((i) => ({ type: i.type, valueHash: i.valueHash })),
+      OR: [...byType].map(([type, hashes]) => ({ type, valueHash: { in: hashes } })),
     },
     select: { id: true, type: true, valueHash: true, reason: true, scope: true, createdAt: true },
     orderBy: { createdAt: 'asc' },

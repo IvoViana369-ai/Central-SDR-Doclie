@@ -86,18 +86,24 @@ function appliesTo(suppression: GateSuppression, channel: GateChannel): boolean 
   return suppression.scope === 'ALL_CHANNELS' || suppression.scope === channel;
 }
 
-/** Contatos que servem para o canal (WhatsApp: celular que não foi marcado como "não usa"). */
+/** Telefone que serve para WhatsApp: celular não marcado como "não usa", ou fixo marcado como provável/confirmado. */
+export function isWhatsappCandidate(
+  cp: Pick<GateContactPoint, 'type' | 'phoneKind' | 'whatsappStatus'>,
+): boolean {
+  return (
+    cp.type === 'PHONE' &&
+    cp.whatsappStatus !== 'NOT_ON_WHATSAPP' &&
+    (cp.phoneKind === 'MOBILE' ||
+      cp.whatsappStatus === 'PROBABLE' ||
+      cp.whatsappStatus === 'CONFIRMED')
+  );
+}
+
+/** Contatos que servem para o canal. */
 function candidatesFor(channel: GateChannel, points: GateContactPoint[]): GateContactPoint[] {
   switch (channel) {
     case 'WHATSAPP':
-      return points.filter(
-        (cp) =>
-          cp.type === 'PHONE' &&
-          cp.whatsappStatus !== 'NOT_ON_WHATSAPP' &&
-          (cp.phoneKind === 'MOBILE' ||
-            cp.whatsappStatus === 'PROBABLE' ||
-            cp.whatsappStatus === 'CONFIRMED'),
-      );
+      return points.filter(isWhatsappCandidate);
     case 'PHONE':
       return points.filter((cp) => cp.type === 'PHONE');
     case 'EMAIL':

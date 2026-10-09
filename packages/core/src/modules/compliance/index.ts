@@ -13,6 +13,7 @@ export {
   GATE_CHANNEL_LABELS,
   evaluateAllChannels,
   evaluateChannel,
+  isWhatsappCandidate,
   type ContactMode,
   type GateChannel,
   type GateInput,

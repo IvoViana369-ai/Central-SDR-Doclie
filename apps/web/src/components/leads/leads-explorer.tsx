@@ -14,6 +14,7 @@ import { api, ApiError } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
 import { ChannelIcons, ContactStatusBadge, LeadStatusBadge, TagChip } from './badges';
 import { BulkDialog, type BulkTarget } from './bulk-dialog';
+import { ExportDialog } from './export-dialog';
 import { TagsDialog } from './tags-dialog';
 
 type ContactStatus = keyof typeof CONTACT_STATUS_LABELS;
@@ -164,7 +165,13 @@ export function LeadsExplorer({
     owners?: { id: string; name: string }[];
     views: SavedView[];
   };
-  permissions: { canCreate: boolean; canBulk: boolean; canAssign: boolean; canManageTags: boolean };
+  permissions: {
+    canCreate: boolean;
+    canBulk: boolean;
+    canAssign: boolean;
+    canManageTags: boolean;
+    canExport: boolean;
+  };
 }) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [rows, setRows] = useState<LeadRow[]>(initial.data);
@@ -267,6 +274,13 @@ export function LeadsExplorer({
         actions={
           <>
             {permissions.canManageTags ? <TagsDialog tags={options.tags} /> : null}
+            {permissions.canExport ? (
+              <ExportDialog
+                selection={selection}
+                total={count.total}
+                onDone={(message) => setNotice({ variant: 'success', text: message })}
+              />
+            ) : null}
             {permissions.canCreate ? (
               <Button asChild>
                 <Link href="/leads/novo">

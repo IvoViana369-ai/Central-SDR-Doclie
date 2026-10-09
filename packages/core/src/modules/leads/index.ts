@@ -42,4 +42,5 @@ export {
 export * from './contracts/filters';
 export { countLeads, searchLeads } from './application/search';
 export { BULK_LIMIT, bulkLeads } from './application/bulk';
+export { EXPORT_LIMIT, EXPORTS_PER_DAY, exportLeads } from './application/export';
 export { deleteView, listSavedViews, saveView, updateView } from './application/saved-views';

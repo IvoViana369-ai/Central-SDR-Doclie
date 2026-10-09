@@ -1,7 +1,9 @@
 import type { ContactStatus, LeadStatus, LeadType, Prisma } from '@docline/db';
 import type { Actor } from '../../../shared/actor';
 import { ValidationError, type ValidationIssue } from '../../../shared/errors';
+import { maskEmail } from '../../../shared/mask';
 import {
+  maskIdentifier,
   normalizeEmail,
   normalizeInstagram,
   normalizePhone,
@@ -272,6 +274,31 @@ export function compileSearch(q: string): Prisma.LeadWhereInput | null {
     }
   }
   return or.length > 0 ? { OR: or } : { id: { in: [] } };
+}
+
+/**
+ * Texto da busca livre como vai para a auditoria: telefone, e-mail, CNPJ e
+ * Instagram mascarados (mesmas regras de detecção de `compileSearch`).
+ */
+export function maskSearchText(q: string | undefined): string | null {
+  const text = q?.trim();
+  if (!text) return null;
+  const digits = text.replace(/\D/g, '');
+  if (digits.length >= 8 && /^[\d\s().\-/+]+$/.test(text)) {
+    const phone = normalizePhone(text);
+    return phone.ok
+      ? maskIdentifier('PHONE', phone.value.e164)
+      : `${'*'.repeat(digits.length - 4)}${digits.slice(-4)}`;
+  }
+  if (text.includes('@') && !text.startsWith('@')) {
+    const email = normalizeEmail(text);
+    return email.ok ? maskEmail(email.value.email) : '***@***';
+  }
+  if (text.startsWith('@') || text.includes('instagram.com')) {
+    const instagram = normalizeInstagram(text);
+    return instagram.ok ? maskIdentifier('INSTAGRAM', instagram.value.handle) : '@***';
+  }
+  return text;
 }
 
 /**

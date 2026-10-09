@@ -131,6 +131,7 @@ docker compose up -d
 pnpm install
 pnpm db:migrate
 pnpm db:seed
+pnpm db:seed:dev   # opcional: ~2.000 empresas fictícias para testar a interface
 
 # 4. Primeiro administrador: imprime o link para definir a senha
 pnpm admin:create --email voce@docline.com.br --name "Seu Nome"
@@ -150,6 +151,7 @@ pnpm dev
 | `pnpm db:migrate` / `pnpm db:deploy` | Criar/aplicar migrações (dev) / aplicar migrações (deploy) |
 | `pnpm db:check` | Falha se o schema mudou sem migração |
 | `pnpm db:seed` | Dados de referência (idempotente) |
+| `pnpm db:seed:dev` | ~2.000 empresas fictícias com duplicados propositais (só `APP_ENV=development`; não roda duas vezes) |
 | `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
 
 Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TEST` e se recusam a rodar se o nome não terminar em `_test`.

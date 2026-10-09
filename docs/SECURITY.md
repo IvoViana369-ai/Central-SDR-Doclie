@@ -298,7 +298,7 @@ O limite **por conta** (5 / 15 min) ainda não existe (F2-18). Ele precisa ser d
 **Fases 2–6 — MVP (MUST)**
 - [ ] Escopo por perfil em todas as listas e detalhes (testes de IDOR).
 - [ ] Upload seguro (limites, zip bomb, sem persistência).
-- [ ] Exportação restrita, auditada e protegida contra CSV injection.
+- [x] Exportação restrita, auditada e protegida contra CSV injection (Fase 2: só ADMIN/GESTOR, 5 por dia, até 20.000 leads, contatos só quando pedidos e nunca os da Lista Não Contatar).
 - [ ] Guardrails de IA e cotas.
 - [ ] Backups e restauração testados antes do go-live.
 - [ ] 2FA para ADMIN/GESTOR (SHOULD).

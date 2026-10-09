@@ -68,6 +68,12 @@ export class BusinessRuleError extends DomainError {
   readonly status = 422;
 }
 
+/** Limite de uso atingido (ex.: exportações por dia). */
+export class RateLimitError extends DomainError {
+  readonly code = 'RATE_LIMITED';
+  readonly status = 429;
+}
+
 export function isDomainError(error: unknown): error is DomainError {
   return error instanceof DomainError;
 }

@@ -10,7 +10,8 @@
     "./permissions": "./src/modules/identity/domain/permissions.ts",
     "./normalization": "./src/modules/normalization/domain/index.ts",
     "./leads-domain": "./src/modules/leads/domain/index.ts",
-    "./compliance-domain": "./src/modules/compliance/domain/index.ts"
+    "./compliance-domain": "./src/modules/compliance/domain/index.ts",
+    "./dev": "./src/dev/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

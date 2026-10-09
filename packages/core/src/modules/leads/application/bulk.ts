@@ -16,6 +16,7 @@ import {
 } from '../../../shared/use-case';
 import { bulkLeadsInput } from '../contracts/filters';
 import { LEAD_EVENTS, type LeadEventType } from '../domain/events';
+import { maskSearchText } from '../infra/filters';
 import { leadScopeWhere } from '../infra/scope';
 import { resolveOwner } from './create-lead';
 import { countSelection, selectionWhere } from './search';
@@ -231,7 +232,7 @@ export const bulkLeads = defineUseCase({
         target: 'ids' in input.target ? 'ids' : 'filter',
         ...('ids' in input.target
           ? {}
-          : { filter: input.target.filter ?? null, q: input.target.q ?? null }),
+          : { filter: input.target.filter ?? null, q: maskSearchText(input.target.q) }),
         ...(input.action === 'assign' ? { ownerId } : { tagId: tag?.id }),
       },
     });

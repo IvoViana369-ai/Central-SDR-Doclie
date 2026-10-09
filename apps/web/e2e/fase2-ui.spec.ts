@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { ADMIN, appAlert, signIn, watchCsp } from './helpers';
 
@@ -16,6 +17,14 @@ async function chooseCity(page: Page, name: string) {
     .getByRole('option', { name: new RegExp(name) })
     .first()
     .click();
+}
+
+/** Busca na lista. Redigita se o texto se perder (digitado antes da hidratação da página). */
+async function searchLeads(page: Page, text: string, count: RegExp) {
+  await expect(async () => {
+    await page.getByLabel('Buscar leads').fill(text);
+    await expect(page.getByTestId('lead-count')).toHaveText(count, { timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 test('administradora cria uma tag pela lista de leads', async ({ page }) => {
@@ -87,10 +96,7 @@ test('aceite M03: busca, contagem com quebra e ação em massa com simulação',
   const assertNoCsp = watchCsp(page);
   await signIn(page, ADMIN.email, ADMIN.password);
   await page.goto('/leads');
-  await page.getByLabel('Buscar leads').fill('(88) 98765-4321');
-  await expect(page.getByTestId('lead-count')).toHaveText(
-    /^2 leads · 2 contactáveis · 0 bloqueados/,
-  );
+  await searchLeads(page, '(88) 98765-4321', /^2 leads · 2 contactáveis · 0 bloqueados/);
 
   await page.getByLabel('Selecionar todos da página').check();
   await page.getByRole('button', { name: 'Ação em massa' }).click();
@@ -126,6 +132,34 @@ test('aceite M14: opt-out em 1 clique bloqueia o WhatsApp e aparece na Lista Nã
   await page.getByLabel('Buscar na lista pelo valor').fill('88987654321');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.getByText('+55 88 9****-4321')).toBeVisible();
+  assertNoCsp();
+});
+
+test('exportação: CSV do filtro sem contatos da Lista Não Contatar, registrada na auditoria', async ({
+  page,
+}) => {
+  const assertNoCsp = watchCsp(page);
+  await signIn(page, ADMIN.email, ADMIN.password);
+  await page.goto('/leads');
+  await searchLeads(page, '(88) 98765-4321', /^2 leads/);
+  await page.getByRole('button', { name: 'Exportar' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Exportar leads' });
+  await expect(dialog.getByTestId('export-total')).toHaveText('2 lead(s) no filtro atual.');
+  await dialog.getByLabel(/Incluir contatos/).check();
+  const downloading = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Baixar CSV' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toMatch(/^leads-\d{4}-\d{2}-\d{2}\.csv$/);
+  const content = readFileSync(await download.path(), 'utf8');
+  expect(content).toContain(LEAD);
+  // O telefone dos dois leads está na Lista Não Contatar (opt-out do aceite M14).
+  expect(content).not.toContain('98765-4321');
+  await expect(
+    page.getByText('2 lead(s) exportado(s). 2 contato(s) da Lista Não Contatar ficaram de fora.'),
+  ).toBeVisible();
+
+  await page.goto('/configuracoes/auditoria');
+  await expect(page.getByRole('cell', { name: 'Leads exportados' }).first()).toBeVisible();
   assertNoCsp();
 });
 

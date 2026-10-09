@@ -24,6 +24,7 @@
     "db:migrate": "pnpm --filter @docline/db migrate:dev",
     "db:deploy": "pnpm --filter @docline/db migrate:deploy",
     "db:seed": "pnpm --filter @docline/db seed",
+    "db:seed:dev": "pnpm --filter @docline/web seed:dev",
     "admin:create": "pnpm --filter @docline/web admin:create",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "db:check": "pnpm --filter @docline/db migrate:check"
