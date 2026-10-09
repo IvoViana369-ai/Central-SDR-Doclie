@@ -83,6 +83,9 @@ export const getLeadInstagram = defineUseCase({
               followersCount: metrics.followersCount,
               mediaCount: metrics.mediaCount,
               lastPostAt: metrics.lastPostAt,
+              daysSinceLastPost: metrics.lastPostAt
+                ? Math.floor((ctx.now.getTime() - metrics.lastPostAt.getTime()) / 86_400_000)
+                : null,
               checkedAt: metrics.checkedAt,
             }
           : null,
@@ -135,9 +138,13 @@ export const getLeadInstagram = defineUseCase({
         privateReplyMessage: { select: { status: true, body: true, sentAt: true } },
       },
     });
+    const settingsRow = await ctx.tx.appSetting.findUnique({
+      where: { key: INSTAGRAM_SETTINGS_KEY },
+    });
     return {
       provider,
       leadActive: lead.status === 'ACTIVE',
+      discoveryEnabled: resolveInstagramSettings(settingsRow?.value).discoveryEnabled,
       gate: gate ? { allowed: gate.allowed, reasons: gate.reasons } : null,
       profiles,
       messages: messages.reverse().map(({ privateReplyFor, ...m }) => ({

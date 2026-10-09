@@ -76,7 +76,7 @@ export const NAVIGATION: NavGroup[] = [
         icon: MessageCircle,
         phase: 7,
         permission: 'lead.read',
-        description: 'WhatsApp pela API: respostas, janela de 24 h e números sem lead.',
+        description: 'WhatsApp e Instagram pela API: respostas, janela de 24 h e quem não é lead.',
       },
     ],
   },

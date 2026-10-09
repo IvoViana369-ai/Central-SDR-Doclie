@@ -1,5 +1,6 @@
 import { roleHasPermission } from '@docline/core';
 import {
+  AtSign,
   Clock,
   Gauge,
   History,
@@ -67,6 +68,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'WhatsApp',
     description: 'Número na Meta, modelos aprovados, envios do mês, preços e automação.',
     Icon: MessageCircle,
+  },
+  {
+    href: '/configuracoes/instagram',
+    title: 'Instagram',
+    description: 'Conta na Meta, respostas do mês, consulta de perfis e automação.',
+    Icon: AtSign,
   },
 ];
 

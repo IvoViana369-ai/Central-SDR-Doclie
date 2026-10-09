@@ -18,7 +18,7 @@ export const strictBaseURL = `http://localhost:${STRICT_PORT}`;
 const testDatabaseUrl =
   process.env.DATABASE_URL_TEST ?? 'postgresql://docline:docline@localhost:5432/docline_sdr_test';
 export const OUTBOX_FILE = fileURLToPath(new URL('./e2e/.state/outbox.jsonl', import.meta.url));
-/** WhatsApp simulado (Fase 7): os testes assinam os webhooks como a Meta. */
+/** WhatsApp e Instagram simulados (Fases 7 e 8): os testes assinam os webhooks como a Meta. */
 export const META_APP_SECRET = 'e2e-meta-app-secret-nao-real';
 export const META_WEBHOOK_VERIFY_TOKEN = 'e2e-verify-token-nao-real';
 
@@ -69,6 +69,8 @@ export default defineConfig({
       LOG_LEVEL: 'warn',
       TWO_FACTOR_ENFORCEMENT: 'reminder',
       WHATSAPP_PROVIDER: 'fake',
+      // Instagram simulado (Fase 8): mesmo app da Meta, mesma assinatura.
+      INSTAGRAM_PROVIDER: 'fake',
       META_APP_SECRET,
       META_WEBHOOK_VERIFY_TOKEN,
     },

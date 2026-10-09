@@ -29,6 +29,7 @@
     "ai:eval": "pnpm --filter @docline/web ai:eval",
     "perf:100k": "pnpm --filter @docline/web perf:100k",
     "whatsapp:simulate": "pnpm --filter @docline/web whatsapp:simulate",
+    "instagram:simulate": "pnpm --filter @docline/web instagram:simulate",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "db:check": "pnpm --filter @docline/db migrate:check"
   },

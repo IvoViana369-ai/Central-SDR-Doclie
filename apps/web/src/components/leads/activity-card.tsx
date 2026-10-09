@@ -129,6 +129,14 @@ function eventDetail(event: TimelineEvent, users: Record<string, string>): strin
       ]
         .filter(Boolean)
         .join(' · ');
+    // Fase 8: onde foi o comentário (o texto fica só no comentário).
+    case 'social.comment':
+      return [
+        p.mediaProductType === 'REELS' ? 'num reel' : p.mediaProductType ? 'numa publicação' : null,
+        p.reply ? 'resposta a outro comentário' : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
     case 'reply.classified':
       return `${label(REPLY_CLASSIFICATION_LABELS, p.from) ?? 'sem classificação'} → ${label(REPLY_CLASSIFICATION_LABELS, p.to) ?? '—'}`;
     case 'cadence.enrolled':

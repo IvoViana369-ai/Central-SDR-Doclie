@@ -15,6 +15,7 @@ import { LeadScoreCard, type LeadScoreView } from '@/components/pipeline/lead-sc
 import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead-stage-card';
 import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
 import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
+import { InstagramCard, type LeadInstagramView } from '@/components/instagram/instagram-card';
 import { WhatsappCard, type LeadWhatsappView } from '@/components/whatsapp/whatsapp-card';
 import { api } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -125,6 +126,7 @@ export function LeadDetail({
   gate,
   timeline,
   whatsapp,
+  instagram,
   sales,
   operation,
   permissions,
@@ -135,6 +137,8 @@ export function LeadDetail({
   timeline: TimelinePage;
   /** WhatsApp pela API (Fase 7); `null` no modo assistido. */
   whatsapp: LeadWhatsappView | null;
+  /** Instagram pela API (Fase 8); `null` no modo assistido. */
+  instagram: LeadInstagramView | null;
   sales: LeadSalesView;
   operation: LeadSalesData;
   permissions: LeadDetailPermissions;
@@ -309,6 +313,9 @@ export function LeadDetail({
               canEdit={permissions.canEdit}
               canRecordEvidence={permissions.canRecordOptInEvidence}
             />
+          ) : null}
+          {instagram ? (
+            <InstagramCard leadId={lead.id} data={instagram} canEdit={permissions.canEdit} />
           ) : null}
           <ActivityCard leadId={lead.id} initial={timeline} />
         </div>

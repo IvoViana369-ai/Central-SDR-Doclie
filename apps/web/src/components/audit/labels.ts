@@ -119,7 +119,14 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'whatsapp.templates.update': 'Modelo do WhatsApp alterado',
   'whatsapp.settings': 'Configuração do WhatsApp alterada',
   'whatsapp.unmatched.link': 'Mensagem de número sem lead vinculada',
-  'whatsapp.unmatched.dismiss': 'Mensagem de número sem lead descartada',
+  'whatsapp.unmatched.dismiss': 'Mensagem de quem não é lead descartada',
+  'instagram.send': 'Resposta pelo Instagram (API) pedida',
+  'instagram.private_reply': 'Resposta privada a comentário no Instagram pedida',
+  'instagram.retry': 'Envio pelo Instagram (API) repetido',
+  'instagram.failed': 'Envio pelo Instagram (API) falhou',
+  'instagram.settings': 'Configuração do Instagram alterada',
+  'instagram.unmatched.link': 'Mensagem no Instagram de quem não era lead vinculada',
+  'instagram.discovery.refresh': 'Métricas do Instagram atualizadas pela ficha',
 };
 
 export function auditActionLabel(action: string): string {

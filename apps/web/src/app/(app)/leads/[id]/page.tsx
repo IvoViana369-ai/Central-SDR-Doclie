@@ -4,6 +4,7 @@ import {
   getLeadCadence,
   getLeadContactability,
   getLeadScore,
+  getLeadInstagram,
   getLeadWhatsapp,
   getPipeline,
   listCadences,
@@ -67,6 +68,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const privileged = actor.role === 'ADMIN' || actor.role === 'MANAGER';
   // WhatsApp pela API (Fase 7): só com o provedor ligado (fora do modo assistido).
   const whatsapp = deps.whatsapp ? await getLeadWhatsapp(deps, actor, { leadId: id }, meta) : null;
+  // Instagram pela API (Fase 8): idem.
+  const instagram = deps.instagram
+    ? await getLeadInstagram(deps, actor, { leadId: id }, meta)
+    : null;
 
   return (
     <LeadDetail
@@ -74,6 +79,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       gate={gate.channels}
       timeline={timeline}
       whatsapp={whatsapp}
+      instagram={instagram}
       sales={{
         stages: pipeline.stages,
         lossReasons,
