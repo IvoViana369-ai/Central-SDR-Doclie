@@ -123,4 +123,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build da imagem (sem publicar)
-        run: docker build --tag docline-sdr:ci .
+        run: >-
+          docker build
+          --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:22-bookworm-slim
+          --tag docline-sdr:ci .

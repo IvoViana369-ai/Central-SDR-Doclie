@@ -1,12 +1,15 @@
-# syntax=docker/dockerfile:1
-#
 # Imagem única para os dois serviços (docs/ARCHITECTURE.md §14):
 #   web    → docker/start-web.sh    (padrão)
 #   worker → docker/start-worker.sh
 # Migrações e seed de referência rodam no pre-deploy do serviço web:
 #   pnpm db:deploy && pnpm db:seed
 
-FROM node:22-bookworm-slim AS base
+# Imagem base: a oficial do Docker Hub por padrão. O CI usa a mesma imagem pelo
+# espelho oficial do ECR Public (public.ecr.aws/docker/library/node), sem o
+# limite de downloads anônimos do Docker Hub.
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+FROM ${NODE_IMAGE} AS base
 ENV CI=true \
     NEXT_TELEMETRY_DISABLED=1 \
     PNPM_HOME=/pnpm \
