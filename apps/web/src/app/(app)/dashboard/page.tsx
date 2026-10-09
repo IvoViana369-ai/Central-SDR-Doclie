@@ -11,11 +11,6 @@ export const metadata: Metadata = { title: 'Dashboard' };
 
 const NEXT_PHASES = [
   {
-    phase: 2,
-    title: 'CRM de leads',
-    text: 'Cadastro de leads, contatos, filtros avançados, timeline e Lista Não Contatar.',
-  },
-  {
     phase: 3,
     title: 'Importação e deduplicação',
     text: 'Planilhas CSV/XLSX com prévia, normalização e revisão de duplicados.',
@@ -38,6 +33,16 @@ export default async function DashboardPage() {
   const firstName = user.name.split(' ')[0];
   const role = user.actor.role;
   const available = [
+    {
+      label: 'Leads: cadastro, filtros, timeline e ações em massa',
+      href: '/leads',
+      show: roleHasPermission(role, 'lead.read'),
+    },
+    {
+      label: 'Conformidade: Lista Não Contatar e titulares',
+      href: '/conformidade',
+      show: roleHasPermission(role, 'suppression.read'),
+    },
     {
       label: 'Equipe: usuários, perfis e convites',
       href: '/equipe',
@@ -66,7 +71,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Disponível agora</CardTitle>
             <CardDescription>
-              Fundação técnica (Fase 1): acesso seguro, perfis e auditoria.
+              CRM de leads (Fase 2) sobre a fundação de acesso seguro, perfis e auditoria.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -90,7 +95,7 @@ export default async function DashboardPage() {
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Seu acesso está ativo. As telas de operação do SDR chegam nas próximas fases.
+                Seu acesso está ativo. As demais telas de operação chegam nas próximas fases.
               </p>
             )}
           </CardContent>

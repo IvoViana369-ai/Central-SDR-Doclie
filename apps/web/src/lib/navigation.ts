@@ -10,6 +10,7 @@ import {
   Plug,
   Radar,
   Settings,
+  ShieldCheck,
   SquareKanban,
   Upload,
   Users,
@@ -134,6 +135,14 @@ export const NAVIGATION: NavGroup[] = [
         description: 'Usuários, perfis e convites.',
       },
       {
+        label: 'Conformidade',
+        href: '/conformidade',
+        icon: ShieldCheck,
+        phase: 2,
+        permission: 'suppression.read',
+        description: 'Lista Não Contatar, solicitações de titulares e bases legais.',
+      },
+      {
         label: 'Integrações',
         href: '/integracoes',
         icon: Plug,
@@ -154,7 +163,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 1;
+export const CURRENT_PHASE = 2;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

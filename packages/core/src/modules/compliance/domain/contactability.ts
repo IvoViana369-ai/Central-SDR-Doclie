@@ -126,9 +126,12 @@ export function evaluateChannel(
 
   const organization = input.organizationSuppressions.find((s) => appliesTo(s, channel));
   if (organization) {
+    // O lead inteiro está na lista: base legal e contatos deixam de importar
+    // e só repetiriam o bloqueio.
     reasons.push(
       `Lead na Lista Não Contatar desde ${formatDate(organization.createdAt)} (${SUPPRESSION_REASON_LABELS[organization.reason]}).`,
     );
+    return { channel, allowed: false, reasons, usableContactPointIds: [] };
   }
 
   const specific = input.channelPermissions.find((p) => p.channel === channel);

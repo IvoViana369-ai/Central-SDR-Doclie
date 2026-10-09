@@ -1,5 +1,11 @@
 import 'server-only';
-import { ForbiddenError, type CoreDeps, type RequestMeta } from '@docline/core';
+import {
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+  type CoreDeps,
+  type RequestMeta,
+} from '@docline/core';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getContainer } from './container';
@@ -30,6 +36,19 @@ export async function loadIfAllowed<T>(
     return { ok: true, data: await load() };
   } catch (error) {
     if (error instanceof ForbiddenError) return { ok: false };
+    throw error;
+  }
+}
+
+/**
+ * Carrega um lead para uma página. Fora do escopo do usuário (ou inexistente),
+ * devolve null para a página responder 404 — a tentativa já foi auditada pelo core.
+ */
+export async function loadLead<T>(load: () => Promise<T>): Promise<T | null> {
+  try {
+    return await load();
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) return null;
     throw error;
   }
 }

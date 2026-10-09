@@ -20,6 +20,7 @@ import { Table, TBody, Td, Th, THead, Tr } from '@/components/ui/table';
 import { api, ApiError } from '@/lib/api-client';
 import { cn, formatDateTime } from '@/lib/utils';
 import { InviteDialog } from './invite-dialog';
+import { TerritoriesDialog } from './territories-dialog';
 
 export interface TeamUser {
   id: string;
@@ -220,7 +221,10 @@ export function TeamManager({
                       {formatDateTime(user.lastLoginAt)}
                     </Td>
                     {canManage ? (
-                      <Td className="text-right">
+                      <Td className="space-x-2 whitespace-nowrap text-right">
+                        {user.role === 'SDR' && user.status !== 'INACTIVE' ? (
+                          <TerritoriesDialog user={user} />
+                        ) : null}
                         {self ? null : user.status === 'INVITED' ? (
                           <Button
                             size="sm"

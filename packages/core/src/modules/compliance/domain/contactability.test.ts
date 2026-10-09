@@ -63,6 +63,26 @@ describe('gate de contactabilidade', () => {
     expect(evaluateChannel(input, 'PHONE').allowed).toBe(true);
   });
 
+  it('lead inteiro na lista: o motivo não se repete com contato, base legal ou e-mail ausente', () => {
+    const optOut = { reason: 'OPT_OUT' as const, scope: 'ALL_CHANNELS' as const, createdAt: since };
+    const input: GateInput = {
+      ...base,
+      leadStatus: 'ARCHIVED',
+      legalBasis: null,
+      organizationSuppressions: [optOut],
+      contactPoints: [{ ...mobile, suppressions: [optOut] }],
+    };
+    for (const channel of ['WHATSAPP', 'EMAIL'] as const) {
+      const result = evaluateChannel(input, channel);
+      expect(result.allowed).toBe(false);
+      expect(result.reasons).toEqual([
+        'Lead arquivado.',
+        'Lead na Lista Não Contatar desde 12/10/2026 (pediu para não ser contatado).',
+      ]);
+      expect(result.usableContactPointIds).toEqual([]);
+    }
+  });
+
   it('contato suprimido não é usado; se não sobra nenhum, o canal fica bloqueado', () => {
     const suppressed = {
       ...mobile,
