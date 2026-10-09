@@ -28,7 +28,8 @@ describe('calendário útil (suíte de cadência)', () => {
     expect(parseHhmm('08:00')).toBe(480);
     expect(parseHhmm('17:45')).toBe(1065);
     expect(formatHhmm(1065)).toBe('17:45');
-    expect(() => parseHhmm('24:00')).toThrow();
+    expect(parseHhmm('24:00')).toBe(1440); // fim da janela no fim do dia
+    expect(() => parseHhmm('24:30')).toThrow();
     expect(() => parseHhmm('8h')).toThrow();
   });
 

@@ -1,5 +1,6 @@
 import { BusinessRuleError, ConflictError, ValidationError } from '../../../shared/errors';
 import { defineUseCase } from '../../../shared/use-case';
+import { engagementActorOf, stopEnrollmentOnStageChange } from '../../engagement';
 import {
   applyLeadOptOut,
   auditLead,
@@ -94,6 +95,14 @@ export const moveLeadStage = defineUseCase({
       lossReason,
       note: input.note,
     });
+    // Sair das etapas da cadência (ou perder) encerra a inscrição (SDR-FLOW §3.2, regra 5).
+    await stopEnrollmentOnStageChange(
+      ctx.tx,
+      lead.id,
+      to.key,
+      ctx.now,
+      engagementActorOf(ctx.actor),
+    );
     await auditLead(ctx, lead.id, 'lead.stage_change', {
       changes: { stage: [from?.name ?? null, to.name] },
       metadata: {

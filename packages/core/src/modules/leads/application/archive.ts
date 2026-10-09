@@ -1,4 +1,10 @@
 import { ConflictError } from '../../../shared/errors';
+import {
+  cancelOpenTasks,
+  engagementActorOf,
+  refreshNextAction,
+  stopLeadEnrollment,
+} from '../../engagement';
 import { defineUseCase } from '../../../shared/use-case';
 import { archiveLeadInput } from '../contracts/schemas';
 import { LEAD_EVENTS } from '../domain/events';
@@ -20,6 +26,17 @@ export const archiveLead = defineUseCase({
     await recordLeadEvent(ctx, leadId, LEAD_EVENTS.archived, {
       payload: reason ? { reason } : {},
     });
+    // Lead arquivado sai da cadência e não deixa tarefa aberta.
+    await stopLeadEnrollment(
+      ctx.tx,
+      leadId,
+      'LEAD_ARCHIVED',
+      ctx.now,
+      engagementActorOf(ctx.actor),
+    );
+    if ((await cancelOpenTasks(ctx.tx, leadId, 'Lead arquivado.')) > 0) {
+      await refreshNextAction(ctx.tx, leadId);
+    }
     await auditLead(ctx, leadId, 'lead.archive', {
       changes: { status: ['ACTIVE', 'ARCHIVED'] },
       ...(reason ? { metadata: { reason } } : {}),

@@ -15,9 +15,9 @@ import type {
  * legíveis. Encontrar um telefone não significa autorização: telefone
  * identificado ≠ contato permitido.
  *
- * Fase 2: Lista Não Contatar, base legal, opt-in (modo API), contato ativo do
- * canal e situação do lead. Janela de horário, limites de frequência e
- * cadência ativa entram na Fase 5.
+ * Lista Não Contatar, base legal, opt-in (modo API), contato ativo do canal e
+ * situação do lead. Janela de horário e limites de frequência, que passam com
+ * o tempo, ficam em `contact-timing.ts` e são somados em `infra/gate.ts`.
  */
 
 export const GATE_CHANNELS = ['WHATSAPP', 'PHONE', 'EMAIL', 'INSTAGRAM'] as const;
@@ -62,6 +62,11 @@ export interface GateResult {
   reasons: string[];
   /** Contatos do canal que podem ser usados (sem supressão). */
   usableContactPointIds: string[];
+  /**
+   * Só com bloqueio que passa com o tempo (janela, intervalo entre contatos,
+   * limite diário): a partir de quando o contato fica liberado.
+   */
+  availableAt?: Date | null;
 }
 
 const SUPPRESSION_REASON_LABELS: Record<SuppressionReason, string> = {

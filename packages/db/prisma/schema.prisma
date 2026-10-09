@@ -1826,9 +1826,12 @@ enum EnrollmentStatus {
 enum EnrollmentStopReason {
   REPLIED
   OPTED_OUT
+  /// Lead bloqueado na Lista Não Contatar (reclamação, decisão interna, ordem legal).
+  BLOCKED
   MANUAL
   STAGE_CHANGED
   LEAD_ARCHIVED
+  LEAD_MERGED
   CONTACT_INVALID
 
   @@map("enrollment_stop_reason")

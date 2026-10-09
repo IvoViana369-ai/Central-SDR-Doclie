@@ -126,7 +126,6 @@ export const CRITERIA = {
     (f) => f.repliedBefore,
     'Já houve resposta do lead.',
     'Ainda não houve resposta registrada.',
-    'Respostas registradas a partir da Fase 5.',
   ),
   showed_interest: flag(
     'showed_interest',
@@ -134,7 +133,6 @@ export const CRITERIA = {
     (f) => f.showedInterest,
     'Uma resposta foi classificada como interesse.',
     'Nenhuma resposta classificada como interesse.',
-    'Classificação de respostas a partir da Fase 5.',
   ),
   in_state: {
     key: 'in_state',

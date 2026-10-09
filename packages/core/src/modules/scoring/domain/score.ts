@@ -20,6 +20,7 @@ const SCORE_TRIGGER_LABELS: Record<string, string> = {
   'priority_city.removed': 'Cidade retirada das prioritárias',
   'model.activated': 'Nova versão do modelo',
   backfill: 'Cálculo inicial',
+  reply: 'Resposta registrada',
 };
 
 export function scoreTriggerLabel(trigger: string): string {

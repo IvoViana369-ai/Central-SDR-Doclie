@@ -31,8 +31,9 @@ export interface LocalDate {
 
 const MINUTE_MS = 60_000;
 
-/** "08:30" → 510. */
+/** "08:30" → 510. "24:00" (fim da janela = fim do dia) → 1440. */
 export function parseHhmm(value: string): number {
+  if (value === '24:00') return 24 * 60;
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
   if (!match) throw new Error(`Horário inválido: ${value}`);
   return Number(match[1]) * 60 + Number(match[2]);

@@ -1,4 +1,5 @@
 import type { ContactPointType, ContactStatus, DbTransaction } from '@docline/db';
+import { syncEngagementWithContactState } from '../../engagement';
 import { recomputeLeadScores } from '../../scoring';
 import { computeContactStatus } from '../domain/contact-status';
 import {
@@ -95,6 +96,8 @@ export async function refreshLeadContactState(
       hasWebsite: lead.websiteUrl !== null,
     },
   });
+  // Opt-out, bloqueio ou contato inválido encerram a cadência na mesma transação.
+  await syncEngagementWithContactState(tx, leadId, contactStatus, now);
   // Canais, site e CNPJ são critérios do score: recalcula na mesma transação.
   await recomputeLeadScores(tx, [leadId], 'contact_state', now);
   return contactStatus;

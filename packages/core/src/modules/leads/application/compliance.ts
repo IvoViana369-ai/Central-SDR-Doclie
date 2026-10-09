@@ -3,12 +3,12 @@ import { ConflictError, NotFoundError, ValidationError } from '../../../shared/e
 import { defineUseCase, type UseCaseContext } from '../../../shared/use-case';
 import {
   CONTACT_STATUS_LABELS,
-  evaluateAllChannels,
-  loadGateInput,
+  evaluateLeadGate,
   refreshLeadContactState,
   suppressIdentifiers,
   type SuppressionToCreate,
 } from '../../compliance';
+import { cancelOpenTasks, engagementActorOf, stopLeadEnrollment } from '../../engagement';
 import { maskIdentifier, toSearchKey } from '../../normalization';
 import {
   anonymizeLeadInput,
@@ -245,12 +245,16 @@ export const getLeadContactability = defineUseCase({
   input: contactabilityInput,
   async run(ctx, input) {
     const lead = await requireLeadInScope(ctx, input.leadId, { id: true, contactStatus: true });
-    const gate = await loadGateInput(ctx.tx, lead.id);
+    const gate = await evaluateLeadGate(ctx.tx, lead.id, {
+      mode: input.mode,
+      actor: ctx.actor,
+      now: ctx.now,
+    });
     return {
       contactStatus: lead.contactStatus,
       contactStatusLabel: CONTACT_STATUS_LABELS[lead.contactStatus],
       mode: input.mode,
-      channels: evaluateAllChannels(gate, input.mode),
+      channels: gate.channels,
     };
   },
 });
@@ -359,6 +363,17 @@ async function scrubLead(
   });
   await ctx.tx.contactPermission.updateMany({ where: { leadId }, data: { evidence: null } });
   await ctx.tx.leadAssignment.updateMany({ where: { leadId }, data: { reason: null } });
+  // Operação comercial (Fase 5): textos das mensagens, anotações e checklist.
+  await ctx.tx.message.updateMany({ where: { leadId }, data: { body: null, optOutMatch: null } });
+  await ctx.tx.activity.updateMany({ where: { leadId }, data: { notes: null } });
+  await ctx.tx.task.updateMany({ where: { leadId }, data: { description: null, outcome: null } });
+  await ctx.tx.opportunity.updateMany({
+    where: { leadId },
+    data: { qualification: { anonymized: true }, notes: null },
+  });
+  // Nada mais a fazer com o lead: tarefas abertas e cadência saem.
+  await stopLeadEnrollment(ctx.tx, leadId, 'MANUAL', ctx.now, engagementActorOf(ctx.actor));
+  await cancelOpenTasks(ctx.tx, leadId, 'Lead anonimizado.');
 }
 
 export const anonymizeLead = defineUseCase({

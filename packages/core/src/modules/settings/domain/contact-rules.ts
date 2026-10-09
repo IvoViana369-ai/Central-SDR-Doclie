@@ -14,7 +14,8 @@ export const contactRulesSchema = z
   .object({
     /** Janela de contato na hora local do lead. */
     windowStart: hhmm,
-    windowEnd: hhmm,
+    /** "24:00" estende a janela até o fim do dia. */
+    windowEnd: z.union([hhmm, z.literal('24:00')]),
     /** Dias da semana com contato (0 = domingo … 6 = sábado). */
     workDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
     /** Intervalo mínimo entre contatos ao mesmo lead (respostas a ele não contam). */

@@ -95,3 +95,64 @@ export async function applyStageChange(ctx: UseCaseContext, change: StageChange)
   });
   return { version: lead.version + 1, durationSeconds };
 }
+
+/**
+ * Movimento automático por chave de etapa (primeiro contato confirmado,
+ * resposta recebida, passo de cadência, transferência). Só move se o lead
+ * estiver ativo, no pipeline e numa das etapas de origem permitidas (quando
+ * informadas); não passa pelas regras de arrastar, que são para pessoas.
+ * Devolve a etapa nova, ou nula se nada mudou.
+ */
+export async function moveLeadToStageKey(
+  ctx: UseCaseContext,
+  leadId: string,
+  toKey: string,
+  options: {
+    source: StageChangeSource | null;
+    /** Só move a partir destas etapas. */
+    onlyFrom?: readonly string[];
+    /** Não mexe em lead já ganho ou perdido. */
+    unlessClosed?: boolean;
+    lossReasonKey?: string;
+    note?: string | null;
+  },
+): Promise<StageRow | null> {
+  const lead = await ctx.tx.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: {
+      id: true,
+      version: true,
+      status: true,
+      stageId: true,
+      pipelineId: true,
+      stage: { select: stageRefSelect },
+    },
+  });
+  if (lead.status !== 'ACTIVE' || !lead.pipelineId) return null;
+  if (lead.stage?.key === toKey) return null;
+  if (options.onlyFrom && !(lead.stage && options.onlyFrom.includes(lead.stage.key))) return null;
+  if (options.unlessClosed && (lead.stage?.category === 'WON' || lead.stage?.category === 'LOST')) {
+    return null;
+  }
+  const to = await ctx.tx.pipelineStage.findFirst({
+    where: { pipelineId: lead.pipelineId, key: toKey },
+    select: stageRefSelect,
+  });
+  if (!to) return null;
+  const lossReason = options.lossReasonKey
+    ? await ctx.tx.lossReason.findUnique({
+        where: { key: options.lossReasonKey },
+        select: { id: true, key: true, name: true },
+      })
+    : null;
+  await applyStageChange(ctx, {
+    lead,
+    from: lead.stage,
+    to,
+    changedById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+    source: options.source,
+    lossReason,
+    note: options.note ?? null,
+  });
+  return to;
+}

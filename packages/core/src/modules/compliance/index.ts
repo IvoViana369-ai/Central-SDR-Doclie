@@ -9,6 +9,11 @@ export {
   type MatchedSuppression,
 } from './domain/contact-status';
 export {
+  evaluateContactTiming,
+  type ContactTimingInput,
+  type ContactTimingResult,
+} from './domain/contact-timing';
+export {
   GATE_CHANNELS,
   GATE_CHANNEL_LABELS,
   evaluateAllChannels,
@@ -32,7 +37,7 @@ export {
   refreshLeadsForIdentifiers,
   type LeadSuppressionState,
 } from './infra/contact-state';
-export { loadGateInput } from './infra/gate';
+export { evaluateLeadGate, loadContactTiming, loadGateInput } from './infra/gate';
 export {
   addSuppression,
   listSuppressions,

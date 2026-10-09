@@ -52,6 +52,12 @@ export const leadDetailSelect = {
   originSource: { select: { id: true, key: true, name: true } },
   owner: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true } },
+  // Atividade comercial (Fase 5).
+  firstContactAt: true,
+  lastContactAt: true,
+  firstReplyAt: true,
+  lastInboundAt: true,
+  nextActionAt: true,
   // Pipeline e score (Fase 4).
   stageId: true,
   stageEnteredAt: true,

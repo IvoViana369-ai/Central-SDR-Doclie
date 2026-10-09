@@ -2,7 +2,12 @@
 // com regras, histórico com duração e motivos de perda (Fase 4).
 export * from './domain/transitions';
 export * from './contracts/schemas';
-export { applyStageChange, stageRefSelect, type StageChange } from './infra/stage-change';
+export {
+  applyStageChange,
+  moveLeadToStageKey,
+  stageRefSelect,
+  type StageChange,
+} from './infra/stage-change';
 export {
   getPipeline,
   listLossReasons,

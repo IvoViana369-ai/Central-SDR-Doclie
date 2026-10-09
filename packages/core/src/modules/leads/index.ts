@@ -3,7 +3,7 @@
 export * from './contracts/schemas';
 export * from './domain/lead';
 export { LEAD_EVENTS, LEAD_EVENT_LABELS, type LeadEventType } from './domain/events';
-export { leadScopeWhere, requireLeadInScope } from './infra/scope';
+export { leadScopeWhere, requireEditableLead, requireLeadInScope } from './infra/scope';
 export { auditLead, recordLeadEvent, touchLead } from './infra/events';
 export { ENTRY_STAGE_KEY } from './infra/stage-entry';
 export {

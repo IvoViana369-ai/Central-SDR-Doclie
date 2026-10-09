@@ -3,6 +3,12 @@ import { JOBS } from '../../../jobs/catalog';
 import { BusinessRuleError, ConflictError, ValidationError } from '../../../shared/errors';
 import { defineUseCase, toJson, type UseCaseContext } from '../../../shared/use-case';
 import { refreshLeadContactState, suppressIdentifiers } from '../../compliance';
+import {
+  cancelOpenTasks,
+  engagementActorOf,
+  refreshNextAction,
+  stopLeadEnrollment,
+} from '../../engagement';
 import { buildLeadNames, formatLeadCode, LEAD_EVENTS, requireLeadInScope } from '../../leads';
 import { maskIdentifier } from '../../normalization';
 import { applyStageChange, stageRefSelect } from '../../pipeline';
@@ -245,6 +251,26 @@ export const mergeDuplicate = defineUseCase({
       ]);
     }
 
+    // Uma oportunidade aberta por lead: com duas, o comercial decide antes qual fica.
+    const openOpportunities = await ctx.tx.opportunity.count({
+      where: { leadId: { in: [survivor.id, merged.id] }, status: 'OPEN' },
+    });
+    if (openOpportunities > 1) {
+      throw new BusinessRuleError(
+        'Os dois leads têm oportunidade aberta com o Comercial. Encerre uma delas antes de mesclar.',
+      );
+    }
+
+    // O mesclado sai da cadência e não deixa tarefa aberta.
+    await stopLeadEnrollment(
+      ctx.tx,
+      merged.id,
+      'LEAD_MERGED',
+      ctx.now,
+      engagementActorOf(ctx.actor),
+    );
+    await cancelOpenTasks(ctx.tx, merged.id, `Lead mesclado em ${survivorCode}.`);
+
     // A etapa escolhida do outro lead entra pelo pipeline (com histórico), não como coluna.
     const { stageId: chosenStageId, ...columns } = patch;
     const stageFromMerged =
@@ -391,12 +417,24 @@ export const mergeDuplicate = defineUseCase({
       skipDuplicates: true,
     });
 
-    const [notes, events, assignments, requests] = await Promise.all([
-      ctx.tx.leadNote.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-      ctx.tx.leadEvent.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-      ctx.tx.leadAssignment.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-      ctx.tx.dataSubjectRequest.findMany({ where: { leadId: merged.id }, select: { id: true } }),
-    ]);
+    const [notes, events, assignments, requests, messages, activities, tasks, opportunities] =
+      await Promise.all([
+        ctx.tx.leadNote.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.leadEvent.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.leadAssignment.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.dataSubjectRequest.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.message.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.activity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.task.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+        ctx.tx.opportunity.findMany({ where: { leadId: merged.id }, select: { id: true } }),
+      ]);
+    // Histórico comercial (Fase 5): mensagens, atividades, tarefas (já fechadas) e oportunidades.
+    const toSurvivor = { where: { leadId: merged.id }, data: { leadId: survivor.id } };
+    await ctx.tx.message.updateMany(toSurvivor);
+    await ctx.tx.activity.updateMany(toSurvivor);
+    await ctx.tx.task.updateMany(toSurvivor);
+    await ctx.tx.opportunity.updateMany(toSurvivor);
+    await mergeContactDates(ctx, survivor.id, merged.id);
     await ctx.tx.leadNote.updateMany({
       where: { leadId: merged.id },
       data: { leadId: survivor.id },
@@ -455,6 +493,10 @@ export const mergeDuplicate = defineUseCase({
       events: events.map((e) => e.id),
       assignments: assignments.map((a) => a.id),
       dataSubjectRequests: requests.map((r) => r.id),
+      messages: messages.map((m) => m.id),
+      activities: activities.map((a) => a.id),
+      tasks: tasks.map((t) => t.id),
+      opportunities: opportunities.map((o) => o.id),
     };
     const record = await ctx.tx.leadMerge.create({
       data: {
@@ -557,3 +599,32 @@ export const mergeDuplicate = defineUseCase({
     };
   },
 });
+
+/** Datas de contato do lead que fica: o primeiro contato mais antigo e o último mais recente. */
+async function mergeContactDates(ctx: UseCaseContext, survivorId: string, mergedId: string) {
+  const [a, b] = await Promise.all(
+    [survivorId, mergedId].map((id) =>
+      ctx.tx.lead.findUniqueOrThrow({
+        where: { id },
+        select: {
+          firstContactAt: true,
+          lastContactAt: true,
+          firstReplyAt: true,
+          lastInboundAt: true,
+        },
+      }),
+    ),
+  );
+  const pick = (x: Date | null, y: Date | null, earliest: boolean) =>
+    x && y ? (x < y === earliest ? x : y) : (x ?? y);
+  await ctx.tx.lead.update({
+    where: { id: survivorId },
+    data: {
+      firstContactAt: pick(a!.firstContactAt, b!.firstContactAt, true),
+      lastContactAt: pick(a!.lastContactAt, b!.lastContactAt, false),
+      firstReplyAt: pick(a!.firstReplyAt, b!.firstReplyAt, true),
+      lastInboundAt: pick(a!.lastInboundAt, b!.lastInboundAt, false),
+    },
+  });
+  await refreshNextAction(ctx.tx, survivorId);
+}

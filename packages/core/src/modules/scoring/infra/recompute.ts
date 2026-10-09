@@ -54,6 +54,7 @@ const factsSelect = {
   scoreBand: true,
   scoreModelId: true,
   scoreComputedAt: true,
+  firstReplyAt: true,
   tags: { select: { tagId: true } },
 } as const;
 
@@ -79,6 +80,16 @@ export async function loadScoreFacts(
   const codes = [
     ...new Set(leads.flatMap((l) => (l.municipalityCode ? [l.municipalityCode] : []))),
   ];
+  // "Mostrou interesse": alguma resposta classificada como interesse.
+  const interested = new Set(
+    (
+      await tx.message.findMany({
+        where: { leadId: { in: leadIds }, direction: 'INBOUND', classification: 'INTERESTED' },
+        select: { leadId: true },
+        distinct: ['leadId'],
+      })
+    ).map((m) => m.leadId),
+  );
   const priority = codes.length
     ? new Set(
         (
@@ -103,10 +114,10 @@ export async function loadScoreFacts(
       inPriorityCity: l.municipalityCode !== null && priority.has(l.municipalityCode),
       leadType: l.leadType,
       tagIds: l.tags.map((t) => t.tagId),
-      // Respostas e interesse chegam com as mensagens da Fase 5; atividade do
-      // Instagram, na Fase 8; avaliações do Google, só após a validação jurídica.
-      repliedBefore: false,
-      showedInterest: false,
+      repliedBefore: l.firstReplyAt !== null,
+      showedInterest: interested.has(l.id),
+      // Atividade do Instagram chega na Fase 8; avaliações do Google, só após a
+      // validação jurídica.
       instagramLastPostAt: null,
       googleReviewsCount: null,
     },
