@@ -84,6 +84,11 @@ model User {
   duplicateDecisions DuplicateCandidate[]    @relation("CandidateDecider")
   mergesPerformed    LeadMerge[]             @relation("MergePerformer")
 
+  stageChanges       LeadStageHistory[] @relation("StageChangedBy")
+  priorityCities     PriorityCity[]     @relation("PriorityCityCreator")
+  scoringModels      ScoringModel[]     @relation("ScoringModelCreator")
+  scoringActivations ScoringModel[]     @relation("ScoringModelActivator")
+
   @@index([role, status])
   @@index([teamId])
   @@map("users")
@@ -294,9 +299,10 @@ model Municipality {
   longitude  Decimal? @db.Decimal(9, 6)
   population Int?
 
-  state       State           @relation(fields: [uf], references: [uf])
-  leads       Lead[]
-  territories UserTerritory[]
+  state        State           @relation(fields: [uf], references: [uf])
+  leads        Lead[]
+  territories  UserTerritory[]
+  priorityCity PriorityCity?
 
   @@index([uf, nameSearch])
   @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "municipalities_name_search_trgm_idx")
@@ -488,6 +494,20 @@ model Lead {
   customFields      Json?          @map("custom_fields")
   /// Lead que absorveu este na mesclagem (status MERGED).
   mergedIntoId      String?        @map("merged_into_id") @db.Uuid
+  /// Etapa atual (Fase 4). Todo cadastro entra em NEW; leads antigos recebem
+  /// NEW no seed e na subida do worker (`backfillLeadStages`).
+  pipelineId        String?        @map("pipeline_id") @db.Uuid
+  stageId           String?        @map("stage_id") @db.Uuid
+  stageEnteredAt    DateTime?      @map("stage_entered_at") @db.Timestamptz(3)
+  /// Desfecho: preenchidos ao entrar numa etapa de perda (LOST) ou de ganho (WON).
+  lostAt            DateTime?      @map("lost_at") @db.Timestamptz(3)
+  lossReasonId      String?        @map("loss_reason_id") @db.Uuid
+  convertedAt       DateTime?      @map("converted_at") @db.Timestamptz(3)
+  /// Cache do último cálculo de score (histórico em lead_score_history).
+  score             Int?
+  scoreBand         ScoreBand?     @map("score_band")
+  scoreModelId      String?        @map("score_model_id") @db.Uuid
+  scoreComputedAt   DateTime?      @map("score_computed_at") @db.Timestamptz(3)
   isTestData        Boolean        @default(false) @map("is_test_data")
   /// Lock otimista: PATCH envia a versão lida; divergência → 409.
   version           Int            @default(1)
@@ -517,6 +537,12 @@ model Lead {
   candidatesB   DuplicateCandidate[] @relation("CandidateB")
   merges        LeadMerge[]          @relation("MergeSurvivor")
   mergedAway    LeadMerge[]          @relation("MergeMerged")
+  pipeline      Pipeline?            @relation(fields: [pipelineId], references: [id])
+  stage         PipelineStage?       @relation(fields: [stageId], references: [id])
+  lossReason    LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+  scoreModel    ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
+  stageHistory  LeadStageHistory[]
+  scoreHistory  LeadScoreHistory[]
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -529,6 +555,10 @@ model Lead {
   @@index([createdAt(sort: Desc)])
   @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_search_trgm_idx")
   @@index([nameCore(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_core_trgm_idx")
+  /// Quadro do pipeline: cards de uma etapa por prioridade.
+  @@index([stageId, status, score(sort: Desc)])
+  @@index([ownerId, stageId])
+  @@index([scoreBand])
   /// Deduplicação por site (mesmo domínio).
   @@index([websiteDomain])
   @@map("leads")
@@ -1265,4 +1295,237 @@ model LeadMerge {
   @@index([survivorLeadId])
   @@index([mergedLeadId])
   @@map("lead_merges")
+}
+
+// -----------------------------------------------------------------------------
+// Pipeline e score (Fase 4)
+// -----------------------------------------------------------------------------
+
+enum StageCategory {
+  OPEN
+  WON
+  LOST
+  /// Parado, à espera de reativação (ex.: Sem resposta).
+  PARKED
+
+  @@map("stage_category")
+}
+
+/// Perfil que costuma trabalhar a etapa (informativo no quadro).
+enum StageOwner {
+  SDR
+  SALES
+
+  @@map("stage_owner")
+}
+
+/// Quem moveu o lead quando não foi uma pessoa.
+enum StageChangeSource {
+  CADENCE
+  INBOUND
+  IMPORT
+  HANDOFF
+  RULE
+  MERGE
+
+  @@map("stage_change_source")
+}
+
+enum ScoreBand {
+  COLD
+  WARM
+  HOT
+  PRIORITY
+
+  @@map("score_band")
+}
+
+enum ScoringModelStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@map("scoring_model_status")
+}
+
+/// CLAMP: soma limitada a 0–100. SCALE: soma reescalada entre o mínimo e o máximo possíveis.
+enum ScoreNormalization {
+  CLAMP
+  SCALE
+
+  @@map("score_normalization")
+}
+
+model Pipeline {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Chave estável (o padrão é DEFAULT).
+  key       String   @unique
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  stages PipelineStage[]
+  leads  Lead[]
+
+  @@unique([isDefault], map: "pipelines_default_key", where: raw("is_default"))
+  @@map("pipelines")
+}
+
+/// Etapa do pipeline (docs/DATABASE.md §8.1). Nome, cor, ordem e SLA são
+/// editáveis; a `key` é estável e usada pelas regras e automações.
+model PipelineStage {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  pipelineId         String        @map("pipeline_id") @db.Uuid
+  key                String
+  name               String
+  position           Int
+  category           StageCategory
+  ownerRole          StageOwner?   @map("owner_role")
+  color              String        @default("slate")
+  requiresLossReason Boolean       @default(false) @map("requires_loss_reason")
+  slaHours           Int?          @map("sla_hours")
+  /// Etapa do seed: não pode ser desativada (as automações dependem dela).
+  isSystem           Boolean       @default(false) @map("is_system")
+  active             Boolean       @default(true)
+  description        String?
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  pipeline    Pipeline           @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads       Lead[]
+  historyFrom LeadStageHistory[] @relation("StageFrom")
+  historyTo   LeadStageHistory[] @relation("StageTo")
+
+  @@unique([pipelineId, key])
+  @@index([pipelineId, position])
+  @@map("pipeline_stages")
+}
+
+model LossReason {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  key                String   @unique
+  name               String
+  /// Etapas de perda em que o motivo aparece (vazio = todas).
+  appliesToStageKeys String[] @default([]) @map("applies_to_stage_keys")
+  position           Int      @default(0)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads   Lead[]
+  history LeadStageHistory[]
+
+  @@map("loss_reasons")
+}
+
+/// Passagem do lead por uma etapa; a linha aberta (`left_at` nulo) é a atual.
+model LeadStageHistory {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  leadId           String             @map("lead_id") @db.Uuid
+  fromStageId      String?            @map("from_stage_id") @db.Uuid
+  toStageId        String             @map("to_stage_id") @db.Uuid
+  /// Nulo quando foi o sistema (ver `automation_source`).
+  changedById      String?            @map("changed_by_id") @db.Uuid
+  automationSource StageChangeSource? @map("automation_source")
+  lossReasonId     String?            @map("loss_reason_id") @db.Uuid
+  note             String?
+  enteredAt        DateTime           @map("entered_at") @db.Timestamptz(3)
+  leftAt           DateTime?          @map("left_at") @db.Timestamptz(3)
+  /// Tempo na etapa, preenchido na saída.
+  durationSeconds  Int?               @map("duration_seconds")
+
+  lead       Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromStage  PipelineStage? @relation("StageFrom", fields: [fromStageId], references: [id])
+  toStage    PipelineStage  @relation("StageTo", fields: [toStageId], references: [id])
+  changedBy  User?          @relation("StageChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  lossReason LossReason?    @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId], map: "lead_stage_history_open_key", where: raw("left_at IS NULL"))
+  @@index([leadId, enteredAt(sort: Desc)])
+  @@index([toStageId, enteredAt])
+  @@map("lead_stage_history")
+}
+
+/// Cidades em que a Docline quer concentrar a prospecção (critério do score).
+model PriorityCity {
+  municipalityCode Int      @id @map("municipality_code")
+  /// Peso relativo, para uso futuro (hoje o critério só confere se a cidade está na lista).
+  weight           Int      @default(1)
+  active           Boolean  @default(true)
+  notes            String?
+  createdById      String?  @map("created_by_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  municipality Municipality @relation(fields: [municipalityCode], references: [ibgeCode])
+  createdBy    User?        @relation("PriorityCityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("priority_cities")
+}
+
+/// Versão do modelo de score: só uma ACTIVE; rascunhos são editáveis e simuláveis.
+model ScoringModel {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  name          String
+  version       Int                @unique
+  status        ScoringModelStatus @default(DRAFT)
+  normalization ScoreNormalization @default(CLAMP)
+  /// `[{band, min, max}]`, cobrindo 0–100 sem buracos.
+  bands         Json
+  notes         String?
+  createdById   String?            @map("created_by_id") @db.Uuid
+  activatedAt   DateTime?          @map("activated_at") @db.Timestamptz(3)
+  activatedById String?            @map("activated_by_id") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  rules       ScoringRule[]
+  history     LeadScoreHistory[]
+  leads       Lead[]
+  createdBy   User?              @relation("ScoringModelCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  activatedBy User?              @relation("ScoringModelActivator", fields: [activatedById], references: [id], onDelete: SetNull)
+
+  @@unique([status], map: "scoring_models_active_key", where: raw("status = 'ACTIVE'"))
+  @@map("scoring_models")
+}
+
+/// Regra do modelo: critério registrado no código, parâmetros e pontos (aceita negativos).
+model ScoringRule {
+  id           String  @id @default(uuid(7)) @db.Uuid
+  modelId      String  @map("model_id") @db.Uuid
+  criterionKey String  @map("criterion_key")
+  params       Json    @default("{}")
+  points       Int
+  active       Boolean @default(true)
+  position     Int
+  description  String?
+
+  model ScoringModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([modelId, position])
+  @@map("scoring_rules")
+}
+
+/// Histórico de score: só grava quando o score ou a faixa mudam.
+model LeadScoreHistory {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  leadId        String     @map("lead_id") @db.Uuid
+  modelId       String     @map("model_id") @db.Uuid
+  score         Int
+  band          ScoreBand
+  previousScore Int?       @map("previous_score")
+  previousBand  ScoreBand? @map("previous_band")
+  /// `[{criterion, label, matched, points, detail}]`.
+  breakdown     Json
+  /// O que provocou o cálculo (ex.: contact_state, lead.update, model.activated).
+  trigger       String
+  computedAt    DateTime   @map("computed_at") @db.Timestamptz(3)
+
+  lead  Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  model ScoringModel @relation(fields: [modelId], references: [id])
+
+  @@index([leadId, computedAt(sort: Desc)])
+  @@map("lead_score_history")
 }

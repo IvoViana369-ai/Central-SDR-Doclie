@@ -3,6 +3,7 @@ import type { DbClient } from '../src/client';
 import { newId } from '../src/ids';
 import { nationalHolidays } from '../src/reference/holidays';
 import { toSearchKey } from '../src/search-key';
+import { seedSalesConfig, type SalesConfigSeedResult } from './sales-config';
 
 interface StatesFile {
   states: { uf: string; name: string; ibgeCode: number; region: string; timezone: string }[];
@@ -21,6 +22,7 @@ export interface ReferenceSeedResult {
   holidays: number;
   leadSources: number;
   segments: number;
+  salesConfig: SalesConfigSeedResult;
 }
 
 /**
@@ -68,7 +70,8 @@ export const SEGMENTS = [
 
 /**
  * Dados de referência (idempotente; pode rodar em produção a cada deploy):
- * UFs, municípios (IBGE) e feriados nacionais.
+ * UFs, municípios (IBGE), feriados nacionais, origens, segmentos e a
+ * configuração comercial inicial (pipeline, motivos de perda e score).
  */
 export async function seedReference(
   db: DbClient,
@@ -139,11 +142,14 @@ export async function seedReference(
     ),
   ]);
 
+  const salesConfig = await seedSalesConfig(db);
+
   return {
     states: states.length,
     municipalities: rows.length,
     holidays: holidays.length,
     leadSources: LEAD_SOURCES.length,
     segments: SEGMENTS.length,
+    salesConfig,
   };
 }

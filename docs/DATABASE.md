@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas das Fases 1 e 2 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-2)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 a 4 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-4)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 2
+### 4.11 Implementação até a Fase 4
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -435,11 +435,22 @@ Diferenças em relação às seções acima:
 - **Índices da deduplicação:** `leads(website_domain)` (mesmo site) e os trigram de `name_core`; `import_rows(result_lead_id)` e `import_rows(matched_lead_id)` para a anonimização achar as linhas ainda não purgadas de um lead.
 - **Mesclagem** (`lead_merges`): o mesclado vira `MERGED` com `merged_into_id`; contatos, pessoas, origens (sem `is_first_touch`), observações, eventos, responsáveis, bases legais por canal que o sobrevivente não tem e solicitações de titulares passam para o sobrevivente; tags são copiadas; contato repetido fica no mesclado. Leads já mesclados no mesclado passam a apontar para o sobrevivente (cadeia de um nível). Nenhuma linha é apagada.
 
-**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`):
+**Fase 4 (pipeline e score):** `pipelines`, `pipeline_stages`, `lead_stage_history`, `loss_reasons`, `priority_cities`, `scoring_models`, `scoring_rules` e `lead_score_history`, como nas seções acima, mais:
+
+- **`leads`:** ganha `pipeline_id`, `stage_id`, `stage_entered_at`, `lost_at`, `loss_reason_id`, `converted_at`, `score`, `score_band`, `score_model_id` e `score_computed_at`. `conversion_type` fica para a oportunidade (Fases 5–6). A etapa é obrigatória na aplicação, mas a coluna aceita nulo: os leads existentes recebem "Novo" no seed, que roda depois das migrações.
+- **`pipelines`:** `key` estável (`DEFAULT`); só um `is_default` (único parcial).
+- **`pipeline_stages`:** `description`; `owner_role` é `SDR`, `SALES` ou nulo.
+- **`lead_stage_history`:** `automation_source` também aceita `MERGE` (mesclagem). Uma única passagem aberta por lead (único parcial em `lead_id` onde `left_at` é nulo).
+- **`loss_reasons`:** `position`; `applies_to_stage_keys` vazio vale para todas as etapas de perda.
+- **`scoring_models`:** `notes` e `created_by_id`; um único `ACTIVE` (único parcial).
+- **`lead_score_history`:** `previous_score` e `previous_band`, para mostrar a mudança sem consultar a linha anterior.
+- **Configuração inicial** (`seed/sales-config.ts`): só cria o que falta, então renomear, reordenar ou recolorir etapas não é desfeito no próximo deploy. Os leads sem etapa vão para "Novo" com a primeira linha do histórico (`backfillLeadStages`, também chamada na subida do worker).
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts` e `pipeline-scoring-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
 - `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
-- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios.
+- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead e modelo de score ativo.
 
 ---
 

@@ -16,6 +16,12 @@ try {
     `Referência: ${result.states} UFs, ${result.municipalities} municípios, ${result.holidays} feriados, ` +
       `${result.leadSources} origens, ${result.segments} segmentos.`,
   );
+  const sales = result.salesConfig;
+  console.log(
+    `Comercial: ${sales.stages} etapas, ${sales.lossReasons} motivos de perda` +
+      `${sales.scoringModelCreated ? ', modelo de score v1 criado' : ''}` +
+      `${sales.leadsPlacedInPipeline ? `, ${sales.leadsPlacedInPipeline} leads colocados em "Novo"` : ''}.`,
+  );
 } finally {
   await db.$disconnect();
 }
