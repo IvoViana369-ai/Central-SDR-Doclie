@@ -27,6 +27,7 @@ export {
 export type * from './ports';
 export { SpreadsheetError } from './ports/spreadsheet';
 export { AiProviderError } from './ports/ai';
+export { WhatsappProviderError } from './ports/whatsapp';
 export * from './modules/identity';
 export * from './modules/audit';
 export * from './modules/normalization';
@@ -45,4 +46,5 @@ export * from './modules/notifications';
 export * from './modules/opportunities';
 export * from './modules/ai-sdr';
 export * from './modules/analytics';
+export * from './modules/whatsapp';
 export * from './jobs/catalog';

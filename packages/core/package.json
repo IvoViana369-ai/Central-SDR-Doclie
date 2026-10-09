@@ -24,6 +24,7 @@
     "./cadence-domain": "./src/modules/cadence/domain/index.ts",
     "./messaging-domain": "./src/modules/messaging/domain/index.ts",
     "./opportunities-domain": "./src/modules/opportunities/domain/index.ts",
+    "./whatsapp-domain": "./src/modules/whatsapp/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

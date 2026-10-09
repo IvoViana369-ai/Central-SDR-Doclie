@@ -17,3 +17,15 @@ export type {
   SpreadsheetReader,
   SpreadsheetRow,
 } from './spreadsheet';
+export type {
+  WhatsappOutbound,
+  WhatsappParameterFormat,
+  WhatsappPhoneHealth,
+  WhatsappProvider,
+  WhatsappSendOutcome,
+  WhatsappSendResult,
+  WhatsappTemplateCategory,
+  WhatsappTemplateInfo,
+  WhatsappTemplateOutbound,
+  WhatsappTextOutbound,
+} from './whatsapp';
