@@ -15,6 +15,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createInstagramProvider,
   createWhatsappProvider,
   createErrorReporter,
   createLogger,
@@ -77,8 +78,7 @@ const deps: CoreDeps = {
   ai: createAiProvider(env),
   aiLimits: aiLimitsFromEnv(env),
   whatsapp: createWhatsappProvider(env),
-  // Fase 8: o adaptador entra com o registro do Instagram (etapa 3).
-  instagram: null,
+  instagram: createInstagramProvider(env),
 };
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------

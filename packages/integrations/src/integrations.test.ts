@@ -10,7 +10,9 @@ import { createLogger } from './observability/logger';
 import {
   assertProvidersImplemented,
   createEmailProvider,
+  createInstagramProvider,
   createWhatsappProvider,
+  instagramWebhookConfig,
   integrationStatuses,
   whatsappWebhookConfig,
 } from './registry';
@@ -132,15 +134,56 @@ describe('status das integrações', () => {
   it('falha na inicialização se um provedor de fase futura for configurado', () => {
     const env = parseServerEnv({
       ...baseEnv,
-      INSTAGRAM_PROVIDER: 'meta_graph',
-      META_APP_SECRET: 's',
-      META_ACCESS_TOKEN: 't',
-      META_GRAPH_API_VERSION: 'v26.0',
-      INSTAGRAM_BUSINESS_ACCOUNT_ID: '1',
+      PLACES_PROVIDER: 'google_places',
+      GOOGLE_API_KEY: 'chave-de-teste',
     });
     expect(() => assertProvidersImplemented(env)).toThrow(
-      /Instagram="meta_graph" \(previsto para a Fase 8\)/,
+      /Google Places="google_places" \(previsto para a Fase 9\)/,
     );
+  });
+
+  it('Instagram: assistido sem provedor; simulado; API com Facebook Login ativa (Fase 8)', () => {
+    expect(createInstagramProvider(parseServerEnv(baseEnv))).toBeNull();
+    expect(instagramWebhookConfig(parseServerEnv(baseEnv))).toBeNull();
+
+    const fake = parseServerEnv({
+      ...baseEnv,
+      INSTAGRAM_PROVIDER: 'fake',
+      META_APP_SECRET: 'segredo-de-teste',
+      META_WEBHOOK_VERIFY_TOKEN: 'verificacao-de-teste',
+    });
+    expect(createInstagramProvider(fake)?.name).toBe('fake');
+    expect(instagramWebhookConfig(fake)).toEqual({
+      appSecret: 'segredo-de-teste',
+      verifyToken: 'verificacao-de-teste',
+    });
+
+    // Sem a Página e o token dela, nem sobe.
+    expect(() =>
+      parseServerEnv({
+        ...baseEnv,
+        INSTAGRAM_PROVIDER: 'meta_graph',
+        META_APP_SECRET: 's',
+        META_GRAPH_API_VERSION: 'v26.0',
+        META_WEBHOOK_VERIFY_TOKEN: 'v',
+        INSTAGRAM_BUSINESS_ACCOUNT_ID: '1',
+      }),
+    ).toThrow(/FACEBOOK_PAGE_ID.*INSTAGRAM_PAGE_ACCESS_TOKEN|INSTAGRAM_PAGE_ACCESS_TOKEN/s);
+
+    const graph = parseServerEnv({
+      ...baseEnv,
+      INSTAGRAM_PROVIDER: 'meta_graph',
+      META_APP_SECRET: 's',
+      META_GRAPH_API_VERSION: 'v26.0',
+      META_WEBHOOK_VERIFY_TOKEN: 'v',
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: '1',
+      FACEBOOK_PAGE_ID: '2',
+      INSTAGRAM_PAGE_ACCESS_TOKEN: 't',
+    });
+    expect(() => assertProvidersImplemented(graph)).not.toThrow();
+    const provider = createInstagramProvider(graph);
+    expect(provider).toMatchObject({ name: 'meta_graph', accountId: '1' });
+    expect(integrationStatuses(graph).find((s) => s.key === 'instagram')?.state).toBe('active');
   });
 
   it('WhatsApp: assistido sem provedor; simulado; Cloud API ativa (Fase 7)', () => {

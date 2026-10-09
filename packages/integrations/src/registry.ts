@@ -1,14 +1,17 @@
 import type { ServerEnv } from '@docline/config';
 import {
   FakeAiProvider,
+  FakeInstagramProvider,
   FakeWhatsappProvider,
   type AiLimits,
   type AiProvider,
   type EmailProvider,
+  type InstagramProvider,
   type Logger,
   type WhatsappProvider,
 } from '@docline/core';
 import { AnthropicAiProvider } from './ai/anthropic';
+import { MetaGraphInstagramProvider } from './instagram/meta-graph';
 import { MetaCloudWhatsappProvider } from './whatsapp/meta-cloud';
 import { ConsoleEmailProvider } from './email/console';
 import { FileEmailProvider } from './email/file';
@@ -82,6 +85,38 @@ export function whatsappWebhookConfig(
   return { appSecret: env.META_APP_SECRET, verifyToken: env.META_WEBHOOK_VERIFY_TOKEN };
 }
 
+/**
+ * Instagram pela API (docs/INTEGRATIONS.md §7.2): `assisted` (padrão) não tem
+ * provedor, só "copiar e abrir o perfil"; `fake` simula sem enviar nada;
+ * `meta_graph` usa a API com Facebook Login e, fora de produção, só envia com
+ * ALLOW_REAL_SENDS=true.
+ */
+export function createInstagramProvider(env: ServerEnv): InstagramProvider | null {
+  switch (env.INSTAGRAM_PROVIDER) {
+    case 'assisted':
+      return null;
+    case 'fake':
+      return new FakeInstagramProvider();
+    case 'meta_graph':
+      return new MetaGraphInstagramProvider({
+        pageAccessToken: env.INSTAGRAM_PAGE_ACCESS_TOKEN!,
+        apiVersion: env.META_GRAPH_API_VERSION!,
+        pageId: env.FACEBOOK_PAGE_ID!,
+        accountId: env.INSTAGRAM_BUSINESS_ACCOUNT_ID!,
+        allowSends: env.APP_ENV === 'production' || env.ALLOW_REAL_SENDS,
+      });
+  }
+}
+
+/** Segredos do webhook do Instagram (o mesmo app da Meta), ou `null` sem provedor. */
+export function instagramWebhookConfig(
+  env: ServerEnv,
+): { appSecret: string; verifyToken: string } | null {
+  if (env.INSTAGRAM_PROVIDER === 'assisted') return null;
+  if (!env.META_APP_SECRET || !env.META_WEBHOOK_VERIFY_TOKEN) return null;
+  return { appSecret: env.META_APP_SECRET, verifyToken: env.META_WEBHOOK_VERIFY_TOKEN };
+}
+
 export function aiLimitsFromEnv(env: ServerEnv): AiLimits {
   return {
     effortGeneration: env.AI_EFFORT_GENERATION,
@@ -115,6 +150,7 @@ const IMPLEMENTED = new Set([
   'sentry',
   'anthropic',
   'meta_cloud',
+  'meta_graph',
 ]);
 
 export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {

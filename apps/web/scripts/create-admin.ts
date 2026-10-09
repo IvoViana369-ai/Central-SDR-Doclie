@@ -23,6 +23,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createInstagramProvider,
   createWhatsappProvider,
   createLogger,
   LazyPgBossJobQueue,
@@ -74,8 +75,7 @@ try {
       ai: createAiProvider(env),
       aiLimits: aiLimitsFromEnv(env),
       whatsapp: createWhatsappProvider(env),
-      // Fase 8: o adaptador entra com o registro do Instagram (etapa 3).
-      instagram: null,
+      instagram: createInstagramProvider(env),
     },
     systemActor('cli:admin:create'),
     { email: values.email, name: values.name, role: values.role as never },

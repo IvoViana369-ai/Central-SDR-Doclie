@@ -7,6 +7,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createInstagramProvider,
   createWhatsappProvider,
   createErrorReporter,
   createLogger,
@@ -58,8 +59,7 @@ export function getContainer(): WebContainer {
     ai: createAiProvider(env),
     aiLimits: aiLimitsFromEnv(env),
     whatsapp: createWhatsappProvider(env),
-    // Fase 8: o adaptador entra com o registro do Instagram (etapa 3).
-    instagram: null,
+    instagram: createInstagramProvider(env),
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,

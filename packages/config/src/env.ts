@@ -108,6 +108,10 @@ export const serverEnvShape = {
   WHATSAPP_BUSINESS_ACCOUNT_ID: optional(z.string()),
   WHATSAPP_PHONE_NUMBER_ID: optional(z.string()),
   INSTAGRAM_BUSINESS_ACCOUNT_ID: optional(z.string()),
+  // Instagram com Facebook Login (Fase 8): Página ligada à conta profissional e
+  // o token da Página gerado por um System User.
+  FACEBOOK_PAGE_ID: optional(z.string()),
+  INSTAGRAM_PAGE_ACCESS_TOKEN: optional(z.string()),
 
   // Google
   GOOGLE_API_KEY: optional(z.string()),
@@ -171,9 +175,11 @@ export const serverEnvSchema = z.object(serverEnvShape).superRefine((env, ctx) =
   if (env.INSTAGRAM_PROVIDER === 'meta_graph') {
     requireAll('INSTAGRAM_PROVIDER=meta_graph', [
       'META_APP_SECRET',
-      'META_ACCESS_TOKEN',
       'META_GRAPH_API_VERSION',
+      'META_WEBHOOK_VERIFY_TOKEN',
       'INSTAGRAM_BUSINESS_ACCOUNT_ID',
+      'FACEBOOK_PAGE_ID',
+      'INSTAGRAM_PAGE_ACCESS_TOKEN',
     ]);
   }
   if (env.PLACES_PROVIDER === 'google_places') {
