@@ -424,6 +424,15 @@ Diferenças em relação às seções acima:
 | `contact_permissions` | Na Fase 2, uma permissão por lead e canal (único parcial sem pessoa/ponto de contato) | Granularidade por ponto de contato quando houver envio por API (Fase 7) |
 | `data_subject_requests` | Status `RECEIVED`, `IN_PROGRESS`, `COMPLETED`, `REJECTED`; campo `notes` | — |
 
+**Fase 3 (importação e deduplicação):** `import_batches`, `import_rows`, `import_mapping_templates`, `duplicate_candidates` e `lead_merges`, como nas seções acima, mais:
+
+- **`import_files`:** bytes do arquivo enviado, só até a leitura no worker, apagados em seguida ([SECURITY §8](./SECURITY.md#8-upload-de-arquivos)).
+- **`import_batches`:** `sheet_names` (para escolher outra aba), `progress` (barra de progresso) e `error`. O status começa em `UPLOADED` e passa a `MAPPING` depois da leitura.
+- **`import_rows`:** `raw` guarda as células como texto; `status` e `error` registram o resultado da gravação de cada linha.
+- **`leads`:** ganha `custom_fields` (colunas extras) e `merged_into_id` (o sobrevivente da mesclagem).
+- **`lead_origins`:** ganha `import_batch_id`.
+- **`duplicate_candidates`:** além do índice único, um `CHECK (lead_a_id < lead_b_id)` impede o mesmo par nas duas ordens.
+
 **Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.

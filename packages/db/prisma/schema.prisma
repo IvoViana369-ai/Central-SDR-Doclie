@@ -78,6 +78,12 @@ model User {
   territories     UserTerritory[]
   savedViews      SavedView[]
 
+  importBatches      ImportBatch[]           @relation("ImportCreator")
+  importsAsOwner     ImportBatch[]           @relation("ImportDefaultOwner")
+  mappingTemplates   ImportMappingTemplate[] @relation("MappingTemplateCreator")
+  duplicateDecisions DuplicateCandidate[]    @relation("CandidateDecider")
+  mergesPerformed    LeadMerge[]             @relation("MergePerformer")
+
   @@index([role, status])
   @@index([teamId])
   @@map("users")
@@ -348,6 +354,7 @@ model LeadSource {
 
   leads         Lead[]
   origins       LeadOrigin[]
+  importBatches ImportBatch[]
   contactPoints ContactPoint[]
 
   @@map("lead_sources")
@@ -477,6 +484,10 @@ model Lead {
   archivedAt        DateTime?      @map("archived_at") @db.Timestamptz(3)
   anonymizedAt      DateTime?      @map("anonymized_at") @db.Timestamptz(3)
   description       String?
+  /// Colunas extras de importação, como texto (docs/MVP.md M04).
+  customFields      Json?          @map("custom_fields")
+  /// Lead que absorveu este na mesclagem (status MERGED).
+  mergedIntoId      String?        @map("merged_into_id") @db.Uuid
   isTestData        Boolean        @default(false) @map("is_test_data")
   /// Lock otimista: PATCH envia a versão lida; divergência → 409.
   version           Int            @default(1)
@@ -500,6 +511,12 @@ model Lead {
   permissions   ContactPermission[]
   suppressions  SuppressionEntry[]
   dsrs          DataSubjectRequest[]
+  mergedInto    Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  absorbed      Lead[]               @relation("LeadMergedInto")
+  candidatesA   DuplicateCandidate[] @relation("CandidateA")
+  candidatesB   DuplicateCandidate[] @relation("CandidateB")
+  merges        LeadMerge[]          @relation("MergeSurvivor")
+  mergedAway    LeadMerge[]          @relation("MergeMerged")
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -625,22 +642,26 @@ model ContactPoint {
 
 /// Origens de um lead (após mesclagens, pode haver várias). Exatamente uma é a primeira (first-touch).
 model LeadOrigin {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  leadId       String   @map("lead_id") @db.Uuid
-  sourceId     String   @map("source_id") @db.Uuid
-  detail       String?
-  url          String?
-  collectedAt  DateTime @map("collected_at") @db.Timestamptz(3)
-  referrerName String?  @map("referrer_name")
-  isFirstTouch Boolean  @default(false) @map("is_first_touch")
-  createdById  String?  @map("created_by_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id            String   @id @default(uuid(7)) @db.Uuid
+  leadId        String   @map("lead_id") @db.Uuid
+  sourceId      String   @map("source_id") @db.Uuid
+  detail        String?
+  url           String?
+  collectedAt   DateTime @map("collected_at") @db.Timestamptz(3)
+  referrerName  String?  @map("referrer_name")
+  isFirstTouch  Boolean  @default(false) @map("is_first_touch")
+  /// Lote de importação de onde o lead (ou esta aparição dele) veio.
+  importBatchId String?  @map("import_batch_id") @db.Uuid
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  lead   Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  source LeadSource @relation(fields: [sourceId], references: [id])
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  source      LeadSource   @relation(fields: [sourceId], references: [id])
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@unique([leadId], map: "lead_origins_first_touch_key", where: raw("is_first_touch"))
   @@index([leadId])
+  @@index([importBatchId])
   @@map("lead_origins")
 }
 
@@ -986,4 +1007,257 @@ model UserTerritory {
   @@unique([userId, municipalityCode], map: "user_territories_city_key", where: raw("municipality_code IS NOT NULL"))
   @@index([stateUf, municipalityCode])
   @@map("user_territories")
+}
+
+// -----------------------------------------------------------------------------
+// Importação e deduplicação (Fase 3) — docs/DATABASE.md §4
+// -----------------------------------------------------------------------------
+
+enum ImportFileType {
+  CSV
+  XLSX
+
+  @@map("import_file_type")
+}
+
+enum ImportStatus {
+  /// Arquivo recebido; aguardando a leitura no worker.
+  UPLOADED
+  /// Linhas lidas; aguardando mapeamento e configuração do lote.
+  MAPPING
+  PREVIEWING
+  PREVIEW_READY
+  COMMITTING
+  COMPLETED
+  FAILED
+  CANCELED
+
+  @@map("import_status")
+}
+
+enum DuplicatePolicy {
+  /// Cria o lead novo e sinaliza o possível duplicado para revisão.
+  CREATE_AND_FLAG
+  SKIP
+  /// Completa só os campos vazios do lead existente.
+  UPDATE_EMPTY_FIELDS
+
+  @@map("duplicate_policy")
+}
+
+enum ImportMatchStatus {
+  NEW
+  EXISTING
+  POSSIBLE_DUPLICATE
+  DUPLICATE_IN_FILE
+  SUPPRESSED
+  INVALID
+
+  @@map("import_match_status")
+}
+
+enum ImportRowDecision {
+  IMPORT
+  SKIP
+  /// Só registra a origem no lead existente.
+  LINK_EXISTING
+  UPDATE_EXISTING
+
+  @@map("import_row_decision")
+}
+
+enum ImportRowStatus {
+  PENDING
+  DONE
+  ERROR
+
+  @@map("import_row_status")
+}
+
+/// Lote de importação de planilha (docs/MVP.md M04).
+model ImportBatch {
+  id                     String          @id @default(uuid(7)) @db.Uuid
+  fileName               String          @map("file_name")
+  fileSize               Int             @map("file_size")
+  /// Detecta reimportação do mesmo arquivo.
+  fileSha256             String          @map("file_sha256")
+  fileType               ImportFileType  @map("file_type")
+  encoding               String?
+  delimiter              String?
+  sheetName              String?         @map("sheet_name")
+  /// Abas da planilha, para o usuário escolher outra (reenviando o arquivo).
+  sheetNames             String[]        @default([]) @map("sheet_names")
+  /// Linha do cabeçalho (1 = primeira linha lida).
+  headerRow              Int             @default(1) @map("header_row")
+  rowCount               Int             @default(0) @map("row_count")
+  status                 ImportStatus    @default(UPLOADED)
+  /// Coluna → campo, e colunas extras para `custom_fields`.
+  mapping                Json?
+  duplicatePolicy        DuplicatePolicy @default(CREATE_AND_FLAG) @map("duplicate_policy")
+  sourceId               String?         @map("source_id") @db.Uuid
+  sourceDetail           String?         @map("source_detail")
+  collectedAt            DateTime?       @map("collected_at") @db.Timestamptz(3)
+  defaultLegalBasis      LegalBasis?     @map("default_legal_basis")
+  legalBasisAssessmentId String?         @map("legal_basis_assessment_id") @db.Uuid
+  defaultOwnerId         String?         @map("default_owner_id") @db.Uuid
+  defaultTagIds          String[]        @default([]) @map("default_tag_ids") @db.Uuid
+  /// Contagens da prévia e do relatório final.
+  stats                  Json?
+  /// Linhas já processadas na etapa atual (barra de progresso).
+  progress               Int             @default(0)
+  error                  String?
+  createdById            String          @map("created_by_id") @db.Uuid
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt            DateTime?       @map("completed_at") @db.Timestamptz(3)
+  /// Depois desta data, as linhas temporárias são apagadas (docs/LGPD.md §12).
+  purgeAfter             DateTime?       @map("purge_after") @db.Timestamptz(3)
+
+  createdBy    User         @relation("ImportCreator", fields: [createdById], references: [id])
+  defaultOwner User?        @relation("ImportDefaultOwner", fields: [defaultOwnerId], references: [id], onDelete: SetNull)
+  source       LeadSource?  @relation(fields: [sourceId], references: [id])
+  rows         ImportRow[]
+  file         ImportFile?
+  origins      LeadOrigin[]
+
+  @@index([fileSha256])
+  @@index([createdById, createdAt(sort: Desc)])
+  @@index([status, purgeAfter])
+  @@map("import_batches")
+}
+
+/// Bytes do arquivo enviado, só até a leitura no worker (apagados em seguida;
+/// docs/SECURITY.md §8: o arquivo não fica guardado).
+model ImportFile {
+  batchId   String   @id @map("batch_id") @db.Uuid
+  content   Bytes
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@map("import_files")
+}
+
+/// Linha da planilha: valores brutos, normalizados, validação e casamento.
+/// Temporária: purgada 30 dias após o lote (docs/LGPD.md §12).
+model ImportRow {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  batchId       String             @map("batch_id") @db.Uuid
+  /// Linha na planilha (1 = primeira linha lida, contando o cabeçalho).
+  rowNumber     Int                @map("row_number")
+  /// Células como texto.
+  raw           Json
+  normalized    Json?
+  errors        Json?
+  warnings      Json?
+  matchStatus   ImportMatchStatus? @map("match_status")
+  matchedLeadId String?            @map("matched_lead_id") @db.Uuid
+  matchReasons  Json?              @map("match_reasons")
+  decision      ImportRowDecision?
+  resultLeadId  String?            @map("result_lead_id") @db.Uuid
+  status        ImportRowStatus    @default(PENDING)
+  error         String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, matchStatus])
+  @@map("import_rows")
+}
+
+/// Mapeamento reutilizável, sugerido quando o cabeçalho de uma nova planilha bate.
+model ImportMappingTemplate {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  name            String
+  /// Chave do cabeçalho normalizado, para sugerir o modelo automaticamente.
+  headerSignature String   @map("header_signature")
+  mapping         Json
+  createdById     String?  @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User? @relation("MappingTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([name])
+  @@index([headerSignature])
+  @@map("import_mapping_templates")
+}
+
+enum DuplicateConfidence {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@map("duplicate_confidence")
+}
+
+enum DuplicateStatus {
+  PENDING
+  MERGED
+  KEPT_SEPARATE
+  IGNORED
+
+  @@map("duplicate_status")
+}
+
+enum DuplicateSource {
+  IMPORT
+  SCAN
+  /// Cadastro ou edição pela interface/API.
+  MANUAL
+  PROSPECTING
+
+  @@map("duplicate_source")
+}
+
+/// Par de leads possivelmente duplicados (sempre `lead_a_id < lead_b_id`).
+model DuplicateCandidate {
+  id           String              @id @default(uuid(7)) @db.Uuid
+  leadAId      String              @map("lead_a_id") @db.Uuid
+  leadBId      String              @map("lead_b_id") @db.Uuid
+  /// 0 a 1.
+  score        Float
+  confidence   DuplicateConfidence
+  /// `[{rule, detail, weight}]`, sem dados pessoais em claro.
+  reasons      Json
+  status       DuplicateStatus     @default(PENDING)
+  detectedBy   DuplicateSource     @map("detected_by")
+  detectedAt   DateTime            @default(now()) @map("detected_at") @db.Timestamptz(3)
+  decidedById  String?             @map("decided_by_id") @db.Uuid
+  decidedAt    DateTime?           @map("decided_at") @db.Timestamptz(3)
+  decisionNote String?             @map("decision_note")
+
+  leadA     Lead        @relation("CandidateA", fields: [leadAId], references: [id], onDelete: Cascade)
+  leadB     Lead        @relation("CandidateB", fields: [leadBId], references: [id], onDelete: Cascade)
+  decidedBy User?       @relation("CandidateDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  merges    LeadMerge[]
+
+  @@unique([leadAId, leadBId])
+  @@index([status, confidence, score(sort: Desc)])
+  @@index([leadBId])
+  @@map("duplicate_candidates")
+}
+
+/// Mesclagem: o lead mesclado vira MERGED e aponta para o sobrevivente; a cópia
+/// integral fica em `merged_snapshot` (nada é excluído; docs/MVP.md M06).
+model LeadMerge {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  survivorLeadId String   @map("survivor_lead_id") @db.Uuid
+  mergedLeadId   String   @map("merged_lead_id") @db.Uuid
+  candidateId    String?  @map("candidate_id") @db.Uuid
+  /// Campo → "survivor" | "merged", como escolhido na tela.
+  fieldChoices   Json     @map("field_choices")
+  /// Cópia do lead mesclado e ids dos filhos movidos.
+  mergedSnapshot Json     @map("merged_snapshot")
+  performedById  String?  @map("performed_by_id") @db.Uuid
+  performedAt    DateTime @default(now()) @map("performed_at") @db.Timestamptz(3)
+
+  survivor    Lead                @relation("MergeSurvivor", fields: [survivorLeadId], references: [id])
+  merged      Lead                @relation("MergeMerged", fields: [mergedLeadId], references: [id])
+  candidate   DuplicateCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  performedBy User?               @relation("MergePerformer", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([survivorLeadId])
+  @@index([mergedLeadId])
+  @@map("lead_merges")
 }
