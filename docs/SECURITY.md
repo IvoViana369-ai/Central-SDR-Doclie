@@ -113,6 +113,8 @@
 | **Revogar** item da Lista Não Contatar | ✅ | ❌ | ❌ | ❌ |
 | Alterar base legal/opt-in | ✅ | ✅ | ⚙️ (com evidência) | ❌ |
 | Exportar leads | ✅ | ✅ | ❌ | ❌ |
+| Mover leads entre etapas abertas, para perda (com motivo) e reativar "Sem resposta" | ✅ | ✅ | ✅ | ✅ |
+| Mover para etapas das automações, converter ou reabrir lead ganho/perdido (auditado como correção) | ✅ | ✅ | ❌ | ❌ |
 | Configurar pipeline, score, cadência | ✅ | ❌ | ❌ | ❌ |
 | Gerenciar usuários | ✅ | ⚙️ (sua equipe) | ❌ | ❌ |
 | Ver auditoria | ✅ | ⚙️ (sua equipe) | ❌ | ❌ |

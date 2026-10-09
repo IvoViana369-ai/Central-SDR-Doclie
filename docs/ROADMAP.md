@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 3 concluídas · próxima: Fase 4 (Pipeline SDR) · **Última revisão:** 2026-10-09
+> **Status:** Fases 1 a 4 concluídas · próxima: Fase 5 (Fila e follow-ups) · **Última revisão:** 2026-10-09
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -24,7 +24,7 @@
 | 1 | Fundação técnica | Monorepo, banco, auth, RBAC, auditoria, fila, layout, CI, staging | ✅ concluída (2026-10-08) | MVP |
 | 2 | CRM de leads | Cadastro, pessoas, contatos, lista e filtros, timeline, base de conformidade | ✅ concluída (2026-10-09) | MVP |
 | 3 | Importação, normalização e deduplicação | Planilhas com prévia, normalização completa, motor e tela de duplicados | ✅ concluída (2026-10-09) | MVP |
-| 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ~1,5 semana | MVP |
+| 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ✅ concluída (2026-10-09) | MVP |
 | 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ~2,5 semanas | MVP |
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ~3,5 semanas | MVP |
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ~2,5 semanas + prazos da Meta | Canais |
@@ -242,6 +242,34 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** Kanban configurável, histórico de etapas, lead scoring explicável.
 **Aceite:** critérios M07 e M08; suítes de pipeline e score.
+
+**Situação (2026-10-09):** ✅ concluída no código; as 8 histórias (F4-01 a F4-08) foram entregues.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase4.spec.ts`, que roda com o worker de verdade, e pelas suítes `pipeline.int.test.ts`, `scoring.int.test.ts`, `transitions.test.ts` e `scoring.test.ts`:
+
+| Critério | O que a jornada comprova |
+|---|---|
+| M08 | O lead entra em "Novo"; arrastar entre etapas grava o histórico. Se outra pessoa alterou o lead, o movimento é recusado e o card volta. "Primeiro contato" não aparece como destino manual. Perda pede o motivo. A ficha mostra as três passagens com a duração. |
+| M07 | A ficha explica o score por critério. Incluir a cidade nas prioritárias recalcula no worker (20 → 35, Frio → Morno), e o histórico mostra o motivo. Um rascunho com peso novo é simulado e ativado, e a base é recalculada (35 → 65). |
+| F4-04 | No celular, o quadro vira uma lista por etapa, com o botão de mover. |
+
+As suítes do ARCHITECTURE §12.2 cobrem o pipeline (transições, motivo obrigatório, histórico com duração, conflito de versão) e o score (soma, teto `CLAMP`, `SCALE`, faixas, regra inativa, pontos negativos, versão do modelo, explicação).
+
+Decisões e pendências:
+
+- **"Primeiro contato" nunca é manual**, nem para gestor: o lead entra nessa etapa ao registrar o contato (Fase 5), depois do gate de contactabilidade.
+- **"Convertido"** é marcado por gestor ou administrador até existir oportunidade ganha (Fases 5–6). As etapas de cadência, "Respondeu" e "Oportunidade" também são movidas à mão só por eles, como correção auditada (`override`).
+- **Motivo "Pediu para não ser contatado"** inclui o lead na Lista Não Contatar na mesma transação (LGPD). A tela avisa antes de mover.
+- **Barra de desfechos:** durante o arraste, as etapas de perda e de conversão aparecem numa barra fixa, porque ficam no fim de um quadro com 17 colunas.
+- **Quadro por `POST`**, com a mesma seleção da lista de leads (DSL e busca).
+- **Colunas de etapa aceitam nulo** no banco. O seed e a subida do worker põem em "Novo" os leads sem etapa, e o worker calcula o score de quem ainda não tem.
+- **Primeiro cálculo do score** vai só para o histórico do score, sem evento na timeline.
+- **Critérios sem dado ainda:** "Já respondeu" e "Mostrou interesse" pontuam a partir da Fase 5; "Instagram ativo" fica inativo até a Fase 8; avaliações do Google, até a validação jurídica.
+- **Simulação** roda na transação do pedido, o que basta na escala do MVP; com bases grandes, vira job.
+- **Próximo passo no card** (SDR-FLOW §3.3) depende das tarefas da Fase 5.
+- **Staging:** continua dependendo da conta da Docline na Render.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. | Tam. |
 |---|---|---|---|

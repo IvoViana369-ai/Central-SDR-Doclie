@@ -152,6 +152,8 @@ Os estados pedidos no §14 dos requisitos são independentes e calculados pelo g
 
 **Implementado na Fase 2:** opt-out em 1 clique (lead inteiro, um canal ou um contato), inclusão manual por valor, revogação só pelo ADMIN com motivo, efeito imediato em todos os leads com o mesmo identificador, CNPJ e o próprio lead também entram na lista, consulta com valores mascarados (ADMIN/GESTOR) e gate de contactabilidade por canal com motivos legíveis. Ficam para as próximas fases: detecção de palavras-chave e confirmação ao titular (Fase 5), parada de cadência (Fase 5), prévia de importação (Fase 3) e campanhas (Fase 10).
 
+**Fase 4:** perder o lead no pipeline com o motivo "Pediu para não ser contatado" registra o opt-out em todos os canais, na mesma transação da movimentação. A tela avisa antes de confirmar. A prévia da importação já marca os identificadores suprimidos (Fase 3). O score usa só sinais de negócio (canais cadastrados, cidade, tipo, tags) e mostra na ficha quanto cada critério pesou.
+
 ---
 
 ## 9. Transparência com o titular

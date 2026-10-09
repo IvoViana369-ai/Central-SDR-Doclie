@@ -122,9 +122,23 @@ stateDiagram-v2
 7. Cada movimentação grava `lead_stage_history` com duração na etapa anterior.
 8. Lock otimista: se outro usuário mexeu no lead, o card volta e o usuário vê o que mudou.
 
+> **Implementação (Fase 4):**
+> - A regra 2 vale também para gestor e administrador: "Primeiro contato" não aparece como destino manual.
+> - Regra 4: até existir oportunidade (Fases 5–6), "Convertido" é marcado à mão por gestor ou administrador.
+> - Regra 6: as etapas preenchidas pelas automações (Follow-up 1 a 3, "Sem resposta", "Respondeu", "Oportunidade") e a reabertura de um lead ganho ou perdido só são feitas à mão por gestor ou administrador. A auditoria registra a movimentação como correção (`override`).
+> - Sair de "Sem resposta" (reativação) vale para todos.
+> - O motivo "Pediu para não ser contatado" inclui o lead na Lista Não Contatar na hora.
+> - A regra 5 entra com a cadência (Fase 5).
+
 ### 3.3 Interface
 
 Colunas com contagem e cards paginados por coluna. O card mostra nome, cidade, faixa de score, próximo passo, dias na etapa e selos (WhatsApp, Instagram, Não contatar). Filtros: responsável, cidade, UF, faixa, origem, tag. No celular, as etapas viram uma lista com seletor de etapa (sem arrastar).
+
+> **Implementação (Fase 4):**
+> - Os cards de cada coluna vêm do maior score para o menor e, no empate, de quem está há mais tempo na etapa. Mostram também o responsável e o SLA vencido.
+> - Durante o arraste, as etapas de perda e de conversão aparecem numa barra fixa, sem rolar até o fim do quadro.
+> - Cada card tem o botão "Mover", que faz o mesmo pelo teclado ou no celular.
+> - O "próximo passo" no card depende das tarefas da Fase 5.
 
 ---
 

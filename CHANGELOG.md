@@ -4,6 +4,66 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.4.0] — Fase 4: Pipeline SDR — 2026-10-09
+
+Aceite da fase (MVP M07 e M08) coberto por jornadas E2E que rodam com o worker de verdade. Totais: 293 testes unitários, 129 de integração e 26 jornadas E2E.
+
+### Adicionado
+
+- **Pipeline e etapas (F4-01):**
+  - pipeline padrão com as 17 etapas e os 8 motivos de perda;
+  - o seed só cria o que falta, então as edições do ADMIN não são desfeitas no deploy;
+  - configuração pelo ADMIN: nome, cor, ordem, SLA, ativação e etapas novas. Nenhuma etapa é excluída; etapas do sistema ou com leads não são desativadas.
+- **Kanban (F4-02):**
+  - colunas com contagem e cards por prioridade (score, depois tempo na etapa), paginados por coluna;
+  - o card mostra score e faixa, dias na etapa, SLA vencido, responsável e selos de WhatsApp, Instagram e Não contatar;
+  - filtros por responsável, UF, cidade, faixa, origem e tag, e busca;
+  - arrastar e soltar com as regras de transição; durante o arraste, os desfechos aparecem numa barra fixa;
+  - botão "Mover" acessível pelo teclado;
+  - lock otimista: se outra pessoa alterou o lead, o card volta e o quadro recarrega.
+- **Regras e histórico (F4-03):**
+  - entre etapas abertas, qualquer pessoa com acesso ao lead;
+  - "Primeiro contato" só registrando o contato;
+  - etapas das automações, conversão e reabertura só por gestor ou administrador, auditadas como correção;
+  - perda exige motivo;
+  - histórico com a duração de cada passagem, na ficha do lead.
+- **Pipeline no celular (F4-04):** lista por etapa com seletor, sem arrastar.
+- **Lead scoring (F4-05, F4-06):**
+  - critérios registrados no código e modelo versionado no banco;
+  - normalização `CLAMP` ou `SCALE`; faixas Frio, Morno, Quente e Prioridade;
+  - recálculo na transação de quem muda o lead (contatos, cidade, tipo, tags) e no worker para ações em massa;
+  - histórico só quando o score ou a faixa mudam;
+  - explicação por critério na ficha do lead.
+- **Pesos do score (F4-07):** rascunho a partir do modelo ativo, simulação da distribuição por faixa e ativação de versão com recálculo da base no worker.
+- **Cidades prioritárias (F4-08):** incluir e retirar (remoção lógica); o score dos leads da cidade é recalculado no worker.
+- **API v1:** `pipelines` (4 rotas), `leads/{id}/stage`, `stage-history` e `score`, `loss-reasons`, `scoring/models` (7 rotas) e `priority-cities` (3 rotas).
+- **Worker:**
+  - jobs `score.recompute-lead` e `score.recompute-all`;
+  - na subida, põe em "Novo" os leads sem etapa e calcula o score de quem ainda não tem.
+
+### Alterado
+
+- **Cadastro e importação:** todo lead entra em "Novo", com a primeira passagem no histórico, e sai com o score calculado.
+- **Mesclagem:** a etapa vira um campo escolhível; o lead mesclado sai do funil.
+- **Filtros (DSL):** novos campos `stage`, `scoreBand` e `score`.
+- **Configurações:** atalhos para etapas, score e cidades prioritárias; rótulos de auditoria das ações novas.
+
+### Decidido
+
+- **"Primeiro contato" nunca é manual**, nem para gestor, porque o contato passa pelo gate de contactabilidade.
+- **"Convertido"** é marcado por gestor ou administrador até existir oportunidade ganha (Fases 5–6).
+- **Motivo "Pediu para não ser contatado"** inclui o lead na Lista Não Contatar na mesma transação.
+- **Primeiro cálculo do score** vai só para o histórico do score, sem evento na timeline.
+- **Quadro por `POST`**, com a mesma seleção da lista de leads.
+- **Critérios ainda sem dado** ("Já respondeu", "Mostrou interesse", "Instagram ativo", avaliações do Google) ficam no modelo e pontuam quando o dado existir. Os dois últimos começam inativos.
+
+### Pendente
+
+- **Staging no ar:** depende da conta da Docline na Render e das credenciais de e-mail.
+- **Sentry:** falta criar a conta e configurar o DSN.
+- **2FA obrigatória:** bloquear o acesso de ADMIN/GESTOR sem 2FA antes da Fase 7.
+- **Próximo passo no card:** depende das tarefas da Fase 5.
+
 ## [0.3.0] — Fase 3: Importação, normalização e deduplicação — 2026-10-09
 
 Aceite da fase (MVP M04, M05 e M06) coberto por jornadas E2E que rodam com o worker de verdade. Totais: 278 testes unitários, 113 de integração e 23 jornadas E2E.
