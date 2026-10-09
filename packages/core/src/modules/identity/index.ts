@@ -1,10 +1,14 @@
 export {
   ROLES,
   ROLE_LABELS,
+  TWO_FACTOR_ENFORCEMENTS,
   TWO_FACTOR_ROLES,
   USER_STATUSES,
   USER_STATUS_LABELS,
+  twoFactorGate,
   type Role,
+  type TwoFactorEnforcement,
+  type TwoFactorGate,
   type UserStatus,
 } from './domain/roles';
 export {

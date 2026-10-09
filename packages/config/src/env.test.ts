@@ -29,6 +29,7 @@ describe('parseServerEnv', () => {
     expect(env.AI_PROVIDER).toBe('fake');
     expect(env.PLACES_PROVIDER).toBe('disabled');
     expect(env.ALLOW_REAL_SENDS).toBe(false);
+    expect(env.TWO_FACTOR_ENFORCEMENT).toBe('required');
     expect(env.IMPORT_MAX_ROWS).toBe(50_000);
   });
 
@@ -129,6 +130,27 @@ describe('parseServerEnv', () => {
         EMAIL_PROVIDER: 'file',
       }),
     ).toEqual(['EMAIL_PROVIDER: file é apenas para desenvolvimento e testes']);
+  });
+
+  it('só aceita o lembrete de 2FA (sem bloqueio) em desenvolvimento e testes', () => {
+    expect(problemsOf({ ...minimal, TWO_FACTOR_ENFORCEMENT: 'reminder' })).toEqual([]);
+    expect(problemsOf({ ...minimal, APP_ENV: 'test', TWO_FACTOR_ENFORCEMENT: 'reminder' })).toEqual(
+      [],
+    );
+    expect(
+      problemsOf({
+        ...minimal,
+        APP_ENV: 'staging',
+        APP_URL: 'https://staging.example.com',
+        ENCRYPTION_KEY: KEY32,
+        TWO_FACTOR_ENFORCEMENT: 'reminder',
+      }),
+    ).toEqual([
+      'TWO_FACTOR_ENFORCEMENT: reminder é apenas para desenvolvimento e testes; use required',
+    ]);
+    expect(problemsOf({ ...minimal, TWO_FACTOR_ENFORCEMENT: 'off' })[0]).toMatch(
+      /^TWO_FACTOR_ENFORCEMENT:/,
+    );
   });
 
   it('aceita uma configuração de produção completa', () => {

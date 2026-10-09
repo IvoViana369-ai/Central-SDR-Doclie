@@ -12,14 +12,20 @@ import { getContainer } from './container';
 import { ipAddressOptions, requestMetaFrom } from './request-meta';
 import { getSessionUser, type SessionUser } from './session';
 
-/** Contexto para páginas autenticadas (Server Components). */
-export async function getPageContext(): Promise<{
+/**
+ * Contexto para páginas autenticadas (Server Components). ADMIN/GESTOR sem a
+ * verificação em duas etapas (quando obrigatória) só acessam "Minha conta":
+ * as demais páginas levam para lá. Fica na página, e não no layout, porque o
+ * layout não roda de novo na navegação entre páginas.
+ */
+export async function getPageContext(options: { allowWithoutTwoFactor?: boolean } = {}): Promise<{
   user: SessionUser;
   deps: CoreDeps;
   meta: RequestMeta;
 }> {
   const user = await getSessionUser();
   if (!user) redirect('/login');
+  if (user.twoFactor === 'blocked' && !options.allowWithoutTwoFactor) redirect('/conta');
   const { deps, env } = getContainer();
   const meta = requestMetaFrom(await headers(), ipAddressOptions(env.TRUSTED_PROXIES));
   return { user, deps, meta };

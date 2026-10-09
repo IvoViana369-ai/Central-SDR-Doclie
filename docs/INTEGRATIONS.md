@@ -377,7 +377,7 @@ Ninguém liga sozinho: depende da Docline e do jurídico. Até lá, o modo assis
 - [ ] Modelos de prospecção aprovados (categoria Marketing), com o texto revisado pelo jurídico e pelo marketing.
 - [ ] Parecer jurídico sobre opt-in, base legal e a Meta como operadora (transferência internacional) — [LGPD](./LGPD.md).
 - [ ] Forma de pagamento configurada na WABA e orçamento mensal aprovado.
-- [ ] **2FA obrigatório para ADMIN/GESTOR** implementado e ativo (pendência de segurança, [SECURITY §18](./SECURITY.md#18-checklist-por-fase)).
+- [ ] Todos os ADMIN/GESTOR com a verificação em duas etapas ativada (o sistema já exige desde a 0.7.1, [SECURITY §3](./SECURITY.md#3-autenticação)).
 
 **Configuração (staging primeiro):**
 

@@ -4,6 +4,26 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.7.1] — 2FA obrigatória para ADMIN e GESTOR — 2026-10-09
+
+Fecha a pendência de segurança prometida para antes da Fase 7 ([SECURITY §3](docs/SECURITY.md#3-autenticação), ADR 024). Totais: 388 testes unitários, 188 de integração e 42 jornadas E2E.
+
+### Alterado
+
+- **ADMIN e GESTOR sem a verificação em duas etapas só acessam "Minha conta"** até ativar: as demais páginas levam para lá, o menu e os avisos ficam ocultos e a API v1 responde `403` com `code: TWO_FACTOR_REQUIRED`. Vale no primeiro acesso de um convidado, para quem foi promovido a GESTOR e para quem teve a 2FA redefinida ou desativada. SDR e Comercial não mudam.
+- **Desativar a 2FA** num perfil que a exige avisa que o acesso fica restrito até ativar de novo (é assim que se troca de celular).
+
+### Adicionado
+
+- **`TWO_FACTOR_ENFORCEMENT`:** `required` (padrão; o único aceito em staging e produção) ou `reminder` (só o lembrete, para desenvolvimento e para a suíte E2E).
+- **E2E com a 2FA obrigatória** (`fase7-2fa.spec.ts`), num segundo servidor com `required`: ADMIN sem 2FA fica em "Minha conta" e recebe `403` na API, o SDR segue normal, e o gestor convidado ativa a 2FA e é liberado.
+- **UAT:** cenário 19 no [GO-LIVE](docs/GO-LIVE.md#4-homologação-uat).
+
+### Corrigido
+
+- **E2E dependia da hora do dia:** a cadência padrão tem janela própria (08:00–18:00) e o preparo do banco de testes só abria a das regras de contato; depois das 18h de Fortaleza, o primeiro passo vencia no dia seguinte e a jornada da Fase 5 falhava. O preparo agora abre as duas.
+
+
 ## [0.7.0] — Fase 7: Integração WhatsApp — 2026-10-09
 
 Envio e recebimento pela WhatsApp Cloud API, oficial da Meta, só para números com opt-in ou com a conversa aberta pelo contato. **A API fica desligada por padrão** (`WHATSAPP_PROVIDER=assisted`); a ativação segue [INTEGRATIONS §16.1](docs/INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api) e o marco M5 do [GO-LIVE](docs/GO-LIVE.md#11-whatsapp-pela-api-marco-m5). F7-01 a F7-08 entregues; F7-09 adiada. Aceite coberto pela jornada E2E `fase7.spec.ts` e pelas suítes do WhatsApp. Totais: 384 testes unitários, 188 de integração e 40 jornadas E2E.

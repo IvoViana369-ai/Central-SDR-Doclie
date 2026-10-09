@@ -165,7 +165,7 @@ O aceite é coberto pelas jornadas E2E `apps/web/e2e/fase2-ui.spec.ts`, `fase2-a
 Decisões e pendências:
 
 - **Exportação síncrona** (sem arquivo guardado no servidor), em vez de job assíncrono: ARCHITECTURE §9.2.
-- **2FA:** disponível para todos, com lembrete para ADMIN/GESTOR. Bloquear o acesso sem 2FA fica para antes da Fase 7. *(Fase 7: ainda não implementado; virou pré-requisito para ligar a API do WhatsApp.)*
+- **2FA:** disponível para todos, com lembrete para ADMIN/GESTOR. Bloquear o acesso sem 2FA fica para antes da Fase 7. *(Entregue na 0.7.1, logo depois da Fase 7: sem 2FA, ADMIN/GESTOR só acessam "Minha conta".)*
 - **Sentry:** pronto; falta o DSN da conta da Docline.
 - **Staging:** continua dependendo da conta da Docline na Render.
 
@@ -385,7 +385,7 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 **Entregáveis:** envio pela WhatsApp Cloud API (modelo aprovado e texto livre na janela), webhooks de status e de mensagens recebidas, opt-in por número com evidência, conversas e janela na ficha e na tela Conversas, modelos sincronizados e ligados às abordagens, saúde do número e custo estimado.
 
-**Situação (2026-10-09):** ✅ concluída no código; F7-01 a F7-08 entregues, **F7-09 adiada** (abaixo). A API fica **desligada por padrão** (`WHATSAPP_PROVIDER=assisted`); a homologação usa o provedor simulado (`fake`) com `pnpm whatsapp:simulate`. Ligar depende da Docline: verificação da empresa na Meta, WABA e número, modelos aprovados, parecer jurídico e o bloqueio de acesso sem 2FA ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
+**Situação (2026-10-09):** ✅ concluída no código; F7-01 a F7-08 entregues, **F7-09 adiada** (abaixo). A API fica **desligada por padrão** (`WHATSAPP_PROVIDER=assisted`); a homologação usa o provedor simulado (`fake`) com `pnpm whatsapp:simulate`. Ligar depende da Docline: verificação da empresa na Meta, WABA e número, modelos aprovados, parecer jurídico ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
 
 O aceite é coberto pela jornada E2E `apps/web/e2e/fase7.spec.ts` e pelas suítes `whatsapp.int.test.ts`, `whatsapp-webhooks.int.test.ts`, `whatsapp-domain.test.ts`, `whatsapp-schema.int.test.ts`, `meta-cloud.test.ts` e `signature.test.ts`:
 
@@ -409,7 +409,8 @@ Decisões e pendências:
 - **Envio real desligado fora de produção** sem `ALLOW_REAL_SENDS=true`; o simulador de webhooks recusa rodar com `meta_cloud`.
 - **Custo estimado** com tabela editável (valores iniciais de fontes secundárias, em USD); conferir na tabela oficial da Meta, que fatura em BRL no Brasil desde 01/07/2026 para clientes elegíveis.
 - **F7-09 adiada** (passos de cadência `API_MESSAGE` com envio automático, COULD): enviar sem uma pessoa exige decidir volume por dia, comportamento com falha e revisão do texto, e só faz sentido depois de medir qualidade e custo com envios humanos. Até lá, o passo vira tarefa e a pessoa cumpre enviando o modelo pela ficha. Candidata à Fase 10 (Campanhas), que já trata elegibilidade e limites.
-- **Pendências:** confirmação de descadastro ao titular (depende do jurídico e de um modelo próprio); bloqueio de acesso de ADMIN/GESTOR sem 2FA, prometido para antes desta fase e agora pré-requisito para ligar a API ([SECURITY §18](./SECURITY.md#18-checklist-por-fase)); revalidar a tabela de códigos de erro da Meta antes de ligar.
+- **2FA obrigatória para ADMIN/GESTOR** (prometida para antes desta fase): entregue na 0.7.1, logo depois; sem 2FA, só "Minha conta" ([SECURITY §3](./SECURITY.md#3-autenticação)).
+- **Pendências:** confirmação de descadastro ao titular (depende do jurídico e de um modelo próprio); revalidar a tabela de códigos de erro da Meta antes de ligar.
 
 Detalhes em [CHANGELOG](../CHANGELOG.md).
 

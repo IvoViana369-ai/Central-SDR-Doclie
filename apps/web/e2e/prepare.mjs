@@ -30,7 +30,9 @@ execFileSync('pnpm', ['--filter', '@docline/db', 'seed'], { stdio: 'pipe' });
 
 // O E2E roda a qualquer hora e em qualquer dia: janela de contato aberta o dia
 // todo e sem feriados. Janela, feriados e limites têm testes próprios com
-// relógio fixo (packages/core).
+// relógio fixo (packages/core). A cadência tem janela própria (08:00–18:00 no
+// seed): sem abri-la também, depois das 18h o primeiro passo vence no dia
+// seguinte e some de "Hoje" na Minha Fila.
 const settings = new pg.Client({ connectionString: url });
 await settings.connect();
 await settings.query('DELETE FROM holidays');
@@ -38,6 +40,7 @@ await settings.query(
   `INSERT INTO app_settings (key, value, updated_at) VALUES ('contact.rules', $1, now())`,
   [JSON.stringify({ windowStart: '00:00', windowEnd: '24:00', workDays: [0, 1, 2, 3, 4, 5, 6] })],
 );
+await settings.query(`UPDATE cadences SET send_window_start = '00:00', send_window_end = '24:00'`);
 await settings.end();
 
 rmSync(process.env.EMAIL_OUTBOX_FILE, { force: true });

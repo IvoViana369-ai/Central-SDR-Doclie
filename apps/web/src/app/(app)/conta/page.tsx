@@ -9,7 +9,8 @@ import { getPageContext } from '@/server/page-context';
 export const metadata: Metadata = { title: 'Minha conta' };
 
 export default async function AccountPage() {
-  const { deps, user, meta } = await getPageContext();
+  // Única página liberada para quem ainda precisa ativar a verificação.
+  const { deps, user, meta } = await getPageContext({ allowWithoutTwoFactor: true });
   const me = await getCurrentUser(deps, user.actor, {}, meta);
   const required = TWO_FACTOR_ROLES.includes(me.role);
 

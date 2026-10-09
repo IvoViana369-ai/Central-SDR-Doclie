@@ -53,6 +53,9 @@ envVarGroups:
         sync: false
       - key: SENTRY_DSN
         sync: false # opcional: DSN do Sentry (erros do web e do worker, sem dados pessoais)
+      # 2FA obrigatória para ADMIN/GESTOR (o padrão; "reminder" é recusado aqui).
+      - key: TWO_FACTOR_ENFORCEMENT
+        value: required
       # Integrações externas ficam desligadas/assistidas até a ativação.
       # WhatsApp pela API (Fase 7): para homologar sem a Meta, use `fake` e
       # defina META_APP_SECRET e META_WEBHOOK_VERIFY_TOKEN de teste; para a

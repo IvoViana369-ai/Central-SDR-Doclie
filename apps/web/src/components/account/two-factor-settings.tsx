@@ -156,8 +156,8 @@ export function TwoFactorSettings({ enabled, required }: { enabled: boolean; req
         >
           {step.purpose === 'disable' && required ? (
             <Alert variant="info">
-              Para o seu perfil a verificação em duas etapas é recomendada (e será obrigatória antes
-              do envio automático de mensagens).
+              Para o seu perfil a verificação em duas etapas é obrigatória: desativada, o acesso
+              fica restrito a esta página até você ativar de novo (por exemplo, num celular novo).
             </Alert>
           ) : null}
           <Field label="Confirme sua senha" htmlFor="twoFactorPassword">

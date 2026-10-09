@@ -7,6 +7,14 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const PORT = 3100;
 export const baseURL = `http://localhost:${PORT}`;
+/**
+ * Segundo servidor, no mesmo banco, com a 2FA obrigatória para ADMIN/GESTOR
+ * (TWO_FACTOR_ENFORCEMENT=required, o padrão de staging e produção). O
+ * principal roda em modo de lembrete porque a suíte entra como ADMIN dezenas de
+ * vezes, e cada login com 2FA exigiria um código novo do aplicativo.
+ */
+const STRICT_PORT = 3101;
+export const strictBaseURL = `http://localhost:${STRICT_PORT}`;
 const testDatabaseUrl =
   process.env.DATABASE_URL_TEST ?? 'postgresql://docline:docline@localhost:5432/docline_sdr_test';
 export const OUTBOX_FILE = fileURLToPath(new URL('./e2e/.state/outbox.jsonl', import.meta.url));
@@ -35,9 +43,13 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     // Prepara o banco de testes e sobe o build de produção (rode `pnpm build` antes)
-    // junto com o worker, que processa importações e a busca de duplicados. Os
-    // dois ficam no mesmo grupo de processos e são encerrados juntos.
-    command: `node e2e/prepare.mjs && (pnpm --filter @docline/worker start & pnpm start)`,
+    // junto com o worker, que processa importações e a busca de duplicados, e o
+    // servidor com a 2FA obrigatória (porta própria, à espera em e2e/fase7-2fa).
+    // Ficam no mesmo grupo de processos e são encerrados juntos.
+    command:
+      'node e2e/prepare.mjs && (pnpm --filter @docline/worker start & ' +
+      `PORT=${STRICT_PORT} APP_URL=${strictBaseURL} BETTER_AUTH_URL=${strictBaseURL} ` +
+      'TWO_FACTOR_ENFORCEMENT=required pnpm start & pnpm start)',
     url: `${baseURL}/api/health`,
     reuseExistingServer: false,
     timeout: 120_000,
@@ -55,6 +67,7 @@ export default defineConfig({
       SUPPRESSION_HASH_PEPPER:
         process.env.SUPPRESSION_HASH_PEPPER ?? 'e2e-pepper-com-pelo-menos-32-caracteres!!',
       LOG_LEVEL: 'warn',
+      TWO_FACTOR_ENFORCEMENT: 'reminder',
       WHATSAPP_PROVIDER: 'fake',
       META_APP_SECRET,
       META_WEBHOOK_VERIFY_TOKEN,

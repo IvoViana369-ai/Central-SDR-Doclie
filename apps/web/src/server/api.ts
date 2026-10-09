@@ -3,6 +3,7 @@ import {
   isDomainError,
   PossibleDuplicateError,
   resolveActor,
+  twoFactorGate,
   UnauthenticatedError,
   ValidationError,
   type Actor,
@@ -37,6 +38,8 @@ interface ApiOptions {
 }
 
 class OriginError extends Error {}
+/** ADMIN/GESTOR sem a verificação em duas etapas obrigatória (docs/SECURITY.md §3). */
+class TwoFactorRequiredError extends Error {}
 
 const TITLES: Record<string, string> = {
   VALIDATION_FAILED: 'Dados inválidos',
@@ -48,6 +51,7 @@ const TITLES: Record<string, string> = {
   BUSINESS_RULE: 'Regra de negócio',
   RATE_LIMITED: 'Limite atingido',
   EXTERNAL_SERVICE: 'Serviço externo indisponível',
+  TWO_FACTOR_REQUIRED: 'Verificação em duas etapas obrigatória',
 };
 
 function problem(
@@ -111,6 +115,14 @@ function toProblem(
   if (error instanceof OriginError) {
     return problem(403, 'FORBIDDEN', 'Origem da requisição não permitida.', meta.requestId);
   }
+  if (error instanceof TwoFactorRequiredError) {
+    return problem(
+      403,
+      'TWO_FACTOR_REQUIRED',
+      'Ative a verificação em duas etapas em Minha conta para continuar.',
+      meta.requestId,
+    );
+  }
   if (isDomainError(error)) {
     const extra =
       error instanceof ValidationError
@@ -151,6 +163,18 @@ export function apiHandler<P extends Record<string, string> = Record<string, nev
         if (!session) throw new UnauthenticatedError();
         const resolved = await resolveActor(deps.db, session.user.id);
         if (!resolved) throw new UnauthenticatedError();
+        // Mesma regra das páginas (getPageContext): sem a 2FA obrigatória, nada da
+        // API v1. Ativar a 2FA e sair usam as rotas do Better Auth (/api/auth).
+        if (
+          resolved.kind === 'user' &&
+          twoFactorGate(
+            resolved.role,
+            Boolean(session.user.twoFactorEnabled),
+            env.TWO_FACTOR_ENFORCEMENT,
+          ) === 'blocked'
+        ) {
+          throw new TwoFactorRequiredError();
+        }
         actor = resolved;
       }
 

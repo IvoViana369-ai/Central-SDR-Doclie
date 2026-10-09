@@ -1,7 +1,6 @@
-import { createHmac } from 'node:crypto';
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test, type Browser } from '@playwright/test';
 import { baseURL } from '../playwright.config';
-import { ADMIN, appAlert, lastInviteLinkFor, setPassword, signIn } from './helpers';
+import { ADMIN, appAlert, freshTotp, lastInviteLinkFor, setPassword, signIn } from './helpers';
 
 /**
  * Limite de login por conta (F2-18; docs/SECURITY.md §12) e verificação em
@@ -16,38 +15,6 @@ const MANAGER = {
   email: 'gil@e2e.example',
   password: 'pipoca-lua-cadeira-trem',
 };
-
-/** TOTP (RFC 6238, SHA-1, 30 s, 6 dígitos), como o aplicativo autenticador faz. */
-function totp(base32Secret: string, at = Date.now()): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = 0;
-  let value = 0;
-  const bytes: number[] = [];
-  for (const char of base32Secret.replace(/[\s=]/g, '').toUpperCase()) {
-    value = (value << 5) | alphabet.indexOf(char);
-    bits += 5;
-    if (bits >= 8) {
-      bytes.push((value >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
-  }
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
-  const hash = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
-  const offset = hash[hash.length - 1]! & 0xf;
-  return String((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
-}
-
-/** Código de um intervalo de 30 s ainda não usado (o mesmo código não vale duas vezes). */
-async function freshTotp(page: Page, secret: string, used: Set<string>): Promise<string> {
-  let code = totp(secret);
-  while (used.has(code)) {
-    await page.waitForTimeout(1_000);
-    code = totp(secret);
-  }
-  used.add(code);
-  return code;
-}
 
 async function browserFrom(browser: Browser, ip: string) {
   const context = await browser.newContext({

@@ -22,3 +22,28 @@ export const USER_STATUS_LABELS: Record<UserStatus, string> = {
  * (docs/SECURITY.md §3: SHOULD no MVP, MUST antes das Fases 7–9).
  */
 export const TWO_FACTOR_ROLES: readonly Role[] = ['ADMIN', 'MANAGER'];
+
+/**
+ * Como a exigência é aplicada (TWO_FACTOR_ENFORCEMENT): `required` bloqueia o
+ * acesso até ativar; `reminder` só lembra (aceito apenas em desenvolvimento e
+ * testes; a configuração recusa em staging e produção).
+ */
+export const TWO_FACTOR_ENFORCEMENTS = ['required', 'reminder'] as const;
+export type TwoFactorEnforcement = (typeof TWO_FACTOR_ENFORCEMENTS)[number];
+
+/**
+ * Situação da verificação em duas etapas de quem está logado:
+ * - `ok`: ativada, ou não exigida para o perfil;
+ * - `pending`: exigida e desativada, só com lembrete;
+ * - `blocked`: exigida e desativada; o acesso fica restrito a "Minha conta".
+ */
+export type TwoFactorGate = 'ok' | 'pending' | 'blocked';
+
+export function twoFactorGate(
+  role: Role,
+  enabled: boolean,
+  enforcement: TwoFactorEnforcement,
+): TwoFactorGate {
+  if (enabled || !TWO_FACTOR_ROLES.includes(role)) return 'ok';
+  return enforcement === 'required' ? 'blocked' : 'pending';
+}

@@ -64,7 +64,7 @@ O `render.yaml` cria o PostgreSQL, o web (com health check em `/api/health` e mi
 
 - [ ] Staging no ar com `pnpm db:seed:dev` (só dados fictícios) e o primeiro ADMIN criado (`pnpm admin:create`).
 - [ ] Produção no ar **sem** o seed de desenvolvimento; dados de referência pelo pré-deploy.
-- [ ] ADMIN e GESTOR com verificação em duas etapas ativada.
+- [ ] ADMIN e GESTOR com verificação em duas etapas ativada. O sistema exige: sem ela, a pessoa entra só em "Minha conta" até ativar (o primeiro ADMIN também, logo depois de definir a senha). Tenha o aplicativo autenticador no celular antes do primeiro acesso.
 - [ ] **Backup e restauração testados:** restaurar o backup mais recente da Render num banco de teste, subir a aplicação apontando para ele, entrar e conferir a contagem de leads e a Lista Não Contatar. Anotar a data e o tempo gasto.
 - [ ] Sentry recebendo um erro de teste; alerta por e-mail configurado.
 - [ ] Worker processando jobs (importação de teste no staging; a tela Importar mostra o progresso).
@@ -94,6 +94,7 @@ No **staging**, com dados fictícios, durante 2 a 3 dias. Cada cenário tem um r
 | 16 | M16 | SDR | Abrir o Dashboard | "Seus números", sem filtro de pessoa e sem Relatórios |
 | 17 | Celular | SDR | Usar a Minha Fila, a ficha e o registro de contato no celular | Tudo legível e com as ações principais |
 | 18 | LGPD | ADMIN | Registrar e atender uma solicitação de titular (anonimizar um lead fictício) | Textos apagados, histórico preservado sem dados pessoais |
+| 19 | Segurança | GESTOR | Primeiro acesso do gestor convidado no cenário 1, sem a verificação em duas etapas | Só "Minha conta" abre; depois de ativar com o aplicativo autenticador, o sistema é liberado |
 
 **Saída do UAT:** lista de ajustes (bloqueantes corrigidos; os demais priorizados), aceite assinado pelo patrocinador e pelo gestor.
 
@@ -189,7 +190,7 @@ Medidos no Dashboard e em Relatórios depois de 4 semanas, com as metas do [MVP 
 
 O piloto roda no **modo assistido** (`WHATSAPP_PROVIDER=assisted`): o SDR envia pelo app do WhatsApp corporativo e confirma no sistema. A API entra quando o piloto estiver estável e a Docline tiver tudo da Meta; até lá, nada muda para a equipe.
 
-**Go/no-go (M5):** conta Meta Business verificada, WABA e número dedicado, modelos de prospecção aprovados, métodos de opt-in definidos com o jurídico (LGPD §20, item 11), bloqueio de acesso sem 2FA para ADMIN/GESTOR implementado. Passo a passo técnico em [INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api).
+**Go/no-go (M5):** conta Meta Business verificada, WABA e número dedicado, modelos de prospecção aprovados, métodos de opt-in definidos com o jurídico (LGPD §20, item 11), todos os ADMIN/GESTOR com 2FA ativa. Passo a passo técnico em [INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api).
 
 **Homologação antes da conta real** (staging, dados fictícios, `WHATSAPP_PROVIDER=fake` com `META_APP_SECRET` e `META_WEBHOOK_VERIFY_TOKEN` de teste):
 

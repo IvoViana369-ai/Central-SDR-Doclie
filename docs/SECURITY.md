@@ -62,7 +62,7 @@
 | Sessão | Cookie `HttpOnly`, `Secure`, `SameSite=Lax`; expiração por inatividade; renovação; revogação ao desativar usuário ou trocar senha |
 | Força bruta | Limite por IP e por conta; atraso progressivo; alerta em picos (por conta desde a Fase 2, ver §12) |
 | Redefinição de senha | Token de uso único, curto (≤ 30 min), invalida sessões anteriores |
-| 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9). *Desde a Fase 2:* disponível para todos em "Minha conta"; ADMIN/GESTOR sem 2FA veem um lembrete em todas as telas (ver nota abaixo) |
+| 2FA | TOTP obrigatório para ADMIN e GESTOR (SHOULD no MVP, MUST antes das Fases 7–9). *Desde a Fase 2:* disponível para todos em "Minha conta". *Desde a 0.7.1:* **obrigatória de fato** — ADMIN/GESTOR sem 2FA só acessam "Minha conta" até ativar (ver notas abaixo) |
 | SSO | Opcional futuro: Google Workspace da Docline |
 
 **Verificação em duas etapas (Fase 2, F2-16).** Plugin `two-factor` do Better Auth, só com aplicativo autenticador (TOTP: SHA-1, 30 s, 6 dígitos). Não há código por e-mail.
@@ -75,6 +75,19 @@
 | Auditoria | `auth.2fa_enabled`, `auth.2fa_disabled`, `auth.2fa_backup_codes` e `auth.2fa_challenge` (senha certa, aguardando código). O `auth.login` só é gravado depois do segundo fator. Código errado vira `auth.login_failed` com motivo `2FA_…`. |
 | Desativar | Exige a senha e fica auditado. |
 | Perda do celular | Usa-se um código de recuperação. Sem eles, o ADMIN redefine em Equipe → "Redefinir 2FA": o segredo é apagado, as sessões são encerradas e a ação fica auditada (`user.2fa_reset`). Antes, confirme a identidade da pessoa por outro canal. |
+
+**Bloqueio sem 2FA (0.7.1, ADR 024).** Com `TWO_FACTOR_ENFORCEMENT=required` (padrão, e o único valor aceito em staging e produção), ADMIN e GESTOR sem a verificação ativada continuam entrando com a senha, mas o acesso fica restrito a "Minha conta":
+
+| Onde | O que acontece |
+|---|---|
+| Páginas | Qualquer página leva a "Minha conta" (conferido em cada página, porque o layout não roda de novo na navegação). Menu e avisos ficam ocultos; uma faixa explica o motivo. |
+| API v1 | `403` com `code: TWO_FACTOR_REQUIRED` em todas as rotas autenticadas. |
+| Liberado | Rotas de autenticação do Better Auth (`/api/auth/*`), que incluem ativar a 2FA e sair. |
+| Quando vale | Assim que o perfil exige: primeiro acesso de um convidado ADMIN/GESTOR, SDR promovido a GESTOR, 2FA redefinida pelo ADMIN ou desativada pela própria pessoa (a troca de celular é desativar e ativar de novo). |
+| SDR e Comercial | Não são afetados (2FA opcional). |
+| Fora de staging/produção | `reminder` mantém só o lembrete; serve ao desenvolvimento e à suíte E2E, que entra como ADMIN dezenas de vezes. Um segundo servidor E2E roda com `required` e testa o bloqueio. |
+
+A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts`) é aplicada na borda web (`getPageContext` e `apiHandler`), onde está a sessão; os casos de uso não mudam. **Último recurso:** se o único ADMIN perder o celular e os códigos de recuperação, o suporte cria outro ADMIN pelo Shell do serviço (`pnpm admin:create`), que redefine a 2FA do primeiro.
 
 ---
 
@@ -361,7 +374,7 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - [x] Exportação restrita, auditada e protegida contra CSV injection (Fase 2: só ADMIN/GESTOR, 5 por dia, até 20.000 leads, contatos só quando pedidos e nunca os da Lista Não Contatar).
 - [x] Guardrails de IA e cotas (Fase 6, §13).
 - [ ] Backups e restauração testados antes do go-live.
-- [x] 2FA para ADMIN/GESTOR (SHOULD): TOTP com códigos de recuperação e lembrete persistente (Fase 2). O bloqueio de acesso sem 2FA fica para antes da Fase 7.
+- [x] 2FA para ADMIN/GESTOR (SHOULD): TOTP com códigos de recuperação e lembrete persistente (Fase 2). O bloqueio de acesso sem 2FA entrou na 0.7.1 (§3).
 
 **Revisão de segurança da Fase 6 (F6-10)**
 - Rotas novas (`/ai/*`, `/approaches`, `/analytics/*`) passam pelo `apiHandler` (sessão, CSRF nas que alteram, Zod) e pelos casos de uso com permissão e escopo; o SDR vê só os próprios números, e gestão e ADMIN filtram por pessoa.
@@ -377,10 +390,10 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - O gate de contactabilidade é conferido ao pedir o envio **e de novo no worker**, imediatamente antes de chamar a Meta (opt-out registrado no meio do caminho barra o envio).
 - Sem reenvio automático (ADR 022): um erro do nosso lado não vira mensagem duplicada no celular do contato.
 - Testes: assinatura (corpo exato, segredo, cabeçalho ausente ou fora do formato), verificação do endpoint (unitários e E2E), webhook repetido, status fora de ordem, status que corrige um envio de resultado incerto, gate por número conferido de novo no envio, 131050 → supressão e opt-in revogado.
-- Pendente: o **bloqueio de acesso de ADMIN/GESTOR sem 2FA**, prometido para antes da Fase 7, **não foi implementado**; a API real continua desligada e o bloqueio entra antes de ligá-la ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
+- O **bloqueio de acesso de ADMIN/GESTOR sem 2FA**, prometido para antes da Fase 7, ficou de fora da 0.7.0 e entrou logo depois, na 0.7.1 (§3).
 
 **Fases 7+ — Integrações**
-- [ ] 2FA obrigatório para ADMIN/GESTOR (bloqueio de acesso sem 2FA; **pré-requisito para ligar a API do WhatsApp**).
+- [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).
 - [x] Webhooks com assinatura, idempotência e limites (Fase 7, §9).
 - [ ] Tokens com menor privilégio e rotação: definido para a Meta (§5); falta criar o *System User* e agendar a rotação na ativação.
 - [ ] Proteção SSRF antes de qualquer busca de URL externa.

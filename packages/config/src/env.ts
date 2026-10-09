@@ -95,6 +95,9 @@ export const serverEnvShape = {
   EMAIL_PROVIDER: withDefault(z.enum(['console', 'file', 'smtp', 'resend']), 'console'),
   CRM_PROVIDER: withDefault(z.enum(['disabled', 'fake', 'webhook', 'docline']), 'disabled'),
   ALLOW_REAL_SENDS: withDefault(z.stringbool(), false),
+  // 2FA de ADMIN/GESTOR (docs/SECURITY.md §3): `required` bloqueia o acesso até
+  // ativar; `reminder` só lembra e é recusado em staging e produção.
+  TWO_FACTOR_ENFORCEMENT: withDefault(z.enum(['required', 'reminder']), 'required'),
 
   // Meta
   META_APP_ID: optional(z.string()),
@@ -206,6 +209,13 @@ export const serverEnvSchema = z.object(serverEnvShape).superRefine((env, ctx) =
         message: 'deve usar https fora do ambiente local',
       });
     }
+  }
+  if (deployed && env.TWO_FACTOR_ENFORCEMENT !== 'required') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['TWO_FACTOR_ENFORCEMENT'],
+      message: 'reminder é apenas para desenvolvimento e testes; use required',
+    });
   }
   if (deployed && env.EMAIL_PROVIDER === 'file') {
     ctx.addIssue({
