@@ -29,6 +29,8 @@ export {
   getUserTerritories,
   listLeadSources,
   listSegments,
+  listStates,
+  searchMunicipalities,
   setUserTerritories,
 } from './application/reference';
 export {

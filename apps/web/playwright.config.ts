@@ -6,7 +6,7 @@ const rootEnv = fileURLToPath(new URL('../../.env', import.meta.url));
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const PORT = 3100;
-const baseURL = `http://localhost:${PORT}`;
+export const baseURL = `http://localhost:${PORT}`;
 const testDatabaseUrl =
   process.env.DATABASE_URL_TEST ?? 'postgresql://docline:docline@localhost:5432/docline_sdr_test';
 export const OUTBOX_FILE = fileURLToPath(new URL('./e2e/.state/outbox.jsonl', import.meta.url));

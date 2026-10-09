@@ -1,6 +1,7 @@
 /**
  * Prepara o banco de testes para a suíte E2E (executado antes do servidor subir):
- * recria o schema, aplica as migrações e cria a administradora inicial pelo CLI.
+ * recria o schema, aplica as migrações, carrega os dados de referência e cria a
+ * administradora inicial pelo CLI.
  * Recusa qualquer banco cujo nome não termine em _test.
  */
 import { execFileSync } from 'node:child_process';
@@ -24,6 +25,8 @@ await client.end();
 execFileSync('pnpm', ['--filter', '@docline/db', 'exec', 'prisma', 'migrate', 'deploy'], {
   stdio: 'pipe',
 });
+// Dados de referência (UFs, municípios, origens, segmentos), como no deploy.
+execFileSync('pnpm', ['--filter', '@docline/db', 'seed'], { stdio: 'pipe' });
 
 rmSync(process.env.EMAIL_OUTBOX_FILE, { force: true });
 const output = execFileSync(

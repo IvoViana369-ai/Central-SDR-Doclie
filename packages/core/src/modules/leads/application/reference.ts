@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BusinessRuleError, NotFoundError, ValidationError } from '../../../shared/errors';
 import { defineUseCase } from '../../../shared/use-case';
+import { toSearchKey } from '../../normalization';
 import { setUserTerritoriesInput, userRefInput } from '../contracts/schemas';
 
 /** Origens ativas, com a base legal sugerida para o formulário de cadastro. */
@@ -124,5 +125,54 @@ export const setUserTerritories = defineUseCase({
       orderBy: [{ stateUf: 'asc' }, { municipalityCode: 'asc' }],
       select: territorySelect,
     });
+  },
+});
+
+/** UFs para filtros e formulários. */
+export const listStates = defineUseCase({
+  name: 'leads.listStates',
+  access: 'lead.read',
+  input: z.object({}),
+  async run(ctx) {
+    return ctx.tx.state.findMany({ orderBy: { uf: 'asc' }, select: { uf: true, name: true } });
+  },
+});
+
+/** Autocompletar de município: começa com o texto primeiro, depois contém. */
+export const searchMunicipalities = defineUseCase({
+  name: 'leads.searchMunicipalities',
+  access: 'lead.read',
+  input: z.object({
+    q: z.string().trim().min(2).max(60),
+    uf: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/)
+      .optional(),
+    limit: z.coerce.number().int().min(1).max(30).default(15),
+  }),
+  async run(ctx, input) {
+    const key = toSearchKey(input.q);
+    const select = { ibgeCode: true, name: true, uf: true, ddd: true } as const;
+    const base = input.uf ? { uf: input.uf } : {};
+    const starts = await ctx.tx.municipality.findMany({
+      where: { ...base, nameSearch: { startsWith: key } },
+      orderBy: [{ isCapital: 'desc' }, { name: 'asc' }],
+      take: input.limit,
+      select,
+    });
+    if (starts.length >= input.limit) return starts;
+    const contains = await ctx.tx.municipality.findMany({
+      where: {
+        ...base,
+        nameSearch: { contains: key },
+        ibgeCode: { notIn: starts.map((m) => m.ibgeCode) },
+      },
+      orderBy: [{ isCapital: 'desc' }, { name: 'asc' }],
+      take: input.limit - starts.length,
+      select,
+    });
+    return [...starts, ...contains];
   },
 });

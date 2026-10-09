@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   isDomainError,
+  PossibleDuplicateError,
   resolveActor,
   UnauthenticatedError,
   ValidationError,
@@ -43,6 +44,7 @@ const TITLES: Record<string, string> = {
   FORBIDDEN: 'Acesso negado',
   NOT_FOUND: 'Não encontrado',
   CONFLICT: 'Conflito',
+  POSSIBLE_DUPLICATE: 'Possível duplicado',
   BUSINESS_RULE: 'Regra de negócio',
 };
 
@@ -103,7 +105,12 @@ function toProblem(error: unknown, meta: RequestMeta, logger: Logger): Response 
     return problem(403, 'FORBIDDEN', 'Origem da requisição não permitida.', meta.requestId);
   }
   if (isDomainError(error)) {
-    const extra = error instanceof ValidationError ? { errors: error.issues } : {};
+    const extra =
+      error instanceof ValidationError
+        ? { errors: error.issues }
+        : error instanceof PossibleDuplicateError
+          ? { duplicates: error.duplicates }
+          : {};
     if (error.status >= 500)
       logger.error({ err: error, requestId: meta.requestId }, 'Erro de domínio');
     return problem(error.status, error.code, error.message, meta.requestId, extra);

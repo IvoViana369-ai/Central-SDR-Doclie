@@ -378,6 +378,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 ### 9.2 Endpoints por módulo
 
+> **Implementado até a Fase 2** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`**. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. A exportação (`POST /exports`) entra na etapa seguinte da Fase 2.
+
 > Legenda de fase: **MVP** = Fases 1–6. Números indicam fases posteriores.
 
 **Identidade, equipe e configurações**
