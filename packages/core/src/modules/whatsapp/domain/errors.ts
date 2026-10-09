@@ -6,9 +6,9 @@
  */
 
 export type WhatsappErrorKind =
-  /** A Meta pede para esperar: nova tentativa automática (a mensagem não saiu). */
+  /** A Meta pede para esperar (a mensagem não saiu): dá para tentar de novo em minutos. */
   | 'RATE_LIMITED'
-  /** Serviço indisponível antes de aceitar: nova tentativa automática. */
+  /** Serviço indisponível antes de aceitar (a mensagem não saiu): dá para tentar de novo. */
   | 'UNAVAILABLE'
   /** Não se sabe se saiu: nunca reenviar sozinho. */
   | 'UNKNOWN_OUTCOME'
@@ -81,19 +81,20 @@ const META_ERRORS: Record<string, ErrorInfo> = {
   '0': { kind: 'AUTH', message: 'Falha de autenticação na Meta.' },
   '130429': {
     kind: 'RATE_LIMITED',
-    message: 'Limite de envio por segundo atingido. Nova tentativa em instantes.',
+    message: 'Limite de envio por segundo atingido. Tente de novo em alguns minutos.',
   },
   '131056': {
     kind: 'RATE_LIMITED',
-    message: 'Muitas mensagens para o mesmo número em pouco tempo. Nova tentativa em instantes.',
+    message:
+      'Muitas mensagens para o mesmo número em pouco tempo. Tente de novo em alguns minutos.',
   },
   '80007': {
     kind: 'RATE_LIMITED',
-    message: 'Limite de uso da conta atingido. Nova tentativa em instantes.',
+    message: 'Limite de uso da conta atingido. Tente de novo em alguns minutos.',
   },
   '4': {
     kind: 'RATE_LIMITED',
-    message: 'Limite de chamadas do app atingido. Nova tentativa em instantes.',
+    message: 'Limite de chamadas do app atingido. Tente de novo em alguns minutos.',
   },
   '131016': { kind: 'UNAVAILABLE', message: 'Serviço do WhatsApp indisponível no momento.' },
   '2': { kind: 'UNAVAILABLE', message: 'Serviço da Meta temporariamente indisponível.' },
@@ -144,7 +145,11 @@ export function describeWhatsappError(code: string): ErrorInfo {
   );
 }
 
-/** A falha pede nova tentativa automática (a mensagem não saiu). */
+/**
+ * Falha passageira e a mensagem não saiu. O envio não repete sozinho (ADR 022):
+ * a pessoa usa "Tentar de novo"; a sincronização e a checagem do número rodam no
+ * próximo ciclo.
+ */
 export function isRetryableWhatsappError(code: string): boolean {
   const { kind } = describeWhatsappError(code);
   return kind === 'RATE_LIMITED' || kind === 'UNAVAILABLE';

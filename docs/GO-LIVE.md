@@ -1,9 +1,9 @@
 # Roteiro de UAT, treinamento e go-live do piloto
 
-> **Status:** pronto para uso (F6-11) · **Última revisão:** 2026-10-09
+> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) · **Última revisão:** 2026-10-09
 > Relacionados: [MVP §11](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) · [ROADMAP](./ROADMAP.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md) · [AI-SDR](./AI-SDR.md)
 
-O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
+O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. A Fase 7 (WhatsApp pela API) também está pronta, mas **o piloto começa no modo assistido**: a API é ligada depois, no marco M5 ([§11](#11-whatsapp-pela-api-marco-m5)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
 
 **Regra de ouro:** dados reais só entram em **produção**, depois da validação jurídica. Staging e UAT usam apenas dados fictícios (`pnpm db:seed:dev`).
 
@@ -19,6 +19,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. Este
 8. [Dia do go-live e primeira semana](#8-dia-do-go-live-e-primeira-semana)
 9. [Plano de volta à planilha](#9-plano-de-volta-à-planilha)
 10. [Critérios de sucesso do piloto](#10-critérios-de-sucesso-do-piloto)
+11. [WhatsApp pela API (marco M5)](#11-whatsapp-pela-api-marco-m5)
 
 ---
 
@@ -183,3 +184,23 @@ Medidos no Dashboard e em Relatórios depois de 4 semanas, com as metas do [MVP 
 - Tempo até o primeiro contato e taxa de resposta acompanhados por semana.
 - Se a IA estiver ligada: parcela de rascunhos aprovados sem edição e motivos de descarte revisados com a equipe.
 - Decisão do patrocinador: ampliar para toda a equipe, ajustar ou encerrar.
+
+## 11. WhatsApp pela API (marco M5)
+
+O piloto roda no **modo assistido** (`WHATSAPP_PROVIDER=assisted`): o SDR envia pelo app do WhatsApp corporativo e confirma no sistema. A API entra quando o piloto estiver estável e a Docline tiver tudo da Meta; até lá, nada muda para a equipe.
+
+**Go/no-go (M5):** conta Meta Business verificada, WABA e número dedicado, modelos de prospecção aprovados, métodos de opt-in definidos com o jurídico (LGPD §20, item 11), bloqueio de acesso sem 2FA para ADMIN/GESTOR implementado. Passo a passo técnico em [INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api).
+
+**Homologação antes da conta real** (staging, dados fictícios, `WHATSAPP_PROVIDER=fake` com `META_APP_SECRET` e `META_WEBHOOK_VERIFY_TOKEN` de teste):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| W1 | SDR | Simular uma mensagem do contato: `pnpm whatsapp:simulate resposta --de "<celular fictício do lead>" --texto "Olá, quero saber mais"` | A resposta aparece na ficha e em Conversas → "Aguardando resposta"; janela aberta por 24 h; cadência encerrada; sugestão da IA na mensagem |
+| W2 | SDR | Na ficha, responder com texto livre | Mensagem `Na fila` → `Enviada`; com `pnpm whatsapp:simulate status --status delivered` e depois `read`, vira `Entregue` e `Lida` |
+| W3 | SDR | Registrar o opt-in apontando a mensagem recebida | Número com opt-in; modelos liberados para esse número |
+| W4 | ADMIN | Configurações → WhatsApp: sincronizar modelos, vincular um à abordagem "Primeiro contato", checar o número | Modelos listados com situação e categoria; qualidade e limite do número na tela |
+| W5 | SDR | Enviar um modelo para outro lead **sem** opt-in e sem conversa | Bloqueado com o motivo (opt-in exigido) |
+| W6 | SDR | Simular a resposta "SAIR" | Lead na Lista Não Contatar, opt-in revogado, envio bloqueado |
+| W7 | GESTOR | Simular uma mensagem de um número que não está na base | Aparece em Conversas → "Números sem lead"; nenhum lead criado; vincular ou descartar |
+
+**Primeira semana com a API:** poucos leads com opt-in; acompanhar todo dia a qualidade do número e o custo do mês (Configurações → WhatsApp), as falhas na ficha e os avisos aos ADMINs. Queda de qualidade: pausar envios de modelo e revisar textos e público. Para voltar ao assistido: `WHATSAPP_PROVIDER=assisted` no web e no worker (nada é reenviado sozinho quando a API volta).

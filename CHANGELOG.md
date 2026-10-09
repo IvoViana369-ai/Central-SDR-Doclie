@@ -4,6 +4,47 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.7.0] — Fase 7: Integração WhatsApp — 2026-10-09
+
+Envio e recebimento pela WhatsApp Cloud API, oficial da Meta, só para números com opt-in ou com a conversa aberta pelo contato. **A API fica desligada por padrão** (`WHATSAPP_PROVIDER=assisted`); a ativação segue [INTEGRATIONS §16.1](docs/INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api) e o marco M5 do [GO-LIVE](docs/GO-LIVE.md#11-whatsapp-pela-api-marco-m5). F7-01 a F7-08 entregues; F7-09 adiada. Aceite coberto pela jornada E2E `fase7.spec.ts` e pelas suítes do WhatsApp. Totais: 384 testes unitários, 188 de integração e 40 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `whatsapp_templates`, `conversations` (uma por lead e número do WhatsApp, com a janela de atendimento), `message_status_events`, `webhook_events` (inbox), `inbound_unmatched` (números sem lead) e `integration_connections`; `messages` ganha conversa, modelo e variáveis, tentativa, entrega, leitura, erro e custo estimado; `contact_permissions` ganha a mensagem usada como evidência e um opt-in por número.
+- **Adaptador da Cloud API (F7-01):** Graph API oficial com `fetch`, versão fixada em `META_GRAPH_API_VERSION`, token de *System User*; envio de modelo e de texto, leitura dos modelos e da saúde do número; nosso id em `biz_opaque_callback_data`; erros traduzidos para o português com a tabela de códigos da Meta; testado contra um servidor local que imita a Graph API.
+- **Envio idempotente (F7-01):** mensagem e job na mesma transação, tentativa marcada antes da chamada, gate conferido de novo no worker, desfecho gravado com atualização condicional; pedido repetido da tela não duplica. Falha conhecida vira "Tentar de novo"; resultado incerto só é repetido depois de 10 minutos sem status e com confirmação.
+- **Webhooks (F7-02):** `/api/webhooks/whatsapp` com verificação do endpoint, assinatura `X-Hub-Signature-256` sobre o corpo exato, limite de 1 MB e inbox idempotente; job `whatsapp.webhook` aplica status (só avançam), mensagens recebidas, situação e qualidade dos modelos e mudanças da conta.
+- **Conversas e janela (F7-03):** seção WhatsApp na ficha (números com opt-in e janela, conversa com status, texto livre na janela, modelo com variáveis e prévia, rascunho aprovado da IA); tela **Conversas** com "Aguardando resposta", "Janela aberta", "Todas" e, para ADMIN/GESTOR, "Números sem lead".
+- **Modelos (F7-04):** sincronização diária e sob demanda, vínculo com abordagens, ativar e desativar; modelo removido na Meta fica marcado, sem apagar o histórico.
+- **Opt-in por número (F7-05):** com a mensagem do contato como evidência (qualquer pessoa que edita o lead) ou com evidência descrita (ADMIN/GESTOR); revogação; o gate do modo API só libera números com opt-in ou com a janela aberta.
+- **Números com e sem o 9º dígito (F7-06):** a resposta encontra o lead nas duas formas; número desconhecido ou em mais de um lead vai para decisão humana, sem criar lead.
+- **Sugestão automática de classificação (F7-07):** cada resposta recebida ganha a sugestão da IA, que a pessoa usa ou troca; desligável.
+- **Saúde do número e custo (F7-08):** checagem de hora em hora (qualidade, limite e situação), aviso aos ADMINs quando piora, custo estimado por mensagem com a tabela editável e visão do mês em **Configurações → WhatsApp**.
+- **Simulador para homologação:** `pnpm whatsapp:simulate` (respostas e status assinados como a Meta), só com `WHATSAPP_PROVIDER=fake`.
+- **Purga:** job `webhooks.purge` apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias.
+- **API v1:** `/leads/{id}/whatsapp` (+ `messages`, `opt-in`, `opt-in/revoke`), `/messages/{id}/retry`, `/conversations` e `/whatsapp/templates` (+ `sync`, `{id}`), `unmatched` (+ `link`, `retry`, `dismiss`), `overview`, `health/check` e `settings`.
+
+### Alterado
+
+- **Gate de contactabilidade:** no modo API, devolve os números utilizáveis (opt-in ou janela aberta); o opt-in de WhatsApp no nível do lead deixou de liberar a API, e o diálogo de base legal não oferece mais essa opção.
+- **Opt-out** (no lead, no canal ou no número) revoga os opt-ins de WhatsApp afetados; o erro 131050 da Meta põe o número na Lista Não Contatar do WhatsApp e revoga o opt-in.
+- **Anonimização** apaga também conversas, variáveis dos modelos, payloads de webhook e mensagens de números sem lead do titular; **mesclagem** leva conversas e opt-in do mesmo número (revogado prevalece).
+- **Respostas recebidas pela API** têm o mesmo tratamento das registradas à mão (opt-out por palavra, cadência encerrada, tarefa) e confirmam o WhatsApp do número.
+
+### Decidido
+
+- **Opt-in por número** (ADR 021), **sem reenvio automático** (ADR 022) e **Graph API direta com versão fixada** (ADR 023).
+- **Envio real desligado fora de produção** sem `ALLOW_REAL_SENDS=true`.
+- **F7-09 adiada:** passos de cadência com envio automático só depois de medir qualidade e custo com envios humanos; candidata à Fase 10.
+
+### Pendente
+
+- **Ativação (M5):** verificação da empresa na Meta, WABA e número, modelos aprovados, parecer jurídico sobre opt-in e a Meta como operadora.
+- **Bloqueio de acesso de ADMIN/GESTOR sem 2FA:** prometido para antes desta fase, não implementado; pré-requisito para ligar a API.
+- **Revalidar a tabela de códigos de erro** na documentação da Meta antes de ligar (a página oficial não pôde ser lida nesta fase).
+- **Confirmação de descadastro ao titular:** depende do jurídico e de um modelo próprio.
+
+
 ## [0.6.0] — Fase 6: IA de prospecção e fechamento do MVP — 2026-10-09
 
 Aceite da fase (MVP M12 e M16) coberto pela jornada E2E `fase6.spec.ts` e pelas suítes da IA, da avaliação offline e dos indicadores. Totais: 356 testes unitários, 170 de integração e 36 jornadas E2E. Com esta fase, as histórias MUST do MVP estão concluídas no código; o go-live do piloto segue o roteiro de [GO-LIVE](docs/GO-LIVE.md).

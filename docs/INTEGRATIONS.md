@@ -1,6 +1,6 @@
 # Integrações — Docline SDR
 
-> **Status:** Fase 0 (desenho). **Nenhuma integração externa real é implementada antes da fase indicada.**
+> **Status:** desenho da Fase 0, com as notas **Implementação** das fases já entregues: IA (Fase 6, [§10](#10-ia)) e WhatsApp Cloud API (Fase 7, [§6.2](#6-whatsapp)). **Nenhuma integração externa real é implementada antes da fase indicada**, e as reais ficam desligadas por padrão.
 > Políticas de plataformas (Meta, Google) mudam com frequência: cada seção marcada com ⚠️ deve ser **revalidada na documentação oficial** antes da fase correspondente.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [AI-SDR](./AI-SDR.md)
 
@@ -40,34 +40,24 @@
 
 ## 2. Estrutura
 
+Situação na Fase 7 (o que ainda não existe aparece como planejado):
+
 ```
 packages/integrations/src/
 ├── whatsapp/
-│   ├── assisted/        # links wa.me (MVP)
-│   ├── meta-cloud/      # WhatsApp Business Platform — Cloud API (Fase 7)
-│   └── fake/
-├── instagram/
-│   ├── assisted/        # link do perfil + copiar texto (MVP)
-│   ├── meta-graph/      # Instagram API (Fase 8)
-│   └── fake/
-├── google/
-│   ├── places/          # Places API (New) (Fase 9)
-│   └── fake/
-├── enrichment/
-│   ├── receita-open-data/  # dados abertos CNPJ (Fase 9)
-│   ├── brasilapi/          # consulta pontual CNPJ/CEP (a validar)
-│   ├── ibge/               # localidades (seed)
-│   └── fake/
-├── ai/
-│   ├── anthropic/
-│   └── fake/
-├── crm/
-│   ├── docline/         # (Fase 12, depende de API)
-│   ├── webhook/         # webhooks de saída assinados
-│   └── fake/
-├── email/{smtp,resend,console}/
+│   ├── meta-cloud.ts    # WhatsApp Cloud API pela Graph API oficial (Fase 7)
+│   └── signature.ts     # X-Hub-Signature-256 e verificação do endpoint do webhook
+├── ai/anthropic.ts      # SDK oficial da Anthropic (Fase 6)
+├── email/{console,file,smtp,resend}.ts
+├── queue/pg-boss.ts
+├── spreadsheet/{csv,xlsx}.ts           # leitura segura de planilhas (Fase 3)
+├── observability/{logger,error-reporter}.ts
 └── registry.ts          # resolve adaptadores conforme o ambiente
+
+planejado: instagram/ (Fase 8) · google/places (Fase 9) · enrichment/ (Fase 9) · crm/ (Fase 12)
 ```
+
+Os **provedores falsos** (WhatsApp, IA) ficam no core (`packages/core/src/modules/*/infra/fake-*.ts`), porque testes, CI e E2E usam o mesmo código. O **modo assistido** do WhatsApp não passa por adaptador: é o link `wa.me` montado no módulo de mensagens.
 
 ---
 
@@ -117,13 +107,15 @@ interface JobQueue {
 
 Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de SDK de terceiros atravessa a porta.
 
+> **Implementado na Fase 7:** em vez da `MessagingProvider` genérica, a porta `WhatsappProvider` (`packages/core/src/ports/whatsapp.ts`) com `send(outbound)` (texto ou modelo, sempre com a nossa referência), `listTemplates()` e `getPhoneHealth()`. Falhas viram `WhatsappProviderError` com o desfecho (`NOT_SENT` ou `UNKNOWN`), o código e se é passageira. A leitura do webhook (formato da Meta) fica no core, não no adaptador (ADR 023). O Instagram (Fase 8) terá a sua porta, aproveitando o que for comum.
+
 ---
 
 ## 4. Registro de provedores e ambientes
 
 | Variável | Valores | Padrão dev | Padrão prod (inicial) |
 |---|---|---|---|
-| `WHATSAPP_PROVIDER` | `assisted`, `fake`, `meta_cloud` | `assisted` | `assisted` → `meta_cloud` (Fase 7) |
+| `WHATSAPP_PROVIDER` | `assisted`, `fake`, `meta_cloud` | `assisted` (`fake` para homologar a API sem a Meta) | `assisted` → `meta_cloud` depois do [§16.1](#161-ativar-o-whatsapp-pela-api-cloud-api) |
 | `INSTAGRAM_PROVIDER` | `assisted`, `fake`, `meta_graph` | `assisted` | `assisted` → `meta_graph` (Fase 8) |
 | `PLACES_PROVIDER` | `disabled`, `fake`, `google_places` | `fake` | `disabled` até validação jurídica |
 | `COMPANY_REGISTRY_PROVIDER` | `disabled`, `fake`, `receita_open_data`, `brasilapi` | `fake` | `disabled` → Fase 9 |
@@ -132,6 +124,8 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 | `CRM_PROVIDER` | `disabled`, `fake`, `webhook`, `docline` | `disabled` | Fase 12 |
 
 O `registry.ts` valida as variáveis na inicialização (schema Zod) e **falha ao subir** se um provedor real estiver configurado sem as credenciais necessárias. Em ambiente não produtivo, adaptadores de envio real recusam operar sem `ALLOW_REAL_SENDS=true` explícito.
+
+Com `WHATSAPP_PROVIDER=meta_cloud` são obrigatórias: `META_APP_SECRET`, `META_ACCESS_TOKEN` (token de *System User*), `META_GRAPH_API_VERSION` (ex.: `v26.0`), `META_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_BUSINESS_ACCOUNT_ID` e `WHATSAPP_PHONE_NUMBER_ID`. Com `fake`, só `META_APP_SECRET` e `META_WEBHOOK_VERIFY_TOKEN` de teste (para o webhook e o simulador). Todas só em variáveis de ambiente; nunca no código nem no Git.
 
 ---
 
@@ -184,6 +178,21 @@ O `registry.ts` valida as variáveis na inicialização (schema Zod) e **falha a
 **Fluxo de envio API:** mensagem aprovada → gate → `message.send` (job, idempotente) → `messages.status = SENT` com `provider_message_id` → webhooks atualizam para `DELIVERED`/`READ`/`FAILED`. Resposta do lead → `message.received` → **cadência parada** → classificação.
 
 **Alternativa — BSPs** (Twilio, 360dialog, Gupshup, Zenvia, Blip…): a porta permite trocar a Cloud API direta por um BSP, se a Docline já tiver contrato ou precisar de suporte local. A Cloud API direta costuma ser a opção de menor custo.
+
+> **Implementação (Fase 7).** Desligada por padrão (`WHATSAPP_PROVIDER=assisted`); ligar segue o [§16.1](#161-ativar-o-whatsapp-pela-api-cloud-api).
+>
+> - **Adaptador** `packages/integrations/src/whatsapp/meta-cloud.ts`: `fetch` direto na Graph API (a Meta não mantém SDK oficial para Node), versão fixada em `META_GRAPH_API_VERSION`, tempo limite de 15 s, sem nova tentativa no adaptador. Cada envio leva o id da nossa mensagem em `biz_opaque_callback_data`, que volta nos webhooks de status. Fora de produção recusa enviar sem `ALLOW_REAL_SENDS=true`. Testado contra um servidor local que imita a Graph API (sem rede e sem custo).
+> - **Provedor simulado** (`WHATSAPP_PROVIDER=fake`): aceita os envios sem sair nada, com marcas no texto para simular erros (`[fake:janela-fechada]`, `[fake:opt-out]`, `[fake:limite]`, `[fake:incerto]`) e 5 modelos fictícios. Respostas e status chegam pelo webhook real, assinados pelo simulador: `pnpm whatsapp:simulate resposta --de "(88) 99999-0000" --texto "Tenho interesse"` e `pnpm whatsapp:simulate status --status delivered`. Recusa rodar com `meta_cloud`.
+> - **Envio** (job `whatsapp.send`): gate do modo API → mensagem `QUEUED` e job na mesma transação → o job marca a tentativa e confere o gate de novo → chama a Meta fora da transação → grava `SENT` (com `provider_message_id`) ou `FAILED` com uma atualização condicional, para que o job e o webhook não apliquem o mesmo efeito duas vezes. **Nunca há reenvio automático** (ADR 022): a Cloud API não tem chave de idempotência, e mandar a mesma mensagem duas vezes é pior que não mandar. Falha conhecida vira "Tentar de novo" para a pessoa; resultado incerto (tempo esgotado, conexão caída, 5xx sem código) só é repetido depois de 10 minutos sem status e com confirmação do risco de duplicidade. Pedidos repetidos da tela (duplo clique) são absorvidos pelo `clientRequestId`.
+> - **Regras aplicadas:** texto livre só com a janela de 24 h aberta (contada da última mensagem recebida daquele número); fora dela, só modelo aprovado e ativo, e só para número com opt-in registrado. O gate do modo API só libera números com opt-in ou com a janela aberta (ADR 021).
+> - **Webhook** `/api/webhooks/whatsapp`: `GET` responde à verificação (`hub.mode=subscribe`, `hub.verify_token`, `hub.challenge`); `POST` confere a assinatura sobre os bytes exatos recebidos (HMAC-SHA256 com `META_APP_SECRET`, comparação em tempo constante), recusa corpo acima de 1 MB (`413`), assinatura inválida (`401`, com registro de segurança sem o conteúdo) e formato inválido (`400`); grava na inbox e responde `200`. Sem `meta_cloud`/`fake` configurado, a rota responde `404`.
+> - **Status:** `sent` → `delivered` → `read` só avançam (status atrasado não volta a mensagem); `failed` grava o código e a explicação em português; o objeto `pricing` (categoria, `billable`) alimenta o custo estimado da mensagem.
+> - **Erros com efeito:** `131050` (o contato pediu ao WhatsApp para não receber marketing da empresa) põe o número na supressão do WhatsApp e revoga o opt-in daquele número; `131047` (janela fechada) pede modelo; `131049` (limite de marketing por pessoa) não é repetido; token inválido ou conta restrita marcam a conexão como degradada e avisam os administradores. A tabela de códigos está em `packages/core/src/modules/whatsapp/domain/errors.ts`; código desconhecido aparece com o número para o suporte.
+> - **Mensagens recebidas:** casadas pelo número com e sem o 9º dígito (F7-06); resposta registrada, cadência parada e palavras de opt-out aplicadas como nas respostas registradas à mão (Fase 5); a IA **sugere** uma classificação (F7-07), nunca aplica. Número sem lead (ou em mais de um lead) vai para "Números sem lead" em Conversas: **nenhum lead é criado sozinho**; ADMIN/GESTOR vinculam, procuram de novo depois de cadastrar o lead ou descartam.
+> - **Modelos** (F7-04): sincronizados uma vez por dia (job `whatsapp.sync-templates`), pelo botão em Configurações → WhatsApp e pelos webhooks de situação e qualidade do modelo; só modelos com corpo de texto e variáveis no corpo são suportados; cada modelo pode ser vinculado a uma abordagem e desativado para uso. Modelo que some da conta fica marcado como removido, sem apagar o histórico.
+> - **Qualidade, limite e custo** (F7-08): job `whatsapp.health-check` de hora em hora lê qualidade, limite de mensagens e situação do número; piora avisa os administradores uma vez. O custo é **estimado** por mensagem com a tabela editável em Configurações → WhatsApp (valores iniciais em USD tirados de fontes secundárias; conferir na tabela oficial da Meta, que desde 1/7/2026 fatura em BRL para clientes elegíveis no Brasil).
+>
+> **Conferido em 2026-10-09** (pesquisa na documentação e no changelog da Meta): Graph API v26.0 (29/07/2026); cobrança por mensagem desde 01/07/2025; `pricing` nos status com `pricing_model`, `type`, `category` e `billable`; `biz_opaque_callback_data`; modelos com `parameter_format` `NAMED`/`POSITIONAL`; códigos 131047, 131049, 131050 e 131064 (adicionado em abr/2026). A página oficial de códigos de erro não pôde ser lida diretamente: **revalidar a tabela antes de ligar a API** e a cada troca de versão.
 
 ### 6.3 Como obter opt-in de forma legítima
 
@@ -316,6 +325,8 @@ sequenceDiagram
 
 Regras: responder rápido (o processamento é assíncrono); idempotência por `(provider, external_event_id)`; assinatura inválida → `401` e registro de segurança; payloads brutos purgados após 90 dias.
 
+> **Implementação (Fase 7, WhatsApp).** A Meta não manda um id por entrega, então `external_event_id` é o **SHA-256 do corpo**: a mesma entrega repetida não é gravada duas vezes. O job `whatsapp.webhook` processa os itens um a um, cada um idempotente (status por `(mensagem, status)`, recebidas por `provider_message_id`); falha de um item não perde os outros e o job tenta de novo até 3 vezes. Cada evento guarda HMACs dos números citados (`contact_hashes`), para que a anonimização de um titular apague também os payloads brutos dele. O job `webhooks.purge` apaga payloads e mensagens de números sem lead com mais de 90 dias.
+
 ---
 
 ## 14. Resiliência e tratamento de erros
@@ -354,3 +365,26 @@ Regras: responder rápido (o processamento é assíncrono); idempotência por `(
 - [ ] Logs sem dados pessoais nem tokens.
 - [ ] Runbook: como pausar a integração rapidamente.
 - [ ] Documentação atualizada (este arquivo e o `.env.example`).
+
+### 16.1 Ativar o WhatsApp pela API (Cloud API)
+
+Ninguém liga sozinho: depende da Docline e do jurídico. Até lá, o modo assistido continua valendo.
+
+**Pré-requisitos (Docline):**
+
+- [ ] Conta Meta Business **verificada**; WhatsApp Business Account (WABA) criada; número **dedicado** registrado na Cloud API e nome de exibição aprovado.
+- [ ] App Meta com o produto WhatsApp; *System User* com permissões `whatsapp_business_messaging` e `whatsapp_business_management` e token **permanente** (não token de pessoa), com rotação planejada.
+- [ ] Modelos de prospecção aprovados (categoria Marketing), com o texto revisado pelo jurídico e pelo marketing.
+- [ ] Parecer jurídico sobre opt-in, base legal e a Meta como operadora (transferência internacional) — [LGPD](./LGPD.md).
+- [ ] Forma de pagamento configurada na WABA e orçamento mensal aprovado.
+- [ ] **2FA obrigatório para ADMIN/GESTOR** implementado e ativo (pendência de segurança, [SECURITY §18](./SECURITY.md#18-checklist-por-fase)).
+
+**Configuração (staging primeiro):**
+
+1. Definir no ambiente (Render → *Environment*, nunca no Git): `WHATSAPP_PROVIDER=meta_cloud`, `META_APP_SECRET`, `META_ACCESS_TOKEN`, `META_GRAPH_API_VERSION` (a versão vigente, ex.: `v26.0`), `META_WEBHOOK_VERIFY_TOKEN` (valor aleatório longo), `WHATSAPP_BUSINESS_ACCOUNT_ID` e `WHATSAPP_PHONE_NUMBER_ID` — no **web** e no **worker**. Em staging, `ALLOW_REAL_SENDS=true` só durante o teste, com números da equipe.
+2. No app Meta → WhatsApp → Configuration: URL de callback `https://<domínio>/api/webhooks/whatsapp`, o mesmo verify token; assinar o campo **`messages`** e, recomendados, `message_template_status_update`, `message_template_quality_update`, `phone_number_quality_update` e `account_update` (atualizam modelos e a saúde do número sem esperar o próximo ciclo).
+3. Configurações → WhatsApp: **Sincronizar modelos**, vincular cada modelo a uma abordagem, revisar a tabela de custo e **Checar o número** (qualidade e limite aparecem na tela).
+4. Teste de ponta a ponta com um número da equipe: escrever primeiro para a empresa (abre a janela), responder com texto livre, registrar opt-in com evidência, enviar um modelo, conferir `Enviada → Entregue → Lida` e a sugestão de classificação.
+5. Produção: repetir 1 a 3, começar com poucos leads com opt-in, acompanhar qualidade e custo por uma semana antes de ampliar.
+
+**Para pausar rápido:** voltar `WHATSAPP_PROVIDER=assisted` no web e no worker. Mensagens na fila viram falha conhecida ("envios reais desligados"); nada é reenviado sozinho quando a API volta.

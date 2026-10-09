@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7, em 2026-10-09 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -117,6 +117,11 @@
 | Consultar a Lista Não Contatar (valores mascarados) | ✅ | ✅ | ❌ | ❌ |
 | **Revogar** item da Lista Não Contatar | ✅ | ❌ | ❌ | ❌ |
 | Alterar base legal/opt-in | ✅ | ✅ | ⚙️ (com evidência) | ❌ |
+| WhatsApp pela API: enviar, tentar de novo, registrar opt-in com a mensagem do contato como evidência, revogar opt-in (no escopo) | ✅ | ✅ | ✅ | ✅ |
+| WhatsApp pela API: registrar opt-in por outro meio (formulário, verbal, contrato…) | ✅ | ✅ | ❌ | ❌ |
+| Decidir mensagens de números sem lead (vincular, procurar de novo, descartar) | ✅ | ✅ | ❌ | ❌ |
+| Modelos do WhatsApp (vincular a abordagem, ativar) e tabela de custo | ✅ | ❌ | ❌ | ❌ |
+| Sincronizar modelos, checar o número e ver o painel do WhatsApp | ✅ | ❌ | ❌ | ❌ |
 | Exportar leads | ✅ | ✅ | ❌ | ❌ |
 | Mover leads entre etapas abertas, para perda (com motivo) e reativar "Sem resposta" | ✅ | ✅ | ✅ | ✅ |
 | Mover para etapas das automações, converter ou reabrir lead ganho/perdido (auditado como correção) | ✅ | ✅ | ❌ | ❌ |
@@ -148,6 +153,7 @@
 - Variáveis validadas na inicialização (schema Zod); a aplicação não sobe com configuração inválida.
 - Credenciais de integração eventualmente salvas no banco (ex.: tokens OAuth por usuário, Fase 12) ficam **criptografadas** com AES-256-GCM (`ENCRYPTION_KEY`).
 - Rotação: tokens Meta/Google/IA a cada 90 dias ou após qualquer suspeita; segredos separados por ambiente.
+- **Meta (Fase 7):** token de *System User* com só `whatsapp_business_messaging` e `whatsapp_business_management`, nunca token pessoal. `META_APP_SECRET` assina os webhooks: vazou, troca no app Meta e no ambiente ao mesmo tempo. O adaptador não coloca token, número nem texto em erros ou logs; o token vai só no cabeçalho `Authorization`. Fora de produção, envio real só com `ALLOW_REAL_SENDS=true`, e o simulador de webhooks recusa rodar com `meta_cloud`.
 - `SUPPRESSION_HASH_PEPPER` **não pode ser rotacionado** sem plano de migração (os hashes da Lista Não Contatar dependem dele). Guardar cópia segura fora do provedor de hospedagem.
 - Pino com `redact` para `authorization`, `cookie`, `*.token`, `*.password`, `*.secret`, telefones e e-mails.
 
@@ -201,6 +207,14 @@
 - Limite de tamanho do corpo; resposta rápida; processamento assíncrono.
 - Idempotência por id do evento (proteção contra replay).
 - Assinatura inválida → `401`, registro de segurança, sem processamento.
+
+> **Implementado na Fase 7** (`/api/webhooks/whatsapp`, `packages/integrations/src/whatsapp/signature.ts`):
+> - A rota é pública (sem sessão e fora da checagem de `Origin` da API v1): a autenticidade vem só da assinatura, conferida sobre os **bytes exatos** recebidos, com `timingSafeEqual` e formato `sha256=<64 hex>` estrito. Só depois disso o corpo é lido como JSON.
+> - Corpo acima de 1 MB → `413` (pelo `Content-Length` e de novo pelo tamanho lido). Formato inválido → `400`. O registro de assinatura inválida leva IP e `requestId`, nunca o conteúdo.
+> - Verificação do endpoint só com `hub.mode=subscribe`, token igual a `META_WEBHOOK_VERIFY_TOKEN` (comparação em tempo constante) e `hub.challenge` curto, devolvido como texto puro.
+> - Sem o provedor configurado (`assisted`), a rota responde `404`: não há superfície exposta no modo assistido.
+> - Replay: a inbox é idempotente pelo SHA-256 do corpo, e cada efeito (status, mensagem recebida) também; uma entrega repetida não muda nada.
+> - Mensagens recebidas são **dados de terceiros**: aparecem como texto (React escapa), entram na IA só delimitadas (§13) e nunca criam lead sozinhas.
 
 ---
 
@@ -357,10 +371,18 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - Script de desempenho só aceita bancos `*_perf` (nome com padrão fechado, porque entra em `DROP DATABASE`).
 - `pnpm audit --prod` sem vulnerabilidades altas; o SDK da Anthropic entra só no pacote de integrações.
 
+**Revisão de segurança da Fase 7 (WhatsApp)**
+- Rotas novas da API v1 (`/leads/:id/whatsapp*`, `/messages/:id/retry`, `/conversations`, `/whatsapp/*`) passam pelo `apiHandler` (sessão, CSRF nas que alteram, Zod) e pelos casos de uso com permissão e escopo (matriz §4.2). Lead fora do escopo continua 404.
+- O webhook é a única rota pública nova (§9); o caso de uso que grava a inbox é `public` e confia na rota para a assinatura, então não há outro caminho até ele.
+- O gate de contactabilidade é conferido ao pedir o envio **e de novo no worker**, imediatamente antes de chamar a Meta (opt-out registrado no meio do caminho barra o envio).
+- Sem reenvio automático (ADR 022): um erro do nosso lado não vira mensagem duplicada no celular do contato.
+- Testes: assinatura (corpo exato, segredo, cabeçalho ausente ou fora do formato), verificação do endpoint (unitários e E2E), webhook repetido, status fora de ordem, status que corrige um envio de resultado incerto, gate por número conferido de novo no envio, 131050 → supressão e opt-in revogado.
+- Pendente: o **bloqueio de acesso de ADMIN/GESTOR sem 2FA**, prometido para antes da Fase 7, **não foi implementado**; a API real continua desligada e o bloqueio entra antes de ligá-la ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
+
 **Fases 7+ — Integrações**
-- [ ] 2FA obrigatório para ADMIN/GESTOR.
-- [ ] Webhooks com assinatura, idempotência e limites.
-- [ ] Tokens com menor privilégio e rotação.
+- [ ] 2FA obrigatório para ADMIN/GESTOR (bloqueio de acesso sem 2FA; **pré-requisito para ligar a API do WhatsApp**).
+- [x] Webhooks com assinatura, idempotência e limites (Fase 7, §9).
+- [ ] Tokens com menor privilégio e rotação: definido para a Meta (§5); falta criar o *System User* e agendar a rotação na ativação.
 - [ ] Proteção SSRF antes de qualquer busca de URL externa.
 - [ ] Chaves de API com escopos e revogação (Fase 12).
 

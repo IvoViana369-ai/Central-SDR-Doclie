@@ -1,6 +1,6 @@
 # LGPD e Governança de Dados — Docline SDR
 
-> **Status:** Fase 0 · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
+> **Status:** Fase 0, com as notas de implementação das Fases 2 a 7 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
 > Relacionados: [SECURITY](./SECURITY.md) · [SDR-FLOW §9](./SDR-FLOW.md#9-contactabilidade-estados-independentes) · [INTEGRATIONS](./INTEGRATIONS.md) · [DATABASE §4.9](./DATABASE.md#49-conformidade)
 
 ## Sumário
@@ -125,6 +125,15 @@ Consequências:
 - **Modo assistido:** contato 1 a 1 por um humano, com base legal registrada, limites de frequência e opt-out imediato. Continua sujeito aos termos do WhatsApp; o volume e a qualidade precisam ser controlados para evitar denúncias e bloqueios.
 - **Primeiro contato frio** de leads descobertos (Google, CNPJ) deve priorizar canais e formatos que respeitem essas regras; a decisão final de política comercial é da Docline com o jurídico.
 
+> **Implementação (Fase 7).** A API nasce **desligada** (`WHATSAPP_PROVIDER=assisted`); ligar depende dos itens da [§20](#20-itens-para-validação-jurídica) e do checklist de ativação ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
+>
+> - **Opt-in por número, não por lead** (ADR 021): a Meta exige a permissão do próprio número, e um lead pode ter vários. Fica em `contact_permissions` com o ponto de contato, o método e a evidência. O opt-in de WhatsApp gravado no lead (Fase 2) **não libera mais a API**.
+> - **Evidência obrigatória.** "O contato escreveu concordando": a pessoa aponta a mensagem recebida daquele número (o sistema confere), e qualquer pessoa que edita o lead pode registrar. Outros métodos (formulário, evento, relação existente, verbal gravado, anúncio click-to-WhatsApp) exigem descrição da evidência e só ADMIN/GESTOR registram. Tudo auditado.
+> - **O que o gate libera na API:** só números com opt-in **ou** com a janela de 24 h aberta pelo próprio contato. Texto livre só com a janela aberta; modelo (fora da janela) só com opt-in. A base legal e a Lista Não Contatar continuam valendo antes de tudo, e o gate é conferido de novo na hora do envio.
+> - **Opt-out derruba o opt-in:** registrar opt-out (no lead, no canal ou no número) revoga os opt-ins de WhatsApp afetados. O erro 131050 da Meta (o contato pediu ao WhatsApp para não receber marketing da empresa) põe o número na Lista Não Contatar do WhatsApp e revoga o opt-in, sem precisar de uma pessoa. "Sair" e as demais palavras de opt-out nas respostas recebidas pela API valem como nas registradas à mão (§8).
+> - **Números desconhecidos não viram leads.** Mensagem de número que não está em nenhum lead (ou está em mais de um) fica em "Números sem lead" para ADMIN/GESTOR decidirem; é apagada em 90 dias se ninguém decidir.
+> - **IA:** a resposta recebida ganha uma **sugestão** de classificação (pode ser desligada em Configurações → WhatsApp); nada é aplicado sem uma pessoa. Com `AI_PROVIDER=fake`, nada sai do sistema.
+
 ---
 
 ## 7. Estados de contato
@@ -158,7 +167,7 @@ Os estados pedidos no §14 dos requisitos são independentes e calculados pelo g
 - **Detecção nas respostas registradas.** As palavras e frases ficam em Configurações → Regras de contato. Uma resposta curta com a palavra, ou uma frase de opt-out, inclui o lead na Lista Não Contatar na mesma transação, mesmo que outra classificação tenha sido escolhida. A tela avisa enquanto o SDR digita. A palavra dentro de um texto maior vira tarefa para uma pessoa decidir, e nada é bloqueado ou excluído por suposição.
 - **Parada de cadência.** Opt-out ou bloqueio encerra a cadência e cancela as tarefas de contato abertas.
 - **Gate.** Todo envio assistido passa pelo gate antes de gerar o link. O gate inclui a janela de horário, o intervalo mínimo entre contatos e o limite diário de primeiros contatos. Nada é enviado automaticamente; quem envia é a pessoa, pelo app.
-- **Confirmação ao titular: pendente.** No modo assistido, o gate bloqueia qualquer mensagem depois do opt-out. A mensagem única de confirmação depende de decisão do jurídico (§20) e, no WhatsApp, de template próprio (Fase 7).
+- **Confirmação ao titular: pendente.** No modo assistido, o gate bloqueia qualquer mensagem depois do opt-out. A mensagem única de confirmação depende de decisão do jurídico (§20) e, no WhatsApp, de template próprio. **Fase 7:** continua pendente; com a API, o gate também bloqueia o envio depois do opt-out, inclusive dentro da janela aberta.
 
 ---
 
@@ -209,7 +218,8 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 | Linhas de importação (`import_rows`) | 30 dias | Excluir |
 | Arquivos de importação | Não armazenados | — |
 | Resultados de prospecção (`prospecting_results`) | 30 dias | Excluir |
-| Payloads de webhook | 90 dias | Excluir |
+| Payloads de webhook | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
+| Mensagens de números sem lead (`inbound_unmatched`) | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
 | Contexto enviado à IA (`input_snapshot`) | 12 meses | Anonimizar |
 | Mensagens | 5 anos (proposta, a validar) | Anonimizar conteúdo |
 | Auditoria | 5 anos (proposta, a validar) | Excluir |
@@ -232,6 +242,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 
   Depois, a cadência é encerrada e as tarefas abertas são canceladas. A timeline e a auditoria guardam só tipos, datas, canais e classificações, sem texto livre, e por isso não precisam de limpeza depois.
 - **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
+- **WhatsApp (Fase 7):** a anonimização também apaga as conversas (número do WhatsApp e nome do perfil), as variáveis dos modelos enviados, os payloads brutos de webhook que citam qualquer telefone do lead (achados pelo HMAC do número, sem guardar o número em claro no índice) e as mensagens de "número sem lead" desses telefones ou já vinculadas ao lead. Mesclar dois leads leva as conversas e o opt-in do mesmo número para o sobrevivente; revogado em qualquer dos dois prevalece.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
 ---
@@ -271,6 +282,8 @@ Hospedagem fora do Brasil (ex.: Render nos EUA/Europa), provedor de IA, Sentry e
 - até lá, staging e testes usam **somente dados fictícios**.
 
 ---
+
+> **Meta (Fase 7).** Com a Cloud API, os números e o texto das mensagens passam pela Meta, que atua como **operadora** para a WhatsApp Business Platform (confirmar o papel nos termos vigentes) e trata dados fora do Brasil. Antes de ligar a API: incluir a Meta no registro de operações e no aviso de privacidade, e o jurídico avaliar os termos de dados da plataforma e as cláusulas-padrão. No modo assistido, o envio sai do app do WhatsApp da própria equipe, sem passar pelo sistema.
 
 > **Implementação (Fase 6).** A IA nasce **desligada** (`AI_PROVIDER=fake`): os rascunhos vêm de um modelo fixo e nenhum dado de lead sai do sistema. Ligar o provedor real é decisão da Docline, depois das cláusulas-padrão com o fornecedor e da avaliação offline com dados fictícios (AI-SDR §14.1). O que foi enviado a cada geração fica em `ai_generations.input_snapshot`; a purga automática pelos prazos da §12 ainda não está implementada (hoje vale a anonimização).
 
@@ -334,7 +347,9 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [ ] Processo de atendimento a titulares testado.
 
 **Fases 7–9**
-- [ ] Opt-in WhatsApp com evidência antes de qualquer envio via API.
+- [x] Opt-in WhatsApp com evidência antes de qualquer envio via API (Fase 7): por número, com evidência conferida ou descrita, auditado; opt-out e o erro 131050 revogam.
+- [x] Payloads de webhook e mensagens de números sem lead com purga em 90 dias; anonimização cobre conversas e payloads (Fase 7).
+- [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.
 
 ---
@@ -349,5 +364,6 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 6. Uso dos dados abertos do CNPJ para prospecção (especialmente MEI/empresário individual).
 7. Uso de dados do Google Places (o que pode ser armazenado e exibido).
 8. Transferência internacional (hospedagem, IA, Meta, Sentry) e contratos com operadores.
+11. **WhatsApp pela API (Fase 7):** quais métodos de opt-in a Docline aceitará e que evidência basta para cada um; se a "relação comercial existente" vale como opt-in; o texto dos modelos de prospecção (categoria Marketing).
 9. Necessidade de encarregado (ou dispensa) e canal de atendimento.
 10. Aviso de privacidade cobrindo a prospecção.

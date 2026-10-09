@@ -1,6 +1,6 @@
 {
   "name": "docline-sdr",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Docline SDR — Central Inteligente de Prospecção",
   "type": "module",

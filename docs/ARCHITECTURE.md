@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 6 implementadas (MVP) · **Última revisão:** 2026-10-09
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP) e Fase 7 (WhatsApp Cloud API) · **Última revisão:** 2026-10-09
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -233,7 +233,8 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `distribution` | Atribuição de responsável (manual no MVP; estratégias depois) | lead_assignments, distribution_rules | 2 (manual) / futura |
 | `tasks` | Atividades, follow-ups, "Minha Fila SDR" | tasks, activities | 5 |
 | `cadence` | Cadências configuráveis, inscrição, avanço, parada automática | cadences, cadence_steps, cadence_enrollments | 5 |
-| `messaging` | Mensagens (assistidas/API), templates, abordagens, conversas | messages, message_templates, approaches, conversations | 5 (assistido) / 7 |
+| `messaging` | Mensagens assistidas e registradas, respostas e classificação | messages | 5 |
+| `whatsapp` | Envio pela Cloud API (texto na janela, modelo com opt-in), webhooks (status, respostas), conversas, modelos, números sem lead, saúde do número | conversations, whatsapp_templates, message_status_events, webhook_events, inbound_unmatched, integration_connections | 7 |
 | `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
 | `prospecting` | Buscas em fontes autorizadas, aprovação de novos leads | prospecting_searches, prospecting_results, registry_companies | 9 |
@@ -388,6 +389,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 >
 > **Fase 5:** `GET /queue` (Minha Fila; `?userId=` para gestor e ADMIN); `POST /tasks`, `PATCH /tasks/{id}` (reagendar) e `POST /tasks/{id}/complete|cancel|skip` (pular passo de cadência); `GET /leads/{id}/tasks`; `POST /leads/{id}/activities`; `POST /leads/{id}/messages/assisted` (prepara o envio assistido e devolve o link), `POST /leads/{id}/messages/logged` (envio feito fora do sistema), `GET /leads/{id}/messages`, **`GET /messages?view=pending|sent|replies|unclassified`** e `POST /messages/{id}/confirm|cancel|classify`; `POST /leads/{id}/replies` (resposta recebida, com a detecção de opt-out); `GET/POST /leads/{id}/cadence` e `POST /leads/{id}/cadence/pause|resume|stop`; `GET/POST /cadences` (`?all=1` inclui as inativas), `PUT /cadences/{id}` e **`POST /cadences/{id}/default`**; `POST /leads/{id}/handoff`, `GET /leads/{id}/opportunities`, **`GET /opportunities`** e `POST /opportunities/{id}/accept|won|lost`; **`GET /sales-owners`**; **`GET /notifications`** e **`POST /notifications/read`**; `GET/PUT /settings/contact-rules`; **`POST /leads/pull`** (puxar do pool do território). As rotas seguem o recurso do lead em vez de `/enrollments/{id}` e `/messages/inbound`, porque cada lead tem no máximo uma inscrição em andamento e a resposta sempre pertence a um lead. Ficam para a Fase 6: `/message-templates`, `/approaches` e `/ai/*`.
 >
+> **Fase 7 (WhatsApp Cloud API):** `GET /leads/{id}/whatsapp` (números com opt-in e janela, gate do modo API, conversa e modelos liberados), `POST /leads/{id}/whatsapp/messages` (`kind: text` na janela ou `kind: template` com opt-in; responde `202`, o worker envia), `POST /leads/{id}/whatsapp/opt-in` e `/opt-in/revoke`, `POST /messages/{id}/retry`, `GET /conversations?filter=attention|open|all`, `GET /whatsapp/templates`, `POST /whatsapp/templates/sync`, `PATCH /whatsapp/templates/{id}`, `GET /whatsapp/unmatched` e `POST /whatsapp/unmatched/{id}/link|retry|dismiss`, `GET /whatsapp/overview`, `POST /whatsapp/health/check` e `GET/PUT /whatsapp/settings`. O webhook fica fora da v1: `GET/POST /api/webhooks/whatsapp`, sem sessão e sem checagem de origem, autenticado pela assinatura da Meta (`X-Hub-Signature-256`); responde `404` no modo assistido. Não implementadas: `/message-templates` (os modelos são os aprovados da Meta) e `/integrations/{provider}/test` (a verificação do número cobre).
+>
 > **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
 
 > Legenda de fase: **MVP** = Fases 1–6. Números indicam fases posteriores.
@@ -525,8 +528,12 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `leads.forgotten-scan` | Diário (10:20 UTC, 07:20 em Fortaleza) | Avisa cada responsável de quantos leads estão esquecidos: etapa aberta, sem próxima ação e sem atividade há N dias (regras de contato) | 5 |
 | `retention.enforce` | Diário | Anonimiza conforme a política de retenção (as `import_rows` têm job próprio, `import.purge`) | 5+ |
 | `ai.generate-batch` | Agendado (opcional) | Pré-gera rascunhos para a fila do dia seguinte (Batch API, custo menor) | 6+ |
-| `webhook.process` | Webhook recebido | Processa eventos da Meta (status, mensagens, opt-out) | 7 |
-| `message.send` | Mensagem aprovada no modo API | Envia via provedor com retentativa e idempotência | 7 |
+| `whatsapp.send` | Envio pedido pela pessoa (na mesma transação da mensagem `QUEUED`) | Confere o gate de novo, marca a tentativa, chama a Cloud API fora da transação e grava o desfecho. **Sem nova tentativa automática** (ADR-022) | 7 |
+| `whatsapp.webhook` | Webhook gravado na inbox | Processa item a item (status, respostas, modelos, qualidade), cada um na sua transação e idempotente; até 3 novas tentativas | 7 |
+| `whatsapp.suggest-classification` | Resposta recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação (F7-07); nunca classifica sozinha | 7 |
+| `whatsapp.sync-templates` | Diário (06:41 UTC) e manual | Sincroniza os modelos da conta na Meta | 7 |
+| `whatsapp.health-check` | De hora em hora (minuto 23) e por webhook de qualidade/conta | Qualidade, limite e situação do número; piora avisa os ADMINs | 7 |
+| `webhooks.purge` | Diário (04:47 UTC) | Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias | 7 |
 | `registry.ingest` | Mensal | Ingestão filtrada dos dados abertos do CNPJ | 9 |
 | `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
 
@@ -573,7 +580,7 @@ central-sdr-docline/
 │   │   └── seed/                     # dados de referência + empresas fictícias
 │   ├── integrations/
 │   │   └── src/
-│   │       ├── whatsapp/{assisted,meta-cloud,fake}/
+│   │       ├── whatsapp/             # meta-cloud.ts (Graph API) e signature.ts (webhooks); o simulado fica no core
 │   │       ├── instagram/{assisted,meta-graph,fake}/
 │   │       ├── google/{places,fake}/
 │   │       ├── enrichment/{receita-open-data,brasilapi,ibge,fake}/
@@ -717,6 +724,9 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 018 | **CSP com nonce por requisição** no `proxy.ts`; o nonce do documento é registrado para estilos injetados por bibliotecas (Radix) | Política estrita sem `unsafe-inline` para scripts e estilos em produção | `unsafe-inline` em `style-src` | Todas as páginas são dinâmicas; atributos `style=""` liberados via `style-src-attr` |
 | 019 | **Hospedagem na Render, região Virginia (EUA)**, para staging e produção (decisão da Docline em 2026-10-08) | Blueprint (`render.yaml`) e imagem já validados; operação simples; custo baixo; Virginia é a região da Render mais próxima do Brasil | Google Cloud em São Paulo (mais configuração); Fly.io em São Paulo (Postgres gerenciado recente); Railway (sem região no Brasil) | **Transferência internacional** (LGPD art. 33): exige cláusulas-padrão da ANPD no contrato/DPA da Render e validação jurídica **antes de dados pessoais reais**; até lá, só dados fictícios. A Render não muda a região de um serviço existente (trocar = recriar e migrar). A Render acrescenta ao `X-Forwarded-For`: `TRUSTED_PROXIES` deve ser configurado no primeiro deploy ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)) |
 | 020 | **Leitor próprio de XLSX** (fflate para o ZIP, saxes para o XML), só valores das células como texto, em vez do ExcelJS (Fase 3) | O ExcelJS 4.4.0 está sem versão nova desde 2023 e depende de pacotes antigos (`tmp`, `archiver`, `unzipper`). Com o leitor próprio, os limites contra zip bomb são explícitos: o total declarado e o número de entradas são conferidos antes de descompactar, e o buffer tem o tamanho declarado, então o arquivo não cresce além dele. Também recusa macros e lê em streaming, com 3 dependências pequenas | ExcelJS; SheetJS (o pacote `xlsx` do npm está desatualizado) | Não converte datas (vêm como número serial; não há campo de data no mapeamento do lead) nem avalia fórmulas: vale o último resultado gravado no arquivo. Testado com planilhas montadas no próprio teste |
+| 021 | **Opt-in do WhatsApp por número** (`contact_permissions.contact_point_id`), com evidência; a linha do lead guarda só a base legal (Fase 7) | A Meta exige a permissão do próprio número para mensagens iniciadas pela empresa; um lead pode ter vários números | Opt-in no nível do lead (Fase 2) | O opt-in de WhatsApp gravado no lead deixa de liberar a API; o gate do modo API filtra os números (opt-in ou janela aberta); opt-out e o erro 131050 revogam o opt-in; mesclagem leva o opt-in do mesmo número (revogado prevalece) |
+| 022 | **Envio pela API sem reenvio automático**: tentativa marcada antes da chamada, desfecho gravado com atualização condicional e nosso id em `biz_opaque_callback_data` (Fase 7) | A Cloud API não tem chave de idempotência; repetir uma chamada de resultado incerto pode mandar a mesma mensagem duas vezes (pior que não mandar, para quem prospecta) | Retentativas automáticas do pg-boss | Falha conhecida vira "Tentar de novo" para a pessoa; resultado incerto só é repetido depois de 10 minutos sem status e com confirmação; o webhook de status corrige uma falha incerta |
+| 023 | **Cloud API direta pela Graph API oficial com `fetch`**, versão fixada em `META_GRAPH_API_VERSION`; leitura do webhook (formato da Meta) no core; inbox de webhooks idempotente pelo SHA-256 do corpo (Fase 7) | A Meta não mantém SDK oficial para Node; a Cloud API direta é a opção de menor custo; o provedor simulado fala o mesmo formato de webhook, então a mesma leitura serve aos dois | BSP (Twilio, 360dialog…), possível pela porta; SDK de terceiros | Atualizar a versão da Graph API é uma mudança planejada, com os testes do adaptador; um BSP exigiria adaptador e leitura de webhook próprios |
 
 ---
 

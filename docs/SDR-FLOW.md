@@ -180,6 +180,8 @@ Colunas com contagem e cards paginados por coluna. O card mostra nome, cidade, f
 > - Editar uma cadência sobe a versão; quem já está nela segue pela posição do passo.
 > - **Não implementado:** a cadência de reativação de 90 dias. O tipo de mensagem `REACTIVATION` já existe para configurá-la.
 
+> **Fase 7:** passos `API_MESSAGE` com envio automático (F7-09, COULD) **não foram implementados**, de propósito: o passo continua virando tarefa, e a pessoa pode cumpri-lo enviando o modelo pela API na ficha. Enviar sozinho exige decidir antes o volume por dia, o comportamento com falha e a revisão do texto, depois de medir qualidade e custo com envios humanos ([ROADMAP](./ROADMAP.md#fase-7--integração-whatsapp)).
+
 ### 4.3 Follow-up avulso
 
 O SDR pode agendar um follow-up fora da cadência ("ligar terça às 10h"), criando uma `task` com data e hora. Também funciona pelo celular.
@@ -258,6 +260,13 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 > - O limite diário conta os primeiros contatos no fuso do SDR. Responder a quem escreveu não conta para o intervalo.
 > - Envios feitos fora do sistema entram como "Registro manual" (`LOGGED`), com data no passado.
 
+> **Implementação (Fase 7, WhatsApp pela API):** com `WHATSAPP_PROVIDER=meta_cloud` (ou `fake` na homologação), a ficha ganha a seção **WhatsApp** e o menu ganha **Conversas**.
+> - **Na ficha:** para cada número, se tem opt-in e se a janela de 24 h está aberta (e até quando); registrar ou revogar o opt-in; a conversa com os status (`Na fila`, `Enviada`, `Entregue`, `Lida`, `Falhou` com a explicação); enviar **texto livre** (só com a janela aberta) ou um **modelo aprovado** (com as variáveis preenchidas e a prévia; só para número com opt-in).
+> - O envio pela API passa pelo mesmo gate do assistido (Lista Não Contatar, base legal, horário, intervalo e limite de primeiros contatos), mais a regra do número (opt-in ou janela aberta), e de novo no worker, na hora de enviar. Tem os mesmos efeitos do envio assistido confirmado: datas de contato, etapa de primeiro contato, tarefa cumprida, evento e auditoria.
+> - **Falhou:** "Tentar de novo" quando a Meta recusou; quando não dá para saber se saiu, a ficha pede para esperar 10 minutos (o status pode chegar) e confirmar o risco de duplicidade. O sistema nunca reenvia sozinho.
+> - **Conversas:** "Aguardando resposta" (o contato escreveu por último), "Janela aberta" e "Todas", no escopo de cada pessoa; ADMIN/GESTOR veem também "Números sem lead".
+> - O modo assistido (`wa.me`) continua disponível ao lado, inclusive para quem não tem opt-in.
+
 ---
 
 ## 7. Resposta do lead e classificação
@@ -277,6 +286,8 @@ Abrir lead · Gerar abordagem · Abrir no WhatsApp/Instagram · Ligar (`tel:`) �
 1. **Regras determinísticas de opt-out** primeiro: palavras e expressões configuráveis, como "SAIR", "PARAR", "não quero receber", "remova meu número", "descadastrar".
 2. **IA** sugere classificação e confiança ([AI-SDR §12](./AI-SDR.md#12-classificação-de-respostas)).
 3. Confiança baixa ou possível opt-out → **humano decide**. Na dúvida sobre opt-out, a cadência é **pausada** até a decisão.
+
+> **Implementação (Fase 7):** a resposta que chega pelo webhook do WhatsApp tem o mesmo tratamento da registrada à mão (abaixo): opt-out certo vai para a Lista Não Contatar, possível opt-out vira tarefa, a cadência é encerrada e a tarefa "Classificar e responder" é criada. Além disso, a IA deixa uma **sugestão** de classificação pronta na mensagem (F7-07; desligável em Configurações → WhatsApp), que a pessoa aceita ou troca. Mensagem de número sem lead não mexe em lead nenhum até alguém vincular.
 
 > **Implementação (Fase 5):**
 > - Sem IA ainda (Fase 6): a classificação é manual, escolhida ao registrar a resposta ou depois, na ficha ou em Mensagens.
@@ -347,6 +358,8 @@ permitido(lead, canal, modo) =
 ```
 
 O resultado traz **motivos legíveis** ("Sem base legal registrada", "Número na Lista Não Contatar desde 12/10/2026"). **Encontrar um telefone publicamente não significa autorização** para mensagens automatizadas: telefone identificado ≠ contato permitido.
+
+> **Implementação (Fase 7):** o **opt-in de plataforma é por número** (`contact_permissions.contact_point_id`) e a **janela de atendimento** também (última mensagem recebida daquele número). No modo API, o gate devolve só os números utilizáveis (com opt-in ou com a janela aberta); o lead pode estar liberado para um número e não para outro. Mensagens recebidas pela API marcam o WhatsApp do número como `CONFIRMED`.
 
 ---
 

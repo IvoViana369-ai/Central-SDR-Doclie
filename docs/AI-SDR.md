@@ -1,6 +1,6 @@
 # SDR AI — IA de Prospecção
 
-> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. Classificação automática e insights nas Fases 7 e 11.
+> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). Insights na Fase 11.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SDR-FLOW](./SDR-FLOW.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md)
 
 ## Sumário
@@ -46,7 +46,7 @@ A SDR AI é um **copiloto do SDR**: prepara mensagens personalizadas, sugere cla
 |---|---|---|
 | Gerar os 8 tipos de mensagem (§17 dos requisitos) | 6 (MVP) | Com edição e aprovação |
 | Sugerir classificação de resposta colada manualmente | 6 (MVP, SHOULD) | Humano confirma |
-| Classificar automaticamente respostas recebidas por webhook | 7 | Opt-out por regra determinística vem antes da IA |
+| Classificar automaticamente respostas recebidas por webhook | 7 ✅ (como **sugestão**) | Opt-out por regra determinística vem antes da IA; a pessoa confirma |
 | Sugerir próxima ação ("next best action") por lead | 11 | Baseado em regras + IA |
 | Insights da carteira ("Hoje existem 37…") | 11+ | Números calculados em SQL; IA só redige |
 | Comparação de abordagens (A/B) | 10–11 | Atribuição já existe desde o MVP |
@@ -271,6 +271,7 @@ stateDiagram-v2
 
 - **Gerar de novo** cria uma nova geração; a anterior fica `DISCARDED` com motivo "regenerada".
 - **Aprovar** cria a mensagem em `PENDING_CONFIRMATION` (modo assistido) ou `QUEUED` (API, Fase 7).
+  - *Fase 7:* aprovar continua preparando o envio assistido. Com a API ligada e a janela de 24 h aberta pelo contato, a seção WhatsApp da ficha oferece enviar o **rascunho aprovado** como texto livre (`QUEUED` → job); cada rascunho tem um envio só, e o texto passa pelo gate de novo. Fora da janela, só modelo aprovado pela Meta, que a IA não gera.
 - Quem aprova: o SDR responsável pelo lead (ou GESTOR/ADMIN). Autoaprovação não existe no MVP; qualquer automação futura exige decisão explícita da Docline, métricas de qualidade e escopo restrito.
 - **O texto enviado é sempre o `text_final` aprovado**, guardado em `messages.body`.
 
@@ -296,6 +297,8 @@ Isso permite responder:
 2. A IA classifica em `INTERESTED`, `QUESTION`, `OBJECTION`, `NOT_INTERESTED`, `OPT_OUT`, `OUT_OF_OFFICE`, `WRONG_CONTACT`, `OTHER`, com confiança e justificativa curta.
 3. Confiança baixa, ou qualquer indício de opt-out, vai para decisão humana; a cadência fica pausada.
 4. O humano pode corrigir; a correção fica registrada (`classification_source = HUMAN`) e alimenta a avaliação.
+
+> **Implementação (Fase 7, F7-07).** Cada resposta com texto que chega pelo webhook do WhatsApp (e casa com um lead) enfileira o job `whatsapp.suggest-classification`, que pede a mesma sugestão da Fase 6 em nome do sistema. A sugestão fica pronta na mensagem (ficha e Mensagens) para a pessoa usar ou trocar; **nada é classificado sozinho**. As regras determinísticas de opt-out rodam antes, na chegada da resposta. Conta no orçamento mensal da IA (não na cota diária de ninguém); se o orçamento acabou ou a IA falhou, a resposta fica sem sugestão e nada mais muda. Resposta já classificada pela regra de opt-out não vai para a IA. Pode ser desligada em Configurações → WhatsApp ("Sugerir a classificação com a IA assim que uma resposta chegar"). Com `AI_PROVIDER=fake`, a sugestão vem do provedor de demonstração e nada sai do sistema.
 
 Saída:
 

@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 6 concluídas no código (MVP) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), depois a Fase 7 · **Última revisão:** 2026-10-09
+> **Status:** Fases 1 a 7 concluídas no código (MVP + WhatsApp pela API, desligada por padrão) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), a ativação do WhatsApp pela API quando a conta da Meta estiver pronta ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)) e depois a Fase 8 · **Última revisão:** 2026-10-09
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -27,7 +27,7 @@
 | 4 | Pipeline SDR | Kanban, histórico de etapas, lead scoring configurável | ✅ concluída (2026-10-09) | MVP |
 | 5 | Fila e follow-ups | Tarefas, cadência, Minha Fila, gate de contactabilidade, contato assistido, transferência | ✅ concluída (2026-10-09) | MVP |
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ✅ concluída no código (2026-10-09); UAT e go-live com a Docline | MVP |
-| 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ~2,5 semanas + prazos da Meta | Canais |
+| 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ✅ concluída no código (2026-10-09); ativação depende da Meta e do jurídico | Canais |
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ~1,5 semana + App Review | Canais |
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ~2 semanas | Captação |
 | 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ~2 semanas | Escala |
@@ -165,7 +165,7 @@ O aceite é coberto pelas jornadas E2E `apps/web/e2e/fase2-ui.spec.ts`, `fase2-a
 Decisões e pendências:
 
 - **Exportação síncrona** (sem arquivo guardado no servidor), em vez de job assíncrono: ARCHITECTURE §9.2.
-- **2FA:** disponível para todos, com lembrete para ADMIN/GESTOR. Bloquear o acesso sem 2FA fica para antes da Fase 7.
+- **2FA:** disponível para todos, com lembrete para ADMIN/GESTOR. Bloquear o acesso sem 2FA fica para antes da Fase 7. *(Fase 7: ainda não implementado; virou pré-requisito para ligar a API do WhatsApp.)*
 - **Sentry:** pronto; falta o DSN da conta da Docline.
 - **Staging:** continua dependendo da conta da Docline na Render.
 
@@ -383,6 +383,36 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 ### Fase 7 — Integração WhatsApp
 
+**Entregáveis:** envio pela WhatsApp Cloud API (modelo aprovado e texto livre na janela), webhooks de status e de mensagens recebidas, opt-in por número com evidência, conversas e janela na ficha e na tela Conversas, modelos sincronizados e ligados às abordagens, saúde do número e custo estimado.
+
+**Situação (2026-10-09):** ✅ concluída no código; F7-01 a F7-08 entregues, **F7-09 adiada** (abaixo). A API fica **desligada por padrão** (`WHATSAPP_PROVIDER=assisted`); a homologação usa o provedor simulado (`fake`) com `pnpm whatsapp:simulate`. Ligar depende da Docline: verificação da empresa na Meta, WABA e número, modelos aprovados, parecer jurídico e o bloqueio de acesso sem 2FA ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)).
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase7.spec.ts` e pelas suítes `whatsapp.int.test.ts`, `whatsapp-webhooks.int.test.ts`, `whatsapp-domain.test.ts`, `whatsapp-schema.int.test.ts`, `meta-cloud.test.ts` e `signature.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F7-01 | Modelo aprovado vai para a fila e sai pelo job uma vez só (pedido repetido não duplica); texto livre só com a janela aberta; falhas da Meta com explicação; resultado incerto não é reenviado sozinho; o gate é conferido de novo no envio. Adaptador testado contra um servidor local que imita a Graph API. |
+| F7-02 | Verificação do endpoint e assinatura obrigatória (E2E); webhook repetido não duplica; status fora de ordem não volta a mensagem; o status corrige um envio de resultado incerto. |
+| F7-03 | Na ficha: números com opt-in e janela, conversa com `Enviada → Entregue → Lida`; a resposta abre a janela e libera o texto livre; Conversas lista quem espera resposta. |
+| F7-04 | Sincronização preserva as decisões do ADMIN (abordagem, ativo); situação e qualidade do modelo chegam pelo webhook; modelo removido na Meta fica marcado, sem apagar o histórico. |
+| F7-05 | Opt-in com evidência conferida (mensagem daquele número) ou descrita (só ADMIN/GESTOR); número na Lista Não Contatar não recebe opt-in; opt-out e o erro 131050 revogam. |
+| F7-06 | Resposta de um número sem o 9º dígito encontra o lead. |
+| F7-07 | A resposta recebida ganha a sugestão de classificação da IA; "Sair" vai direto para a Lista Não Contatar. |
+| F7-08 | Saúde do número com aviso aos ADMINs quando piora; custo estimado pela categoria cobrada; visão do mês em Configurações → WhatsApp. |
+
+Decisões e pendências:
+
+- **Opt-in por número** (ADR 021): a Meta exige a permissão do próprio número. O opt-in de WhatsApp no nível do lead (Fase 2) deixou de liberar a API; a tela da base legal não oferece mais essa opção.
+- **Sem reenvio automático** (ADR 022): a Cloud API não tem chave de idempotência, e uma mensagem duplicada no celular de quem está sendo prospectado é pior que uma falha. A tentativa é marcada antes da chamada; o desfecho é gravado com atualização condicional (job e webhook não aplicam o efeito duas vezes); cada envio leva o nosso id em `biz_opaque_callback_data` para a reconciliação.
+- **Graph API direta com `fetch`** e versão fixada (ADR 023): a Meta não mantém SDK oficial para Node. Inbox de webhooks idempotente pelo SHA-256 do corpo.
+- **Números sem lead não viram leads**: ficam para ADMIN/GESTOR decidirem e são apagados em 90 dias.
+- **Envio real desligado fora de produção** sem `ALLOW_REAL_SENDS=true`; o simulador de webhooks recusa rodar com `meta_cloud`.
+- **Custo estimado** com tabela editável (valores iniciais de fontes secundárias, em USD); conferir na tabela oficial da Meta, que fatura em BRL no Brasil desde 01/07/2026 para clientes elegíveis.
+- **F7-09 adiada** (passos de cadência `API_MESSAGE` com envio automático, COULD): enviar sem uma pessoa exige decidir volume por dia, comportamento com falha e revisão do texto, e só faz sentido depois de medir qualidade e custo com envios humanos. Até lá, o passo vira tarefa e a pessoa cumpre enviando o modelo pela ficha. Candidata à Fase 10 (Campanhas), que já trata elegibilidade e limites.
+- **Pendências:** confirmação de descadastro ao titular (depende do jurídico e de um modelo próprio); bloqueio de acesso de ADMIN/GESTOR sem 2FA, prometido para antes desta fase e agora pré-requisito para ligar a API ([SECURITY §18](./SECURITY.md#18-checklist-por-fase)); revalidar a tabela de códigos de erro da Meta antes de ligar.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
+
 | ID | História / tarefa | Prior. |
 |---|---|---|
 | F7-01 | Adaptador `meta_cloud`: envio de template e de texto livre (janela aberta), idempotência | MUST |
@@ -393,7 +423,7 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F7-06 | Casamento de `wa_id` com e sem 9º dígito | MUST |
 | F7-07 | Classificação automática de respostas recebidas | SHOULD |
 | F7-08 | Monitor de qualidade/limites do número e custo por mensagem | SHOULD |
-| F7-09 | Passos de cadência `API_MESSAGE` (somente com opt-in) | COULD |
+| F7-09 | Passos de cadência `API_MESSAGE` (somente com opt-in) — *adiada, ver acima* | COULD |
 
 ### Fase 8 — Instagram
 
