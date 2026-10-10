@@ -22,6 +22,7 @@ export {
   type ContactMode,
   type GateChannel,
   type GateInput,
+  type GateReasonCode,
   type GateResult,
 } from './domain/contactability';
 export {

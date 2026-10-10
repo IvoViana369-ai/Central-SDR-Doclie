@@ -32,6 +32,49 @@ describe('gate de contactabilidade', () => {
     expect(results[0]?.usableContactPointIds).toEqual(['cel']);
     expect(results[1]?.usableContactPointIds).toEqual(['cel', 'fixo']);
     expect(results[3]?.reasons).toEqual(['Nenhum Instagram cadastrado.']);
+    expect(results.map((r) => r.codes)).toEqual([[], [], [], ['NO_CONTACT']]);
+  });
+
+  it('cada motivo tem o seu código (as campanhas contam por motivo)', () => {
+    expect(evaluateChannel({ ...base, legalBasis: null }, 'WHATSAPP').codes).toEqual([
+      'NO_LEGAL_BASIS',
+    ]);
+    expect(evaluateChannel({ ...base, leadStatus: 'ARCHIVED' }, 'PHONE').codes).toEqual([
+      'LEAD_NOT_ACTIVE',
+    ]);
+    expect(
+      evaluateChannel(
+        {
+          ...base,
+          organizationSuppressions: [
+            { reason: 'OPT_OUT', scope: 'ALL_CHANNELS', createdAt: since },
+          ],
+        },
+        'EMAIL',
+      ).codes,
+    ).toEqual(['SUPPRESSED']);
+    expect(
+      evaluateChannel(
+        {
+          ...base,
+          contactPoints: [
+            {
+              ...email,
+              suppressions: [{ reason: 'OPT_OUT', scope: 'ALL_CHANNELS', createdAt: since }],
+            },
+          ],
+        },
+        'EMAIL',
+      ).codes,
+    ).toEqual(['CONTACT_SUPPRESSED']);
+    expect(evaluateChannel(base, 'WHATSAPP', 'API').codes).toEqual(['NO_OPT_IN']);
+    expect(
+      evaluateChannel(
+        { ...base, contactPoints: [{ ...email, id: 'ig', type: 'INSTAGRAM' as const }] },
+        'INSTAGRAM',
+        'API',
+      ).codes,
+    ).toEqual(['NO_SERVICE_WINDOW']);
   });
 
   it('telefone identificado não é autorização: sem base legal, nada é liberado', () => {

@@ -62,10 +62,24 @@ export interface GateInput {
   contactPoints: GateContactPoint[];
 }
 
+/** Motivo do bloqueio em forma de código (as campanhas contam por motivo). */
+export type GateReasonCode =
+  | 'LEAD_NOT_ACTIVE'
+  | 'SUPPRESSED'
+  | 'NO_LEGAL_BASIS'
+  | 'NO_CONTACT'
+  | 'CONTACT_SUPPRESSED'
+  | 'NO_OPT_IN'
+  | 'NO_SERVICE_WINDOW'
+  /** Janela de horário, intervalo entre contatos ou limite diário (passa com o tempo). */
+  | 'TIMING';
+
 export interface GateResult {
   channel: GateChannel;
   allowed: boolean;
   reasons: string[];
+  /** Os mesmos motivos, como códigos (na ordem de `reasons`). */
+  codes: GateReasonCode[];
   /** Contatos do canal que podem ser usados (sem supressão). */
   usableContactPointIds: string[];
   /**
@@ -137,9 +151,13 @@ export function evaluateChannel(
   mode: ContactMode = 'ASSISTED',
 ): GateResult {
   const reasons: string[] = [];
+  const codes: GateReasonCode[] = [];
 
   const statusReason = LEAD_STATUS_REASONS[input.leadStatus];
-  if (statusReason) reasons.push(statusReason);
+  if (statusReason) {
+    reasons.push(statusReason);
+    codes.push('LEAD_NOT_ACTIVE');
+  }
 
   const organization = input.organizationSuppressions.find((s) => appliesTo(s, channel));
   if (organization) {
@@ -148,24 +166,28 @@ export function evaluateChannel(
     reasons.push(
       `Lead na Lista Não Contatar desde ${formatDate(organization.createdAt)} (${SUPPRESSION_REASON_LABELS[organization.reason]}).`,
     );
-    return { channel, allowed: false, reasons, usableContactPointIds: [] };
+    codes.push('SUPPRESSED');
+    return { channel, allowed: false, reasons, codes, usableContactPointIds: [] };
   }
 
   const specific = input.channelPermissions.find((p) => p.channel === channel);
   const legalBasis = specific?.legalBasis ?? input.legalBasis;
   if (legalBasis === null || legalBasis === 'NOT_ASSESSED') {
     reasons.push('Sem base legal registrada para este canal.');
+    codes.push('NO_LEGAL_BASIS');
   }
 
   const candidates = candidatesFor(channel, input.contactPoints);
   let usable = candidates.filter((cp) => !cp.suppressions.some((s) => appliesTo(s, channel)));
   if (candidates.length === 0) {
     reasons.push(MISSING_CONTACT[channel]);
+    codes.push('NO_CONTACT');
   } else if (usable.length === 0) {
     const first = candidates.flatMap((cp) => cp.suppressions).find((s) => appliesTo(s, channel))!;
     reasons.push(
       `Contato na Lista Não Contatar desde ${formatDate(first.createdAt)} (${SUPPRESSION_REASON_LABELS[first.reason]}).`,
     );
+    codes.push('CONTACT_SUPPRESSED');
   } else if (mode === 'API' && channel === 'WHATSAPP') {
     // A Meta exige permissão do próprio número (ou a conversa aberta por ele).
     usable = usable.filter((cp) => cp.whatsappOptIn || cp.serviceWindowOpen);
@@ -173,6 +195,7 @@ export function evaluateChannel(
       reasons.push(
         'Nenhum número com opt-in registrado nem conversa aberta pelo contato nas últimas 24 h (exigido para enviar pela API do WhatsApp).',
       );
+      codes.push('NO_OPT_IN');
     }
   } else if (mode === 'API' && channel === 'INSTAGRAM') {
     // A API do Instagram só responde a quem escreveu, até 24 h depois (Fase 8).
@@ -181,6 +204,7 @@ export function evaluateChannel(
       reasons.push(
         'O contato não escreveu para a Docline no Instagram nas últimas 24 h: pela API só dá para responder (o primeiro contato é pelo app).',
       );
+      codes.push('NO_SERVICE_WINDOW');
     }
   }
 
@@ -188,6 +212,7 @@ export function evaluateChannel(
     channel,
     allowed: reasons.length === 0,
     reasons,
+    codes,
     usableContactPointIds: reasons.length === 0 ? usable.map((cp) => cp.id) : [],
   };
 }

@@ -151,6 +151,7 @@ export async function evaluateLeadGate(
           ...result,
           allowed: false,
           reasons: timing.reasons,
+          codes: ['TIMING' as const],
           usableContactPointIds: [],
           availableAt: timing.availableAt,
         }

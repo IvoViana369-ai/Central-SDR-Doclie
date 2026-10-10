@@ -51,4 +51,5 @@ export * from './modules/analytics';
 export * from './modules/whatsapp';
 export * from './modules/instagram';
 export * from './modules/prospecting';
+export * from './modules/campaigns';
 export * from './jobs/catalog';
