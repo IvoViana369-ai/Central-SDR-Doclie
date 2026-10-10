@@ -94,4 +94,5 @@ export const ASSIGNMENT_STRATEGY_LABELS: Record<AssignmentStrategy, string> = {
   TERRITORY: 'Território',
   PRIORITY: 'Prioridade',
   AVAILABILITY: 'Disponibilidade',
+  CAMPAIGN: 'Campanha',
 };

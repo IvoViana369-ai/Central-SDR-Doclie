@@ -9,6 +9,7 @@
 // configurações e dados de referência (UFs, municípios, feriados).
 // Fase 2: núcleo de leads, timeline, conformidade (base legal, Lista Não
 // Contatar, titulares), visões salvas e territórios.
+// Fases seguintes: ver docs/DATABASE.md (§4.10: campanhas, Fase 10).
 //
 // Índices parciais usam o recurso "partialIndexes" (preview do Prisma 7), para
 // que a checagem de drift do CI também os cubra (docs/ARCHITECTURE.md §4.1).
@@ -111,6 +112,10 @@ model User {
   registryIngestions   RegistryIngestion[]
   prospectingSearches  ProspectingSearch[]
   prospectingDecisions ProspectingResult[] @relation("ProspectingDecidedBy")
+  campaignsOwned       Campaign[]          @relation("CampaignOwner")
+  campaignsCreated     Campaign[]          @relation("CampaignCreator")
+  campaignSdrs         CampaignSdr[]
+  campaignLeads        CampaignLead[]
 
   @@index([role, status])
   @@index([teamId])
@@ -589,6 +594,8 @@ model Lead {
   /// Fase 9: resultados de prospecção que bateram com o lead ou o criaram.
   prospectingMatches ProspectingResult[]  @relation("ProspectingMatchedLead")
   prospectingCreated ProspectingResult[]  @relation("ProspectingCreatedLead")
+  /// Fase 10: participação em campanhas.
+  campaignLeads      CampaignLead[]
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -793,6 +800,9 @@ enum AssignmentStrategy {
   TERRITORY
   PRIORITY
   AVAILABILITY
+
+  /// Distribuição dos leads de uma campanha (Fase 10).
+  CAMPAIGN
 
   @@map("assignment_strategy")
 }
@@ -1790,6 +1800,8 @@ model Message {
   isFirstContact           Boolean               @default(false) @map("is_first_contact")
   taskId                   String?               @map("task_id") @db.Uuid
   enrollmentId             String?               @map("enrollment_id") @db.Uuid
+  /// Fase 10: campanha a que o contato é atribuído (preenchida pelas métricas da campanha).
+  campaignId               String?               @map("campaign_id") @db.Uuid
   cadenceStepId            String?               @map("cadence_step_id") @db.Uuid
   sentById                 String?               @map("sent_by_id") @db.Uuid
   sentAt                   DateTime?             @map("sent_at") @db.Timestamptz(3)
@@ -1835,6 +1847,7 @@ model Message {
   contactPoint      ContactPoint?        @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
   task              Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
   enrollment        CadenceEnrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  campaign          Campaign?            @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   cadenceStep       CadenceStep?         @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
   sentBy            User?                @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
   classifiedBy      User?                @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
@@ -1856,6 +1869,7 @@ model Message {
   @@unique([aiGenerationId], map: "messages_ai_generation_active_key", where: raw("status <> 'CANCELED'"))
   @@index([leadId, createdAt(sort: Desc)])
   @@index([sentById, status])
+  @@index([campaignId])
   /// Limite diário de primeiros contatos por SDR.
   @@index([sentById, sentAt], map: "messages_first_contact_idx", where: raw("is_first_contact"))
   /// Taxa de resposta por abordagem (analytics).
@@ -1933,6 +1947,7 @@ model Cadence {
 
   steps       CadenceStep[]
   enrollments CadenceEnrollment[]
+  campaigns   Campaign[]
   createdBy   User?               @relation("CadenceCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([isDefault], map: "cadences_default_key", where: raw("is_default"))
@@ -1978,16 +1993,21 @@ model CadenceEnrollment {
   enrolledById        String?               @map("enrolled_by_id") @db.Uuid
   enrolledAt          DateTime              @map("enrolled_at") @db.Timestamptz(3)
   endedAt             DateTime?             @map("ended_at") @db.Timestamptz(3)
+  /// Fase 10: campanha que liberou o lead para esta cadência (atribuição).
+  campaignId          String?               @map("campaign_id") @db.Uuid
 
-  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  cadence    Cadence   @relation(fields: [cadenceId], references: [id])
-  enrolledBy User?     @relation("EnrollmentBy", fields: [enrolledById], references: [id], onDelete: SetNull)
-  tasks      Task[]
-  messages   Message[]
+  lead          Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  cadence       Cadence        @relation(fields: [cadenceId], references: [id])
+  enrolledBy    User?          @relation("EnrollmentBy", fields: [enrolledById], references: [id], onDelete: SetNull)
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  tasks         Task[]
+  messages      Message[]
+  campaignLeads CampaignLead[]
 
   @@unique([leadId], map: "cadence_enrollments_active_key", where: raw("status = 'ACTIVE' OR status = 'PAUSED'"))
   @@index([status, nextStepDueAt])
   @@index([leadId, enrolledAt(sort: Desc)])
+  @@index([campaignId])
   @@map("cadence_enrollments")
 }
 
@@ -2113,6 +2133,7 @@ model Approach {
   generations       AiGeneration[]
   messages          Message[]
   whatsappTemplates WhatsappTemplate[]
+  campaignVariants  CampaignVariant[]
 
   @@map("approaches")
 }
@@ -2613,4 +2634,164 @@ model ProspectingResult {
   /// "Recusado antes" nas buscas seguintes.
   @@index([providerRef, decision])
   @@map("prospecting_results")
+}
+
+// -----------------------------------------------------------------------------
+// Campanhas (Fase 10)
+// -----------------------------------------------------------------------------
+
+enum CampaignStatus {
+  /// Em edição: filtro, canal, cadência, SDRs, limite e variantes.
+  DRAFT
+  /// Montando a seleção (job `campaign.build`).
+  BUILDING
+  /// Seleção montada: elegibilidade e distribuição para revisar antes de ativar.
+  READY
+  /// Liberando leads para a cadência, dentro do limite diário de cada SDR.
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+
+  @@map("campaign_status")
+}
+
+enum CampaignLeadEligibility {
+  ELIGIBLE
+  INELIGIBLE
+
+  @@map("campaign_lead_eligibility")
+}
+
+enum CampaignLeadStatus {
+  /// Apto, à espera da liberação (limite diário).
+  PENDING
+  /// Liberado: inscrito na cadência, com a tarefa na fila do SDR.
+  RELEASED
+  /// Deixou de ser apto na hora de liberar (motivo em `ineligibility_reasons`).
+  SKIPPED
+  /// Retirado da campanha por uma pessoa.
+  REMOVED
+
+  @@map("campaign_lead_status")
+}
+
+/// Campanha (F10-01): uma seleção de leads por filtro, congelada na montagem,
+/// com canal, cadência, responsável, SDRs, limite diário e abordagens em teste.
+/// A campanha nunca envia mensagens: libera leads para a cadência, e cada
+/// contato segue o gate e o modo de envio de sempre.
+model Campaign {
+  id                      String         @id @default(uuid(7)) @db.Uuid
+  name                    String
+  objective               String?
+  status                  CampaignStatus @default(DRAFT)
+  /// Seleção de leads (filtro da lista + busca), como na lista de leads.
+  filterDefinition        Json           @map("filter_definition")
+  /// De onde veio o filtro (ex.: nome da visão salva), para exibir.
+  filterLabel             String?        @map("filter_label")
+  /// Canal da abordagem (WHATSAPP, INSTAGRAM, EMAIL, PHONE): a elegibilidade
+  /// exige um contato liberado pelo gate nesse canal.
+  channel                 Channel
+  /// Cadência usada na liberação; nula = a cadência padrão.
+  cadenceId               String?        @map("cadence_id") @db.Uuid
+  ownerId                 String         @map("owner_id") @db.Uuid
+  /// Leads liberados por SDR por dia (fuso do SDR).
+  dailyContactLimit       Int            @map("daily_contact_limit")
+  /// Contatado há menos que isso não entra (frequência).
+  minDaysSinceLastContact Int            @default(30) @map("min_days_since_last_contact")
+  startsAt                DateTime?      @map("starts_at") @db.Timestamptz(3)
+  endsAt                  DateTime?      @map("ends_at") @db.Timestamptz(3)
+  /// Quando a seleção foi congelada (montagem).
+  snapshotAt              DateTime?      @map("snapshot_at") @db.Timestamptz(3)
+  /// Totais da montagem (selecionados, aptos, motivos).
+  buildStats              Json?          @map("build_stats")
+  buildError              String?        @map("build_error")
+  activatedAt             DateTime?      @map("activated_at") @db.Timestamptz(3)
+  /// Fim da atribuição de contatos e respostas (conclusão).
+  completedAt             DateTime?      @map("completed_at") @db.Timestamptz(3)
+  /// Lock otimista da edição.
+  version                 Int            @default(1)
+  createdById             String?        @map("created_by_id") @db.Uuid
+  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  cadence     Cadence?            @relation(fields: [cadenceId], references: [id], onDelete: SetNull)
+  owner       User                @relation("CampaignOwner", fields: [ownerId], references: [id])
+  createdBy   User?               @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sdrs        CampaignSdr[]
+  variants    CampaignVariant[]
+  leads       CampaignLead[]
+  enrollments CadenceEnrollment[]
+  messages    Message[]
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("campaigns")
+}
+
+/// SDRs que recebem os leads da campanha (F10-03).
+model CampaignSdr {
+  campaignId String @map("campaign_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, userId])
+  @@map("campaign_sdrs")
+}
+
+/// Abordagem em teste na campanha (F10-05): variantes A, B… sorteadas de forma
+/// equilibrada entre os leads aptos.
+model CampaignVariant {
+  id         String @id @default(uuid(7)) @db.Uuid
+  campaignId String @map("campaign_id") @db.Uuid
+  /// "A", "B", "C" ou "D".
+  label      String @db.VarChar(1)
+  approachId String @map("approach_id") @db.Uuid
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  approach Approach       @relation(fields: [approachId], references: [id])
+  leads    CampaignLead[]
+
+  @@unique([campaignId, label])
+  @@unique([campaignId, approachId])
+  @@map("campaign_variants")
+}
+
+/// Lead na campanha (F10-02 a F10-04): elegibilidade com motivos, SDR,
+/// variante, liberação e os marcos do funil (preenchidos a partir das
+/// mensagens, das oportunidades e da Lista Não Contatar).
+model CampaignLead {
+  campaignId           String                  @map("campaign_id") @db.Uuid
+  leadId               String                  @map("lead_id") @db.Uuid
+  eligibility          CampaignLeadEligibility
+  /// Códigos dos motivos (ver o domínio das campanhas).
+  ineligibilityReasons String[]                @default([]) @map("ineligibility_reasons")
+  status               CampaignLeadStatus      @default(PENDING)
+  assignedToId         String?                 @map("assigned_to_id") @db.Uuid
+  variantId            String?                 @map("variant_id") @db.Uuid
+  /// Ordem de liberação (score na montagem; maior primeiro).
+  priority             Int                     @default(0)
+  addedAt              DateTime                @map("added_at") @db.Timestamptz(3)
+  releasedAt           DateTime?               @map("released_at") @db.Timestamptz(3)
+  enrollmentId         String?                 @map("enrollment_id") @db.Uuid
+  contactedAt          DateTime?               @map("contacted_at") @db.Timestamptz(3)
+  deliveredAt          DateTime?               @map("delivered_at") @db.Timestamptz(3)
+  repliedAt            DateTime?               @map("replied_at") @db.Timestamptz(3)
+  interestedAt         DateTime?               @map("interested_at") @db.Timestamptz(3)
+  opportunityAt        DateTime?               @map("opportunity_at") @db.Timestamptz(3)
+  convertedAt          DateTime?               @map("converted_at") @db.Timestamptz(3)
+  optedOutAt           DateTime?               @map("opted_out_at") @db.Timestamptz(3)
+
+  campaign   Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead       Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo User?              @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  variant    CampaignVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  enrollment CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@id([campaignId, leadId])
+  @@index([campaignId, status, assignedToId])
+  @@index([leadId])
+  @@map("campaign_leads")
 }

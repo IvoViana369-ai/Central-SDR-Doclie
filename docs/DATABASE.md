@@ -385,6 +385,14 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 
 **`campaign_leads`** (Fase 10): PK `(campaign_id, lead_id)`, `eligibility` (`ELIGIBLE`, `INELIGIBLE`), `ineligibility_reasons` text[], `assigned_to_id`, marcos `added_at`, `contacted_at`, `delivered_at`, `replied_at`, `interested_at`, `opportunity_at`, `converted_at`, `opted_out_at`.
 
+> **Implementação (Fase 10).** Como desenhado acima, com estes acréscimos:
+> - **`campaigns`:** status com `BUILDING` (montagem no worker) e sem `objective` obrigatório; `filter_definition` guarda a seleção da lista de leads (filtro + busca) e `filter_label` de onde ela veio (ex.: visão salva); `channel` é o canal da elegibilidade; `cadence_id` nulo = cadência padrão; `daily_contact_limit` vale **por SDR por dia**; `min_days_since_last_contact` (padrão 30) é a regra de frequência; `snapshot_at`, `build_stats` (selecionados, aptos e motivos) e `build_error` registram a montagem; `activated_at`, `completed_at` e `version` (lock otimista).
+> - **`campaign_sdrs`:** SDRs que recebem os leads da campanha.
+> - **`campaign_variants`:** abordagens em teste (A/B): letra única e abordagem única por campanha; a abordagem em uso não pode ser apagada.
+> - **`campaign_leads`:** além do desenho, `status` (`PENDING` → `RELEASED`, ou `SKIPPED` se deixou de ser apto na hora de liberar, ou `REMOVED` por uma pessoa), `variant_id`, `priority` (score na montagem), `released_at` e `enrollment_id` (a inscrição na cadência criada na liberação).
+> - **Atribuição:** `campaign_id` em `cadence_enrollments` e em `messages` (SET NULL: apagar a campanha não apaga o histórico do lead); estratégia de atribuição `CAMPAIGN` em `lead_assignments`.
+> - A campanha **não envia mensagens**: libera leads para a cadência; cada contato segue o gate e o modo de envio de sempre.
+
 **`daily_metrics`** (Fase 11): `date`, `dimension` (`GLOBAL`, `SDR`, `CITY`, `SOURCE`, `CAMPAIGN`, `APPROACH`, `CHANNEL`, `SEGMENT`), `dimension_id`, `new_leads`, `contacted`, `replied`, `interested`, `opportunities`, `converted`, `opt_outs`, `messages_out`, `messages_in`. Único `(date, dimension, dimension_id)`.
 
 **`insights`** (Fase 11+): `generated_at`, `scope`, `audience_user_id`, `type`, `text`, `data` jsonb (números que sustentam o texto), `valid_until`, `feedback`.
