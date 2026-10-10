@@ -190,6 +190,27 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 900,
   },
+  /**
+   * Base aberta do CNPJ (F9-01): todo dia confere se a Receita publicou um mês
+   * novo e completo e, se sim, começa a carga (ou retoma a interrompida).
+   */
+  registryCheck: {
+    name: 'registry.check',
+    cron: '31 6 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 600,
+    expireInSeconds: 300,
+  },
+  /**
+   * Carga de um mês da base aberta do CNPJ (dados: `{ ingestionId }`): longa,
+   * em streaming; nova tentativa retoma do arquivo onde parou.
+   */
+  registryIngest: {
+    name: 'registry.ingest',
+    retryLimit: 3,
+    retryDelaySeconds: 900,
+    expireInSeconds: 14_400,
+  },
   /** Confere a conta e o token do Instagram (diário, 04:13 em Fortaleza). */
   instagramAccountCheck: {
     name: 'instagram.account-check',

@@ -4,6 +4,8 @@ import {
   runDuplicateCheck,
   runForgottenScan,
   runOverdueScan,
+  runRegistryCheck,
+  runRegistryIngestion,
   runDuplicateScan,
   runImportCommit,
   runImportParse,
@@ -77,5 +79,7 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
       runInstagramSuggestClassification(deps, data),
     [JOBS.instagramAccountCheck.name]: async () => runInstagramAccountCheck(deps),
     [JOBS.instagramDiscovery.name]: async () => runInstagramDiscovery(deps),
+    [JOBS.registryCheck.name]: async () => runRegistryCheck(deps),
+    [JOBS.registryIngest.name]: async (data) => runRegistryIngestion(deps, data),
   };
 }
