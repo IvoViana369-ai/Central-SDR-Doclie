@@ -18,6 +18,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createCompanyRegistrySource,
   createInstagramProvider,
   createWhatsappProvider,
   createLogger,
@@ -76,6 +77,7 @@ try {
       aiLimits: aiLimitsFromEnv(env),
       whatsapp: createWhatsappProvider(env),
       instagram: createInstagramProvider(env),
+      companyRegistry: createCompanyRegistrySource(env),
     },
     {
       count,

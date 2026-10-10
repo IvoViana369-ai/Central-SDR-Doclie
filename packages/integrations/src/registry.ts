@@ -1,10 +1,12 @@
 import type { ServerEnv } from '@docline/config';
 import {
   FakeAiProvider,
+  FakeCompanyRegistrySource,
   FakeInstagramProvider,
   FakeWhatsappProvider,
   type AiLimits,
   type AiProvider,
+  type CompanyRegistrySource,
   type EmailProvider,
   type InstagramProvider,
   type Logger,
@@ -105,6 +107,23 @@ export function createInstagramProvider(env: ServerEnv): InstagramProvider | nul
         accountId: env.INSTAGRAM_BUSINESS_ACCOUNT_ID!,
         allowSends: env.APP_ENV === 'production' || env.ALLOW_REAL_SENDS,
       });
+  }
+}
+
+/**
+ * Base aberta do CNPJ (docs/INTEGRATIONS.md §9.1): `disabled` (padrão) não
+ * carrega nada; `fake` usa escritórios fictícios no layout da Receita.
+ */
+export function createCompanyRegistrySource(env: ServerEnv): CompanyRegistrySource | null {
+  switch (env.COMPANY_REGISTRY_PROVIDER) {
+    case 'disabled':
+      return null;
+    case 'fake':
+      return new FakeCompanyRegistrySource();
+    case 'receita_open_data':
+    case 'brasilapi':
+      // Barrados antes por `assertProvidersImplemented`.
+      throw new Error(`Base do CNPJ "${env.COMPANY_REGISTRY_PROVIDER}" ainda não implementada.`);
   }
 }
 

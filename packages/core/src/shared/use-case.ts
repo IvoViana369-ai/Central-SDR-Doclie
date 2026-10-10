@@ -5,6 +5,7 @@ import type { AiEffort, AiProvider } from '../ports/ai';
 import type { EmailProvider } from '../ports/email';
 import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
+import type { CompanyRegistrySource } from '../ports/company-registry';
 import type { InstagramProvider } from '../ports/instagram';
 import type { WhatsappProvider } from '../ports/whatsapp';
 import type { Actor } from './actor';
@@ -35,6 +36,8 @@ export interface CoreDeps {
   whatsapp: WhatsappProvider | null;
   /** Instagram pela API (Fase 8); `null` no modo assistido (copiar e abrir o perfil). */
   instagram: InstagramProvider | null;
+  /** Base aberta do CNPJ (Fase 9); `null` com `COMPANY_REGISTRY_PROVIDER=disabled`. */
+  companyRegistry: CompanyRegistrySource | null;
 }
 
 /** Controles de custo da IA (AI_* no ambiente; docs/AI-SDR.md §15). */

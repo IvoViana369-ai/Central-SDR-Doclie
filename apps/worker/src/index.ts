@@ -15,6 +15,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createCompanyRegistrySource,
   createInstagramProvider,
   createWhatsappProvider,
   createErrorReporter,
@@ -79,6 +80,7 @@ const deps: CoreDeps = {
   aiLimits: aiLimitsFromEnv(env),
   whatsapp: createWhatsappProvider(env),
   instagram: createInstagramProvider(env),
+  companyRegistry: createCompanyRegistrySource(env),
 };
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------

@@ -37,3 +37,4 @@ export type {
   InstagramSendResult,
   InstagramUserProfile,
 } from './instagram';
+export type { CompanyRegistrySource, RegistryFile, RegistryFileKind } from './company-registry';

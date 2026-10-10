@@ -30,6 +30,7 @@ export {
   aiLimitsFromEnv,
   assertProvidersImplemented,
   createAiProvider,
+  createCompanyRegistrySource,
   createEmailProvider,
   createInstagramProvider,
   createWhatsappProvider,

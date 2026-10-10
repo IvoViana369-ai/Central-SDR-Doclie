@@ -235,6 +235,7 @@ const deps: CoreDeps = {
   },
   whatsapp: null,
   instagram: null,
+  companyRegistry: null,
 };
 
 try {

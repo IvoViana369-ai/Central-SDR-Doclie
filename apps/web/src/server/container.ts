@@ -7,6 +7,7 @@ import {
   aiLimitsFromEnv,
   createAiProvider,
   createEmailProvider,
+  createCompanyRegistrySource,
   createInstagramProvider,
   createWhatsappProvider,
   createErrorReporter,
@@ -60,6 +61,7 @@ export function getContainer(): WebContainer {
     aiLimits: aiLimitsFromEnv(env),
     whatsapp: createWhatsappProvider(env),
     instagram: createInstagramProvider(env),
+    companyRegistry: createCompanyRegistrySource(env),
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,

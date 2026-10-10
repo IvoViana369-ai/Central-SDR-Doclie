@@ -62,6 +62,7 @@ const deps: CoreDeps = {
   },
   whatsapp: null,
   instagram: null,
+  companyRegistry: null,
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

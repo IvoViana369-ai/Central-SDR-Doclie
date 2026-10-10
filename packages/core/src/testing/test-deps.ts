@@ -1,6 +1,7 @@
 import { getTestDb } from '@docline/db/testing';
 import { FakeAiProvider } from '../modules/ai-sdr/infra/fake-provider';
 import { FakeInstagramProvider } from '../modules/instagram/infra/fake-provider';
+import { FakeCompanyRegistrySource } from '../modules/prospecting/infra/fake-source';
 import { FakeWhatsappProvider } from '../modules/whatsapp/infra/fake-provider';
 import type { Role, UserStatus } from '../modules/identity/domain/roles';
 import type { TransactionalEmail } from '../ports/email';
@@ -27,6 +28,8 @@ export function createTestDeps(options: { now?: Date } = {}) {
   const whatsapp = new FakeWhatsappProvider();
   /** Instagram simulado, no relógio dos testes (Business Discovery determinístico). */
   const instagram = new FakeInstagramProvider(() => clock.now());
+  /** Base aberta do CNPJ simulada (escritórios fictícios, CNPJs com raiz "FK"). */
+  const companyRegistry = new FakeCompanyRegistrySource();
   const noop = () => undefined;
   const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
   const deps: CoreDeps = {
@@ -58,6 +61,7 @@ export function createTestDeps(options: { now?: Date } = {}) {
     },
     whatsapp,
     instagram,
+    companyRegistry,
   };
 
   let counter = 0;
@@ -76,5 +80,5 @@ export function createTestDeps(options: { now?: Date } = {}) {
     return { user, actor };
   }
 
-  return { db, deps, sent, enqueued, ai, whatsapp, instagram, createActor };
+  return { db, deps, sent, enqueued, ai, whatsapp, instagram, companyRegistry, createActor };
 }
