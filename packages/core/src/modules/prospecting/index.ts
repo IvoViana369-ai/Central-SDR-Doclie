@@ -22,5 +22,6 @@ export {
   type ProspectingReason,
 } from './application/prospecting';
 export { getProspectingPotential } from './application/potential';
+export { getRegistryOverview, updateRegistrySettings } from './application/admin';
 export { enrichLeadFromRegistry, getLeadRegistryData } from './application/enrichment';
 export { REGISTRY_SOURCE_KEY, type RegistryView } from './infra/registry-row';

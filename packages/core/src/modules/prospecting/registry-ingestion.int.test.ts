@@ -7,10 +7,12 @@ import { createTestDeps } from '../../testing/test-deps';
 import {
   FakeCompanyRegistrySource,
   fakeCnpj,
+  getRegistryOverview,
   REGISTRY_SETTINGS_KEY,
   runRegistryCheck,
   runRegistryIngestion,
   startRegistryIngestion,
+  updateRegistrySettings,
 } from '.';
 
 type UserActor = Extract<Actor, { kind: 'user' }>;
@@ -211,6 +213,71 @@ describe('base aberta do CNPJ: carga mensal (F9-01)', () => {
     expect(
       await db.notification.count({ where: { type: 'registry.suspicious', userId: admin.id } }),
     ).toBe(1);
+  });
+
+  it('painel do ADMIN: fonte, cargas, totais e configuração (vale na próxima carga)', async () => {
+    expect(await getRegistryOverview(deps, admin, {})).toMatchObject({
+      provider: 'fake',
+      current: null,
+      total: 0,
+      ingestions: [],
+      settings: { monthlyIngestion: true, includeIndividualEntrepreneurs: false },
+    });
+    await startRegistryIngestion(deps, admin);
+    await runQueued();
+    const overview = await getRegistryOverview(deps, admin, {});
+    expect(overview).toMatchObject({
+      current: { reference: '2026-09' },
+      total: 30,
+      individuals: 0,
+      byUf: [
+        { uf: 'CE', count: 28 },
+        { uf: 'PI', count: 2 },
+      ],
+      ingestions: [
+        {
+          status: 'SUCCEEDED',
+          reference: '2026-09',
+          requestedBy: expect.any(String),
+          stats: expect.objectContaining({ kept: 31 }),
+        },
+      ],
+    });
+
+    await updateRegistrySettings(deps, admin, {
+      monthlyIngestion: false,
+      includeIndividualEntrepreneurs: true,
+      includeSecondaryCnae: false,
+    });
+    expect((await getRegistryOverview(deps, admin, {})).settings).toEqual({
+      monthlyIngestion: false,
+      includeIndividualEntrepreneurs: true,
+      includeSecondaryCnae: false,
+    });
+    expect(
+      await db.auditLog.findFirstOrThrow({ where: { action: 'registry.settings' } }),
+    ).toMatchObject({
+      changes: {
+        monthlyIngestion: [true, false],
+        includeIndividualEntrepreneurs: [false, true],
+      },
+    });
+    // Forçando, o mesmo mês é carregado de novo, já com a configuração nova.
+    expect(await startRegistryIngestion(deps, admin, { force: true })).toMatchObject({
+      status: 'started',
+    });
+    await runQueued();
+    expect((await getRegistryOverview(deps, admin, {})).individuals).toBe(1);
+
+    const manager = (await createActor('MANAGER')).actor;
+    await expect(getRegistryOverview(deps, manager, {})).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      updateRegistrySettings(deps, manager, {
+        monthlyIngestion: true,
+        includeIndividualEntrepreneurs: false,
+        includeSecondaryCnae: false,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('falhas e situações: não publicado, arquivo corrompido, carga parada, desligada, sem permissão', async () => {

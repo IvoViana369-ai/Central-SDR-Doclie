@@ -127,6 +127,16 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'instagram.settings': 'Configuração do Instagram alterada',
   'instagram.unmatched.link': 'Mensagem no Instagram de quem não era lead vinculada',
   'instagram.discovery.refresh': 'Métricas do Instagram atualizadas pela ficha',
+  'registry.ingest.start': 'Carga da base aberta do CNPJ iniciada',
+  'registry.ingest.finish': 'Carga da base aberta do CNPJ concluída',
+  'registry.ingest.fail': 'Carga da base aberta do CNPJ falhou',
+  'registry.settings': 'Configuração da base aberta do CNPJ alterada',
+  'prospecting.search': 'Busca na Prospecção',
+  'prospecting.approve': 'Resultado da Prospecção aprovado',
+  'prospecting.reject': 'Resultados da Prospecção recusados',
+  'prospecting.purge': 'Resultados da Prospecção apagados (retenção)',
+  'lead.prospecting_update': 'Lead completado pela Prospecção',
+  'lead.registry_enrich': 'Lead completado com os dados abertos do CNPJ',
 };
 
 export function auditActionLabel(action: string): string {
@@ -270,6 +280,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'lead.create': 'Criar leads',
   'lead.update': 'Editar leads',
   'lead.import': 'Importar leads',
+  'prospecting.run': 'Prospecção (base aberta do CNPJ)',
   'lead.assign': 'Distribuir leads',
   'lead.bulk': 'Ações em massa',
   'lead.export': 'Exportar leads',
