@@ -22,6 +22,8 @@ export const PERMISSIONS = [
   'lead.create',
   'lead.update',
   'lead.import',
+  /** Prospecção na base aberta do CNPJ: buscar, aprovar e recusar (Fase 9). */
+  'prospecting.run',
   'lead.assign',
   'lead.bulk',
   'lead.export',
@@ -54,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'user.read',
     'report.read',
     'lead.import',
+    'prospecting.run',
     'lead.assign',
     'lead.bulk',
     'lead.export',

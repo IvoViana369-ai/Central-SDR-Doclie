@@ -71,7 +71,7 @@ export interface PreparedLead {
 /**
  * Valida e normaliza um cadastro (campos, origem, base legal, contatos,
  * tags e responsável), com todos os erros juntos, por campo. Usado pelo
- * cadastro manual e pela importação.
+ * cadastro manual, pela importação e pela Prospecção.
  */
 export async function prepareLeadCreation(
   ctx: UseCaseContext,
@@ -153,7 +153,7 @@ export async function insertLead(
   ctx: UseCaseContext,
   prepared: PreparedLead,
   options: {
-    createdVia: 'MANUAL' | 'IMPORT';
+    createdVia: 'MANUAL' | 'IMPORT' | 'PROSPECTING';
     importBatchId?: string;
     /** Avisos de duplicidade confirmados (cadastro) ou sinalizados (importação). */
     duplicateCodes?: string[];

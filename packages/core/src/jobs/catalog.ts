@@ -211,6 +211,14 @@ export const JOBS = {
     retryDelaySeconds: 900,
     expireInSeconds: 14_400,
   },
+  /** Apaga os resultados das buscas da Prospecção com mais de 30 dias (docs/LGPD.md §12). */
+  prospectingPurge: {
+    name: 'prospecting.purge',
+    cron: '27 4 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 300,
+    expireInSeconds: 600,
+  },
   /** Confere a conta e o token do Instagram (diário, 04:13 em Fortaleza). */
   instagramAccountCheck: {
     name: 'instagram.account-check',

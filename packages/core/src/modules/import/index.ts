@@ -3,7 +3,14 @@
 export * from './contracts/schemas';
 export * from './domain/fields';
 export * from './domain/decisions';
-export { normalizeImportRow, type NormalizedImportRow, type RowIssue } from './domain/row';
+export {
+  normalizeImportRow,
+  type ImportContact,
+  type NormalizedImportRow,
+  type RowIssue,
+} from './domain/row';
+export { InFileIndex, matchRows, type RowMatch, type RowToMatch } from './infra/matching';
+export { fillEmptyLeadFields, type LeadDataOrigin } from './infra/fill-empty';
 export {
   cancelImportBatch,
   createImportBatch,

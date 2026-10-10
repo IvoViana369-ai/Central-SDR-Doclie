@@ -5,6 +5,7 @@ import {
   runForgottenScan,
   runOverdueScan,
   runRegistryCheck,
+  runProspectingPurge,
   runRegistryIngestion,
   runDuplicateScan,
   runImportCommit,
@@ -81,5 +82,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.instagramDiscovery.name]: async () => runInstagramDiscovery(deps),
     [JOBS.registryCheck.name]: async () => runRegistryCheck(deps),
     [JOBS.registryIngest.name]: async (data) => runRegistryIngestion(deps, data),
+    [JOBS.prospectingPurge.name]: async () => runProspectingPurge(deps),
   };
 }

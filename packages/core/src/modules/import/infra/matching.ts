@@ -95,6 +95,8 @@ export async function matchRows(
   hasher: IdentifierHasher,
   rows: RowToMatch[],
   inFile: InFileIndex,
+  /** Texto da repetição (a Prospecção cita o outro CNPJ, não uma linha de planilha). */
+  inFileDetail: (firstRowNumber: number) => string = (first) => `Igual à linha ${first}`,
 ): Promise<Map<string, RowMatch>> {
   const cnpjs = [...new Set(rows.flatMap((r) => (r.normalized.cnpj ? [r.normalized.cnpj] : [])))];
   const roots = [
@@ -255,7 +257,7 @@ export async function matchRows(
     // Arquivo: a primeira ocorrência vale.
     const first = inFile.firstOccurrence(n);
     if (first !== null) {
-      reasons.push({ rule: 'IN_FILE', detail: `Igual à linha ${first}` });
+      reasons.push({ rule: 'IN_FILE', detail: inFileDetail(first) });
       if (!suppressed) status = 'DUPLICATE_IN_FILE';
     } else {
       inFile.add(n, row.rowNumber);

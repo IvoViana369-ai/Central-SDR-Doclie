@@ -118,6 +118,9 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 | Ver/editar leads no escopo | ✅ | ✅ | ✅ | ✅ |
 | Criar lead manualmente | ✅ | ✅ | ✅ | ✅ |
 | Importar planilhas | ✅ | ✅ | ⚙️ (configurável) | ❌ |
+| Prospecção na base aberta do CNPJ: buscar, ver o potencial por cidade, aprovar (vira lead) e recusar (`prospecting.run`) | ✅ | ✅ | ❌ | ❌ |
+| Completar um lead com os dados abertos do CNPJ (no escopo) | ✅ | ✅ | ✅ | ✅ |
+| Carga da base aberta do CNPJ: rodar, acompanhar e configurar | ✅ | ❌ | ❌ | ❌ |
 | Atribuir/redistribuir leads | ✅ | ✅ | ❌ (só "puxar do pool") | ❌ |
 | Ações em massa | ✅ | ✅ | ⚙️ (nos próprios leads) | ❌ |
 | Criar e editar tags (aplicar tags existentes: todos) | ✅ | ✅ | ❌ | ❌ |
