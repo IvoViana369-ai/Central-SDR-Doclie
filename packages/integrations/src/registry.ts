@@ -13,6 +13,7 @@ import {
   type WhatsappProvider,
 } from '@docline/core';
 import { AnthropicAiProvider } from './ai/anthropic';
+import { ReceitaOpenDataSource } from './company-registry/receita-open-data';
 import { MetaGraphInstagramProvider } from './instagram/meta-graph';
 import { MetaCloudWhatsappProvider } from './whatsapp/meta-cloud';
 import { ConsoleEmailProvider } from './email/console';
@@ -112,7 +113,8 @@ export function createInstagramProvider(env: ServerEnv): InstagramProvider | nul
 
 /**
  * Base aberta do CNPJ (docs/INTEGRATIONS.md §9.1): `disabled` (padrão) não
- * carrega nada; `fake` usa escritórios fictícios no layout da Receita.
+ * carrega nada; `fake` usa escritórios fictícios no layout da Receita;
+ * `receita_open_data` baixa os arquivos mensais oficiais.
  */
 export function createCompanyRegistrySource(env: ServerEnv): CompanyRegistrySource | null {
   switch (env.COMPANY_REGISTRY_PROVIDER) {
@@ -121,9 +123,10 @@ export function createCompanyRegistrySource(env: ServerEnv): CompanyRegistrySour
     case 'fake':
       return new FakeCompanyRegistrySource();
     case 'receita_open_data':
-    case 'brasilapi':
-      // Barrados antes por `assertProvidersImplemented`.
-      throw new Error(`Base do CNPJ "${env.COMPANY_REGISTRY_PROVIDER}" ainda não implementada.`);
+      return new ReceitaOpenDataSource({
+        baseUrl: env.REGISTRY_BASE_URL,
+        reference: env.REGISTRY_REFERENCE ?? null,
+      });
   }
 }
 
@@ -170,6 +173,7 @@ const IMPLEMENTED = new Set([
   'anthropic',
   'meta_cloud',
   'meta_graph',
+  'receita_open_data',
 ]);
 
 export function integrationStatuses(env: ServerEnv): IntegrationStatus[] {

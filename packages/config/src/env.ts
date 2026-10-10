@@ -88,7 +88,7 @@ export const serverEnvShape = {
   INSTAGRAM_PROVIDER: withDefault(z.enum(['assisted', 'fake', 'meta_graph']), 'assisted'),
   PLACES_PROVIDER: withDefault(z.enum(['disabled', 'fake', 'google_places']), 'disabled'),
   COMPANY_REGISTRY_PROVIDER: withDefault(
-    z.enum(['disabled', 'fake', 'receita_open_data', 'brasilapi']),
+    z.enum(['disabled', 'fake', 'receita_open_data']),
     'disabled',
   ),
   AI_PROVIDER: withDefault(z.enum(['fake', 'anthropic']), 'fake'),
@@ -116,6 +116,15 @@ export const serverEnvShape = {
   // Google
   GOOGLE_API_KEY: optional(z.string()),
   GOOGLE_PLACES_DAILY_QUOTA: withDefault(z.coerce.number().int().nonnegative(), 200),
+
+  // Base aberta do CNPJ (Fase 9): pasta oficial da Receita e, se preciso, o mês fixo.
+  REGISTRY_BASE_URL: withDefault(
+    z.url(),
+    'https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj',
+  ),
+  REGISTRY_REFERENCE: optional(
+    z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'formato esperado: 2026-09'),
+  ),
 
   // IA
   AI_API_KEY: optional(z.string()),

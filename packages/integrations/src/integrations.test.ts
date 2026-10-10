@@ -9,6 +9,7 @@ import { ResendEmailProvider } from './email/resend';
 import { createLogger } from './observability/logger';
 import {
   assertProvidersImplemented,
+  createCompanyRegistrySource,
   createEmailProvider,
   createInstagramProvider,
   createWhatsappProvider,
@@ -140,6 +141,25 @@ describe('status das integrações', () => {
     expect(() => assertProvidersImplemented(env)).toThrow(
       /Google Places="google_places" \(previsto para a Fase 9\)/,
     );
+  });
+
+  it('base do CNPJ: desligada, simulada ou a pasta oficial da Receita (Fase 9)', () => {
+    expect(createCompanyRegistrySource(parseServerEnv(baseEnv))).toBeNull();
+    expect(
+      createCompanyRegistrySource(parseServerEnv({ ...baseEnv, COMPANY_REGISTRY_PROVIDER: 'fake' }))
+        ?.name,
+    ).toBe('fake');
+    const receita = parseServerEnv({ ...baseEnv, COMPANY_REGISTRY_PROVIDER: 'receita_open_data' });
+    expect(receita.REGISTRY_BASE_URL).toBe(
+      'https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj',
+    );
+    expect(() => assertProvidersImplemented(receita)).not.toThrow();
+    expect(createCompanyRegistrySource(receita)?.name).toBe('receita_open_data');
+    expect(integrationStatuses(receita).find((s) => s.key === 'companyRegistry')?.state).toBe(
+      'active',
+    );
+    expect(() => parseServerEnv({ ...baseEnv, REGISTRY_REFERENCE: '2026-13' })).toThrow();
+    expect(() => parseServerEnv({ ...baseEnv, COMPANY_REGISTRY_PROVIDER: 'brasilapi' })).toThrow();
   });
 
   it('Instagram: assistido sem provedor; simulado; API com Facebook Login ativa (Fase 8)', () => {
