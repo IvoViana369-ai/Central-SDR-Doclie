@@ -56,84 +56,93 @@ export const enrollLead = defineUseCase({
   name: 'cadence.enroll',
   access: 'lead.update',
   input: enrollLeadInput,
-  async run(ctx, input) {
-    const lead = await requireEditableLead(ctx, input.leadId, {
-      id: true,
-      status: true,
-      contactStatus: true,
-      stage: { select: { key: true, category: true } },
-    });
-    if (lead.status !== 'ACTIVE') {
-      throw new BusinessRuleError('Só leads ativos entram na cadência.');
-    }
-    if (lead.contactStatus === 'OPTED_OUT' || lead.contactStatus === 'BLOCKED') {
-      throw new BusinessRuleError(
-        'O lead está na Lista Não Contatar: não pode entrar na cadência.',
-      );
-    }
-    if (lead.stage?.category === 'WON' || lead.stage?.category === 'LOST') {
-      throw new BusinessRuleError('Lead ganho ou perdido não entra na cadência. Reabra antes.');
-    }
-    const ongoing = await findOngoingEnrollment(ctx.tx, lead.id);
-    if (ongoing) {
-      throw new ConflictError(
-        `O lead já está na cadência "${ongoing.cadence.name}". Encerre-a antes de inscrever de novo.`,
-      );
-    }
-    const cadence = await ctx.tx.cadence.findFirst({
-      where: input.cadenceId
-        ? { id: input.cadenceId, active: true }
-        : { isDefault: true, active: true },
-      include: { steps: { orderBy: { position: 'asc' } } },
-    });
-    if (!cadence) throw new NotFoundError('Cadência não encontrada ou inativa.');
-    const firstStep = cadence.steps[0];
-    if (!firstStep) throw new BusinessRuleError('A cadência não tem passos.');
-
-    const created = await ctx.tx.cadenceEnrollment.create({
-      data: {
-        leadId: lead.id,
-        cadenceId: cadence.id,
-        cadenceVersion: cadence.version,
-        status: 'ACTIVE',
-        currentStepPosition: firstStep.position,
-        enrolledById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
-        enrolledAt: ctx.now,
-      },
-    });
-    const enrollment = await ctx.tx.cadenceEnrollment.findUniqueOrThrow({
-      where: { id: created.id },
-      include: enrollmentInclude,
-    });
-    // Pronto para a abordagem: sai de "Novo", "A qualificar" ou "Qualificado".
-    await moveLeadToStageKey(ctx, lead.id, 'AWAITING_OUTREACH', {
-      source: 'CADENCE',
-      onlyFrom: ['NEW', 'TO_QUALIFY', 'QUALIFIED'],
-    });
-    const calendar = await cadenceCalendar(ctx, enrollment);
-    const plan = plannedSchedule(
-      ctx.now,
-      cadence.steps.map((s) => ({ position: s.position, dayOffset: s.dayOffset })),
-      cadence.noResponseAfterDays,
-      calendar,
-    );
-    const firstDue = plan.steps[0]!.dueAt;
-    await ctx.tx.cadenceEnrollment.update({
-      where: { id: enrollment.id },
-      data: { nextStepDueAt: firstDue },
-    });
-    await createStepTask(ctx, enrollment, firstStep, firstDue);
-    await recordCadenceEvent(ctx, lead.id, LEAD_EVENTS.cadenceEnrolled, enrollment.id, {
-      cadence: cadence.name,
-      version: cadence.version,
-    });
-    await auditLead(ctx, lead.id, 'cadence.enroll', {
-      subjectId: enrollment.id,
-      metadata: { cadence: cadence.name, version: cadence.version },
-    });
-    return { enrollmentId: enrollment.id, plan };
-  },
+  run: (ctx, input) => enrollInCadence(ctx, input.leadId, { cadenceId: input.cadenceId }),
 });
+
+/**
+ * A inscrição em si, com as mesmas regras. A liberação das campanhas (Fase 10)
+ * também passa por aqui, informando a campanha da inscrição.
+ */
+export async function enrollInCadence(
+  ctx: UseCaseContext,
+  leadId: string,
+  options: { cadenceId?: string | null; campaignId?: string | null },
+) {
+  const lead = await requireEditableLead(ctx, leadId, {
+    id: true,
+    status: true,
+    contactStatus: true,
+    stage: { select: { key: true, category: true } },
+  });
+  if (lead.status !== 'ACTIVE') {
+    throw new BusinessRuleError('Só leads ativos entram na cadência.');
+  }
+  if (lead.contactStatus === 'OPTED_OUT' || lead.contactStatus === 'BLOCKED') {
+    throw new BusinessRuleError('O lead está na Lista Não Contatar: não pode entrar na cadência.');
+  }
+  if (lead.stage?.category === 'WON' || lead.stage?.category === 'LOST') {
+    throw new BusinessRuleError('Lead ganho ou perdido não entra na cadência. Reabra antes.');
+  }
+  const ongoing = await findOngoingEnrollment(ctx.tx, lead.id);
+  if (ongoing) {
+    throw new ConflictError(
+      `O lead já está na cadência "${ongoing.cadence.name}". Encerre-a antes de inscrever de novo.`,
+    );
+  }
+  const cadence = await ctx.tx.cadence.findFirst({
+    where: options.cadenceId
+      ? { id: options.cadenceId, active: true }
+      : { isDefault: true, active: true },
+    include: { steps: { orderBy: { position: 'asc' } } },
+  });
+  if (!cadence) throw new NotFoundError('Cadência não encontrada ou inativa.');
+  const firstStep = cadence.steps[0];
+  if (!firstStep) throw new BusinessRuleError('A cadência não tem passos.');
+
+  const created = await ctx.tx.cadenceEnrollment.create({
+    data: {
+      leadId: lead.id,
+      cadenceId: cadence.id,
+      cadenceVersion: cadence.version,
+      status: 'ACTIVE',
+      currentStepPosition: firstStep.position,
+      enrolledById: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+      enrolledAt: ctx.now,
+      campaignId: options.campaignId ?? null,
+    },
+  });
+  const enrollment = await ctx.tx.cadenceEnrollment.findUniqueOrThrow({
+    where: { id: created.id },
+    include: enrollmentInclude,
+  });
+  // Pronto para a abordagem: sai de "Novo", "A qualificar" ou "Qualificado".
+  await moveLeadToStageKey(ctx, lead.id, 'AWAITING_OUTREACH', {
+    source: 'CADENCE',
+    onlyFrom: ['NEW', 'TO_QUALIFY', 'QUALIFIED'],
+  });
+  const calendar = await cadenceCalendar(ctx, enrollment);
+  const plan = plannedSchedule(
+    ctx.now,
+    cadence.steps.map((s) => ({ position: s.position, dayOffset: s.dayOffset })),
+    cadence.noResponseAfterDays,
+    calendar,
+  );
+  const firstDue = plan.steps[0]!.dueAt;
+  await ctx.tx.cadenceEnrollment.update({
+    where: { id: enrollment.id },
+    data: { nextStepDueAt: firstDue },
+  });
+  await createStepTask(ctx, enrollment, firstStep, firstDue);
+  await recordCadenceEvent(ctx, lead.id, LEAD_EVENTS.cadenceEnrolled, enrollment.id, {
+    cadence: cadence.name,
+    version: cadence.version,
+  });
+  await auditLead(ctx, lead.id, 'cadence.enroll', {
+    subjectId: enrollment.id,
+    metadata: { cadence: cadence.name, version: cadence.version },
+  });
+  return { enrollmentId: enrollment.id, plan };
+}
 
 /** Pausa a cadência do lead (com data de retomada opcional). */
 export const pauseCadence = defineUseCase({

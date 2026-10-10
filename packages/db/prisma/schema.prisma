@@ -2707,7 +2707,8 @@ model Campaign {
   buildStats              Json?          @map("build_stats")
   buildError              String?        @map("build_error")
   activatedAt             DateTime?      @map("activated_at") @db.Timestamptz(3)
-  /// Fim da atribuição de contatos e respostas (conclusão).
+  /// Conclusão. A atribuição do funil não depende dela: vale a janela de cada
+  /// liberação (90 dias ou até o lead ser liberado por outra campanha).
   completedAt             DateTime?      @map("completed_at") @db.Timestamptz(3)
   /// Lock otimista da edição.
   version                 Int            @default(1)

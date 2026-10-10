@@ -44,6 +44,7 @@ export const LEAD_EVENTS = {
   opportunityAccepted: 'opportunity.accepted',
   opportunityWon: 'opportunity.won',
   opportunityLost: 'opportunity.lost',
+  campaignReleased: 'campaign.released',
 } as const;
 
 export type LeadEventType = (typeof LEAD_EVENTS)[keyof typeof LEAD_EVENTS];
@@ -89,4 +90,5 @@ export const LEAD_EVENT_LABELS: Record<LeadEventType, string> = {
   'opportunity.accepted': 'Transferência aceita pelo Comercial',
   'opportunity.won': 'Oportunidade ganha',
   'opportunity.lost': 'Oportunidade perdida',
+  'campaign.released': 'Liberado por uma campanha',
 };

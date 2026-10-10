@@ -281,6 +281,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'lead.update': 'Editar leads',
   'lead.import': 'Importar leads',
   'prospecting.run': 'Prospecção (base aberta do CNPJ)',
+  'campaign.manage': 'Campanhas (montar, ativar e acompanhar)',
   'lead.assign': 'Distribuir leads',
   'lead.bulk': 'Ações em massa',
   'lead.export': 'Exportar leads',

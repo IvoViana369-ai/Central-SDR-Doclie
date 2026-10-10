@@ -1,6 +1,8 @@
 import {
   JOBS,
   runCadenceTick,
+  runCampaignBuild,
+  runCampaignTick,
   runDuplicateCheck,
   runForgottenScan,
   runOverdueScan,
@@ -83,5 +85,7 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.registryCheck.name]: async () => runRegistryCheck(deps),
     [JOBS.registryIngest.name]: async (data) => runRegistryIngestion(deps, data),
     [JOBS.prospectingPurge.name]: async () => runProspectingPurge(deps),
+    [JOBS.campaignBuild.name]: async (data) => runCampaignBuild(deps, data),
+    [JOBS.campaignTick.name]: async (data) => runCampaignTick(deps, data ?? {}),
   };
 }

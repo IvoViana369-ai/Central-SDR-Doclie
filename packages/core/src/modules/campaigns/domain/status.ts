@@ -31,7 +31,8 @@ export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
 export const CAMPAIGN_LEAD_STATUS_LABELS: Record<CampaignLeadStatus, string> = {
   PENDING: 'Aguardando liberação',
   RELEASED: 'Na fila',
-  SKIPPED: 'Pulado na liberação',
+  // Inapto na montagem ou na hora de liberar (com os motivos).
+  SKIPPED: 'Não liberado',
   REMOVED: 'Retirado',
 };
 

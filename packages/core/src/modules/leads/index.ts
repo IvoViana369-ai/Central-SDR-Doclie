@@ -51,6 +51,7 @@ export {
   setChannelPermission,
 } from './application/compliance';
 export * from './contracts/filters';
+export { compileLeadSelection } from './infra/filters';
 export { countLeads, countSelection, searchLeads, selectionWhere } from './application/search';
 export { BULK_LIMIT, bulkLeads } from './application/bulk';
 export { EXPORT_LIMIT, EXPORTS_PER_DAY, exportLeads } from './application/export';

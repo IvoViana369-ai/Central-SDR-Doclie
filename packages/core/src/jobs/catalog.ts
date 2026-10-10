@@ -227,6 +227,28 @@ export const JOBS = {
     retryDelaySeconds: 600,
     expireInSeconds: 120,
   },
+  /**
+   * Monta a campanha (dados: `{ campaignId }`): retrato do filtro,
+   * elegibilidade com motivos, distribuição entre SDRs e variantes do A/B.
+   */
+  campaignBuild: {
+    name: 'campaign.build',
+    retryLimit: 1,
+    retryDelaySeconds: 60,
+    expireInSeconds: 1800,
+  },
+  /**
+   * Campanhas (de hora em hora; dados opcionais `{ campaignId }` logo após
+   * ativar): conclui as vencidas, libera o lote do dia de cada SDR para a
+   * cadência e atualiza os marcos do funil. Nunca envia mensagem.
+   */
+  campaignTick: {
+    name: 'campaign.tick',
+    cron: '11 * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 1800,
+  },
   /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
   webhooksPurge: {
     name: 'webhooks.purge',

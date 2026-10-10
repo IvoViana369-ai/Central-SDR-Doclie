@@ -6,6 +6,7 @@ export * from './domain';
 export * from './contracts/schemas';
 export { advanceEnrollment, cadenceStageKeys } from './infra/engine';
 export {
+  enrollInCadence,
   enrollLead,
   getLeadCadence,
   pauseCadence,

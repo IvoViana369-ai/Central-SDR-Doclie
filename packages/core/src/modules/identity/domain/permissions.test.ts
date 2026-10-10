@@ -19,6 +19,7 @@ const EXPECTED: Record<Permission, Role[]> = {
   'lead.update': ['ADMIN', 'MANAGER', 'SDR', 'SALES'],
   'lead.import': ['ADMIN', 'MANAGER'],
   'prospecting.run': ['ADMIN', 'MANAGER'],
+  'campaign.manage': ['ADMIN', 'MANAGER'],
   'lead.assign': ['ADMIN', 'MANAGER'],
   'lead.bulk': ['ADMIN', 'MANAGER'],
   'lead.export': ['ADMIN', 'MANAGER'],

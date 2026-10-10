@@ -26,6 +26,8 @@ export const PERMISSIONS = [
   'prospecting.run',
   'lead.assign',
   'lead.bulk',
+  /** Campanhas: criar, montar, ativar, pausar e ver o funil e o A/B (Fase 10). */
+  'campaign.manage',
   'lead.export',
   'lead.anonymize',
   'tag.manage',
@@ -59,6 +61,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'prospecting.run',
     'lead.assign',
     'lead.bulk',
+    'campaign.manage',
     'lead.export',
     'tag.manage',
     'duplicate.decide',

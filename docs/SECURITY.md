@@ -123,6 +123,7 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 | Carga da base aberta do CNPJ: rodar, acompanhar e configurar | ✅ | ❌ | ❌ | ❌ |
 | Atribuir/redistribuir leads | ✅ | ✅ | ❌ (só "puxar do pool") | ❌ |
 | Ações em massa | ✅ | ✅ | ⚙️ (nos próprios leads) | ❌ |
+| Campanhas: criar, montar, ativar, pausar, concluir e ver o funil e o A/B (`campaign.manage`); a campanha nunca envia mensagem | ✅ | ✅ | ❌ (vê na ficha a campanha e a abordagem do lead) | ❌ |
 | Criar e editar tags (aplicar tags existentes: todos) | ✅ | ✅ | ❌ | ❌ |
 | Decidir duplicados (mesclar) | ✅ | ✅ | ⚙️ | ❌ |
 | Gerar e aprovar mensagens com IA; pedir sugestão de classificação | ✅ | ✅ | ✅ | ✅ |
