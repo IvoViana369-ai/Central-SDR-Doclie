@@ -1,0 +1,113 @@
+# Blueprint da Render — ambiente de STAGING (docs/ARCHITECTURE.md §14).
+#
+# Antes de aplicar:
+# - Região: Virginia, decidida em 2026-10-08 (ARCHITECTURE ADR-019). A Render
+#   não tem região no Brasil e não muda a região de um serviço existente.
+#   Hospedar nos EUA é transferência internacional (LGPD §16): só dados
+#   fictícios até a validação jurídica.
+# - Planos: confira os nomes e preços vigentes na Render. O pre-deploy
+#   (migrações) exige instância paga.
+# - Variáveis "sync: false" são pedidas no painel ao criar o Blueprint.
+#   ENCRYPTION_KEY e SUPPRESSION_HASH_PEPPER: gere com `openssl rand -base64 32`
+#   e guarde o pepper em local seguro (não pode ser rotacionado — SECURITY §5).
+# - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
+#   serviço web:  pnpm admin:create --email <email> --name "<nome>"
+
+databases:
+  - name: docline-sdr-staging-db
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: '17'
+    databaseName: docline_sdr
+    user: docline
+    ipAllowList: [] # sem acesso externo: só os serviços da Render conectam
+
+envVarGroups:
+  - name: docline-sdr-staging
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: APP_URL
+        sync: false # ex.: https://docline-sdr-staging-web.onrender.com
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: SUPPRESSION_HASH_PEPPER
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      # Proxies da Render à frente do serviço (IPs/CIDRs). A Render ACRESCENTA ao
+      # X-Forwarded-For enviado pelo cliente (não substitui): sem esta lista, o
+      # rate limit de login vira um contador único para todos. Definir no
+      # primeiro deploy, após conferir o cabeçalho recebido (SECURITY §12).
+      - key: TRUSTED_PROXIES
+        sync: false
+      - key: JOB_QUEUE_SCHEMA
+        value: pgboss
+      - key: EMAIL_PROVIDER
+        value: smtp
+      - key: SMTP_URL
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SENTRY_DSN
+        sync: false # opcional: DSN do Sentry (erros do web e do worker, sem dados pessoais)
+      # 2FA obrigatória para ADMIN/GESTOR (o padrão; "reminder" é recusado aqui).
+      - key: TWO_FACTOR_ENFORCEMENT
+        value: required
+      # Integrações externas ficam desligadas/assistidas até a ativação.
+      # WhatsApp pela API (Fase 7): para homologar sem a Meta, use `fake` e
+      # defina META_APP_SECRET e META_WEBHOOK_VERIFY_TOKEN de teste; para a
+      # conta real (`meta_cloud`), siga docs/INTEGRATIONS.md §16.1 e cadastre
+      # os segredos da Meta no painel (nunca aqui).
+      - key: WHATSAPP_PROVIDER
+        value: assisted
+      # Instagram pela API (Fase 8): `fake` para homologar (mesmos segredos de
+      # teste do webhook); para a conta real (`meta_graph`), siga
+      # docs/INTEGRATIONS.md §16.2 e cadastre INSTAGRAM_PAGE_ACCESS_TOKEN,
+      # INSTAGRAM_BUSINESS_ACCOUNT_ID e FACEBOOK_PAGE_ID no painel.
+      - key: INSTAGRAM_PROVIDER
+        value: assisted
+      - key: AI_PROVIDER
+        value: fake
+      - key: PLACES_PROVIDER
+        value: disabled
+      # Base aberta do CNPJ (Fase 9): `fake` para homologar a Prospecção com
+      # escritórios fictícios; para a base real (`receita_open_data`), siga
+      # docs/INTEGRATIONS.md §16.3 (parecer jurídico e formato conferido).
+      - key: COMPANY_REGISTRY_PROVIDER
+        value: disabled
+
+services:
+  - type: web
+    name: docline-sdr-staging-web
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-web.sh
+    preDeployCommand: pnpm db:deploy && pnpm db:seed
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging
+
+  - type: worker
+    name: docline-sdr-staging-worker
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-worker.sh
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging

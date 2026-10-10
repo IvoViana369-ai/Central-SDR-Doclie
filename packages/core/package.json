@@ -1,0 +1,40 @@
+{
+  "name": "@docline/core",
+  "version": "0.11.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./password-policy": "./src/modules/identity/domain/password-policy.ts",
+    "./roles": "./src/modules/identity/domain/roles.ts",
+    "./permissions": "./src/modules/identity/domain/permissions.ts",
+    "./normalization": "./src/modules/normalization/domain/index.ts",
+    "./leads-domain": "./src/modules/leads/domain/index.ts",
+    "./compliance-domain": "./src/modules/compliance/domain/index.ts",
+    "./import-domain": "./src/modules/import/domain/index.ts",
+    "./dedup-domain": "./src/modules/dedup/domain/index.ts",
+    "./pipeline-domain": "./src/modules/pipeline/domain/index.ts",
+    "./scoring-domain": "./src/modules/scoring/domain/index.ts",
+    "./settings-domain": "./src/modules/settings/domain/index.ts",
+    "./tasks-domain": "./src/modules/tasks/domain/index.ts",
+    "./ai-domain": "./src/modules/ai-sdr/domain/index.ts",
+    "./ai-eval": "./src/modules/ai-sdr/eval/index.ts",
+    "./analytics-domain": "./src/modules/analytics/domain/index.ts",
+    "./engagement-domain": "./src/modules/engagement/domain/index.ts",
+    "./cadence-domain": "./src/modules/cadence/domain/index.ts",
+    "./messaging-domain": "./src/modules/messaging/domain/index.ts",
+    "./opportunities-domain": "./src/modules/opportunities/domain/index.ts",
+    "./whatsapp-domain": "./src/modules/whatsapp/domain/index.ts",
+    "./instagram-domain": "./src/modules/instagram/domain/index.ts",
+    "./prospecting-domain": "./src/modules/prospecting/domain/index.ts",
+    "./campaigns-domain": "./src/modules/campaigns/domain/index.ts",
+    "./dev": "./src/dev/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@docline/db": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

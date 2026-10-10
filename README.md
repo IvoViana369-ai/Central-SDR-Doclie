@@ -2,8 +2,22 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fase 0 concluída (descoberta, arquitetura e planejamento). Aguardando aprovação para iniciar a Fase 1.**
-> Ainda não há código de aplicação neste repositório: só a documentação de arquitetura, o modelo de dados, o plano e o modelo de variáveis de ambiente.
+> **Status: Fases 1 a 11 concluídas — MVP, WhatsApp e Instagram oficiais, Prospecção pela base aberta do CNPJ, Campanhas e Analytics prontos no código.**
+> - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
+> - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
+> - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
+> - **Fase 4 (pipeline SDR):** Kanban com as 17 etapas, regras de movimentação, motivo de perda e histórico com duração; lista por etapa no celular; lead scoring explicável, com versões, simulação e cidades prioritárias.
+> - **Fase 5 (fila e follow-ups):** Minha Fila SDR com prioridade e ações rápidas; cadência D0/D2/D5/D10 configurável, em dias úteis e com parada automática; contato assistido (`wa.me`, Instagram, e-mail, `tel:`) com confirmação de envio; registro de respostas com detecção de opt-out; limites de horário e de frequência; transferência ao Comercial com checklist; avisos no app.
+> - **Fase 6 (IA e fechamento do MVP):** "Gerar com IA" no contato assistido, com avisos, edição, aprovação humana e envio assistido; guardrails e cotas; sugestão de classificação de respostas; base de conhecimento, abordagens e custos da IA; avaliação offline com rubrica; dashboard e relatórios com exportação; teste de desempenho com 100 mil leads. A IA real fica desligada (`AI_PROVIDER=fake`) até a decisão da Docline.
+> - **Fase 7 (WhatsApp oficial):** envio pela WhatsApp Cloud API (modelos aprovados e texto livre na janela de 24 h), status de entrega e leitura e respostas por webhook assinado, opt-in por número com evidência, tela Conversas com os números sem lead, modelos ligados às abordagens, saúde do número e custo estimado. Sem reenvio automático e sem criar leads sozinho. A API fica desligada (`WHATSAPP_PROVIDER=assisted`) até a conta da Meta e o parecer jurídico; para homologar, `fake` + `pnpm whatsapp:simulate`.
+> - **Fase 8 (Instagram oficial):** mensagens e comentários da conta da Docline por webhook assinado, resposta pela API só a quem escreveu (24 h) e resposta privada a comentários (uma por comentário, até 7 dias), ecos do que a equipe respondeu pelo app, "Quem não é lead" em Conversas e métricas públicas dos perfis (Business Discovery) para o critério "Instagram ativo" do score. O primeiro contato continua assistido. Desligada (`INSTAGRAM_PROVIDER=assisted`) até o App Review da Meta e o parecer jurídico; para homologar, `fake` + `pnpm instagram:simulate`.
+> - **Fase 9 (Prospecção):** cópia mensal dos escritórios de contabilidade ativos da base aberta do CNPJ (só os arquivos oficiais da Receita, lidos em streaming, com retomada); tela Prospecção com busca por UF, cidades, atividade e quantidade, comparação com a base e a Lista Não Contatar e aprovação humana (nada vira lead sozinho); potencial por cidade; "Completar com dados abertos" na ficha. Google Places fica para depois do parecer jurídico.
+> - **Fase 10 (Campanhas):** campanha a partir do filtro da lista de leads (ou de uma visão salva), com retrato congelado, elegibilidade com motivos (Lista Não Contatar, base legal, contato no canal, etapa, cadência ou outra campanha em andamento, contato recente, responsável de fora), distribuição entre os SDRs e liberação diária para a cadência, com limite por SDR. **A campanha não envia mensagens:** o SDR recebe as tarefas na Minha Fila, com a abordagem sugerida. Funil por janela de atribuição e teste A/B de abordagens que nunca declara vencedora sozinho.
+> - **Fase 11 (Analytics):** indicadores recalculados de hora em hora (rollups diários e fatos por lead); relatórios de conversão por cidade, UF, segmento, origem, responsável, quem fez o 1º contato, campanha, abordagem e canal, desempenho por SDR, evolução mensal e WhatsApp × Instagram, com intervalo de confiança e aviso de amostra insuficiente em toda taxa; insights da carteira no dashboard (números do banco, texto da IA conferido); distribuição automática do pool por território ou rodízio, com ausência e limite de leads por SDR (desligada por padrão).
+>
+> **Pendências para o piloto:** staging na Render (conta e credenciais da Docline), DSN do Sentry, validação jurídica, transferência internacional e decisão sobre ligar a IA. O caminho até o go-live está em [docs/GO-LIVE.md](docs/GO-LIVE.md).
+>
+> **Próximo:** UAT e go-live do piloto no modo assistido; ativações que dependem da Meta e do jurídico (WhatsApp, Instagram e base aberta do CNPJ: marcos M5, M5b e M6); depois, Fase 12 (Integrações Docline). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -41,22 +55,27 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Portas e adaptadores; WhatsApp, Instagram, Google, dados abertos CNPJ, IA, CRM |
 | [docs/LGPD.md](docs/LGPD.md) | Bases legais, opt-in × base legal, opt-out, direitos dos titulares, retenção, incidentes |
 | [docs/SECURITY.md](docs/SECURITY.md) | Autenticação, RBAC, segredos, uploads, webhooks, IA, auditoria, checklist por fase |
-| [.env.example](.env.example) | Variáveis de ambiente previstas (sem segredos) |
+| [docs/GO-LIVE.md](docs/GO-LIVE.md) | Roteiro de UAT, treinamento, importação da base real, go-live do piloto e volta à planilha |
+| [.env.example](.env.example) | Variáveis de ambiente (sem segredos) |
+| [CHANGELOG.md](CHANGELOG.md) | O que foi entregue em cada fase |
 
-## Resumo das decisões
+## Stack e decisões
 
-| Tema | Decisão |
-|---|---|
-| Arquitetura | **Monólito modular** em TypeScript (monorepo pnpm): `apps/web` (Next.js: UI + API `/api/v1`) + `apps/worker` (jobs) + `packages/core` (domínio) + `packages/integrations` (adaptadores) + `packages/db` (Prisma) |
-| Banco | **PostgreSQL** + Prisma; `pg_trgm` para similaridade; eventos append-only para timeline e analytics |
-| Filas | **pg-boss** (no próprio PostgreSQL). Redis/BullMQ só se necessário no futuro |
-| Frontend | Next.js + React + Tailwind + shadcn/ui; responsivo |
-| Autenticação | Better Auth + RBAC próprio (Administrador, Gestor, SDR, Comercial) |
-| IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória |
-| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API na Fase 7, só com opt-in |
-| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta e Google Places apenas como apoio (Fase 9, após parecer jurídico) |
-| Deploy | Docker; Render (web + worker + Postgres), com a região de hospedagem ainda por decidir |
-| n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio |
+| Tema | Decisão | Versão em uso |
+|---|---|---|
+| Arquitetura | **Monólito modular** em TypeScript (monorepo pnpm): `apps/web` (UI + API `/api/v1`) + `apps/worker` (jobs) + `packages/core` (domínio) + `packages/integrations` (adaptadores) + `packages/db` (Prisma) + `packages/config` (ambiente) | Node 22, pnpm 10, TypeScript 6.0 |
+| Banco | **PostgreSQL** + Prisma (adaptador `pg`); `pg_trgm` para similaridade; auditoria append-only | PostgreSQL 16/17, Prisma 7.10 |
+| Filas | **pg-boss** no próprio PostgreSQL, com enfileiramento na mesma transação do dado | pg-boss 12 |
+| Frontend | Next.js (App Router) + Tailwind + componentes próprios sobre Radix; responsivo, tema claro/escuro | Next.js 16.3, React 19.3, Tailwind 4 |
+| Autenticação | Better Auth (e-mail/senha, sem cadastro público) + RBAC próprio (Administrador, Gestor, SDR, Comercial) | Better Auth 1.7 |
+| IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória | Fase 6 |
+| Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API (Graph API direta, versão fixada) na Fase 7, só com opt-in ou janela aberta; Instagram API (Facebook Login) na Fase 8, só respondendo a quem escreveu ou comentou | Fases 5–8 |
+| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta (cópia local mensal, arquivos oficiais da Receita); Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
+| Qualidade | ESLint (com regras de fronteira entre módulos), Prettier, Vitest (unitários + integração com Postgres real), Playwright (E2E) | ESLint 10, Vitest 5, Playwright 1.63 |
+| Deploy | Imagem Docker única (web e worker) na **Render, região Virginia** (decisão de 2026-10-08) | `Dockerfile`, `render.yaml` |
+| n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio | Fase 12 |
+
+Justificativas e alternativas em [ARCHITECTURE §4](docs/ARCHITECTURE.md#4-análise-da-stack) e nos [ADRs](docs/ARCHITECTURE.md#15-registro-de-decisões-adrs).
 
 ## Principais riscos
 
@@ -68,16 +87,17 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 
 Registro completo em [ROADMAP §6](docs/ROADMAP.md#6-registro-de-riscos).
 
-## Estrutura planejada do repositório
+## Estrutura do repositório
 
 ```
-apps/web            Next.js — UI, API /api/v1, webhooks
-apps/worker         Jobs (importação, dedup, score, cadência, webhooks, retenção)
-packages/core       Domínio e casos de uso (sem dependência de framework)
-packages/db         Prisma: schema, migrações, seeds
-packages/integrations  Adaptadores: whatsapp, instagram, google, enrichment, ai, crm, email
-packages/config     Configurações compartilhadas (TS, lint, schema de env)
-docs/               Documentação do projeto
+apps/web               Next.js — telas, API /api/v1, autenticação, E2E (e2e/)
+apps/worker            Jobs pg-boss (heartbeat, importação, deduplicação; depois cadência…)
+packages/core          Domínio: casos de uso, RBAC, auditoria, portas (sem framework)
+packages/db            Prisma: schema, migrações, seed de referência (UFs, municípios, feriados)
+packages/integrations  Adaptadores: logger, e-mail, fila pg-boss, registro de provedores
+packages/config        Validação das variáveis de ambiente (Zod)
+docker/                Scripts de inicialização dos containers
+docs/                  Documentação do projeto
 ```
 
 Detalhes em [ARCHITECTURE §11](docs/ARCHITECTURE.md#11-estrutura-de-pastas).
@@ -109,12 +129,68 @@ Detalhes em [ARCHITECTURE §11](docs/ARCHITECTURE.md#11-estrutura-de-pastas).
 | Modo assistido | `MessageMode.ASSISTED` | O sistema prepara; o humano envia no app; o sistema registra |
 | Transferência | `Opportunity` (handoff) | Passagem do lead qualificado ao Comercial |
 
-## Como rodar
+## Como rodar localmente
 
-Disponível a partir da **Fase 1** (fundação técnica). O plano de setup local (Docker Compose com PostgreSQL) está em [ARCHITECTURE §14](docs/ARCHITECTURE.md#14-implantação-ambientes-e-custos).
+**Pré-requisitos:** Node.js 22 (`.nvmrc`), pnpm 10 (`npm i -g pnpm@10.28.0` ou `corepack enable`) e Docker (ou um PostgreSQL 16+ local).
+
+```bash
+# 1. Variáveis de ambiente
+cp .env.example .env
+# Gere os segredos e cole no .env: BETTER_AUTH_SECRET, ENCRYPTION_KEY, SUPPRESSION_HASH_PEPPER
+openssl rand -base64 32
+
+# 2. PostgreSQL 17 + Mailpit (e-mails de teste em http://localhost:8025)
+docker compose up -d
+# Para ver os convites no Mailpit, use no .env: EMAIL_PROVIDER=smtp
+
+# 3. Dependências (gera o cliente Prisma) e banco
+pnpm install
+pnpm db:migrate
+pnpm db:seed
+pnpm db:seed:dev   # opcional: ~2.000 empresas fictícias para testar a interface
+
+# 4. Primeiro administrador: imprime o link para definir a senha
+pnpm admin:create --email voce@docline.com.br --name "Seu Nome"
+
+# 5. Web (http://localhost:3000) + worker
+pnpm dev
+
+# 6. Opcional: Prospecção com a base do CNPJ simulada (COMPANY_REGISTRY_PROVIDER=fake no .env):
+#    Configurações → Dados abertos do CNPJ → "Rodar a carga agora" (o worker carrega os escritórios fictícios)
+```
+
+### Comandos úteis
+
+| Comando | O que faz |
+|---|---|
+| `pnpm dev` | Web e worker em modo desenvolvimento |
+| `pnpm check` | Lint + formatação + tipos + testes unitários |
+| `pnpm test` / `pnpm test:int` | Testes unitários / de integração (banco `*_test`, recriado a cada execução) |
+| `pnpm --filter @docline/web build && pnpm test:e2e` | Build de produção + jornadas E2E (Playwright) |
+| `pnpm db:migrate` / `pnpm db:deploy` | Criar/aplicar migrações (dev) / aplicar migrações (deploy) |
+| `pnpm db:check` | Falha se o schema mudou sem migração |
+| `pnpm db:seed` | Dados de referência (idempotente) |
+| `pnpm db:seed:dev` | ~2.000 empresas fictícias com duplicados propositais (só `APP_ENV=development`; não roda duas vezes) |
+| `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
+| `pnpm ai:eval` | Avaliação offline da IA com o conjunto fictício (provedor falso por padrão; real só com `--yes`) — [AI-SDR §14](docs/AI-SDR.md#14-avaliação-de-qualidade) |
+| `pnpm whatsapp:simulate` | Simula webhooks da Meta contra o servidor local (`resposta --de … --texto …`, `status --status delivered`); só com `WHATSAPP_PROVIDER=fake` — [INTEGRATIONS §6.2](docs/INTEGRATIONS.md#6-whatsapp) |
+| `pnpm instagram:simulate` | Simula webhooks do Instagram contra o servidor local (`mensagem --de @perfil --texto …`, `comentario`, `eco`, `visto`); só com `INSTAGRAM_PROVIDER=fake` — [INTEGRATIONS §7.2](docs/INTEGRATIONS.md#7-instagram) |
+| `pnpm perf:100k` | Teste de desempenho com 100 mil leads fictícios num banco próprio (`DATABASE_URL_PERF`, nome terminado em `_perf`, recriado do zero) — [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-escalabilidade) |
+
+Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TEST` e se recusam a rodar se o nome não terminar em `_test`.
+
+### Deploy
+
+- **Imagem:** `Dockerfile` (uma imagem; o comando define o papel: `docker/start-web.sh` ou `docker/start-worker.sh`).
+- **Render (staging):** `render.yaml` cria PostgreSQL, web (com health check em `/api/health` e migrações no pre-deploy) e worker. Instruções no topo do arquivo.
+- **CI:** `.github/workflows/ci.yml` roda lint, tipos, testes (unitários, integração, E2E), checagem de migrações, auditoria de dependências, varredura de segredos e build da imagem.
 
 ## Próximo passo recomendado
 
-1. **Revisar e aprovar** esta Fase 0, respondendo às [questões em aberto](docs/ARCHITECTURE.md#16-questões-em-aberto), principalmente hospedagem, base existente e etapas de follow-up.
-2. **Iniciar em paralelo, já:** verificação da empresa na Meta (WABA) e validação jurídica LGPD. São os itens com maior prazo externo.
-3. **Autorizar a Fase 1 — Fundação técnica** ([backlog F1](docs/ROADMAP.md#fase-1--fundação-técnica)).
+1. **Piloto (F6-11):** seguir o [roteiro de go-live](docs/GO-LIVE.md): staging na Render, validação jurídica, UAT com 1–2 SDRs e o gestor, treinamento, importação da base real em produção e decisão sobre ligar a IA real (com a avaliação offline e o DPA do provedor). O piloto começa no modo assistido.
+2. **WhatsApp pela API (marco M5):** a Docline inicia já a verificação da empresa na Meta, a WABA, o número dedicado e os modelos de prospecção; para ligar, seguir o [checklist de ativação](docs/INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api) e a [homologação W1–W7](docs/GO-LIVE.md#11-whatsapp-pela-api-marco-m5).
+3. **Base aberta do CNPJ (marco M6):** parecer jurídico (inclusive sobre empresário individual/MEI) e conferência do formato da publicação; para ligar, seguir o [checklist de ativação](docs/INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj) e a [homologação P1–P7](docs/GO-LIVE.md#13-base-aberta-do-cnpj-e-prospecção-marco-m6).
+4. **Campanhas no piloto:** depois das primeiras semanas no modo assistido, homologar as campanhas ([roteiro C1–C8](docs/GO-LIVE.md#14-campanhas)) e começar com um limite diário que caiba no dia real de cada SDR.
+5. **Relatórios e distribuição no piloto:** usar os relatórios e os insights desde o início (com poucas semanas, a maioria das taxas aparece como "amostra insuficiente"); ligar a distribuição automática só com os territórios cadastrados e o limite de leads combinado ([roteiro A1–A8](docs/GO-LIVE.md#15-relatórios-insights-e-distribuição-automática)).
+6. **Aprovar a Fase 12 — Integrações Docline** ([backlog F12](docs/ROADMAP.md#fase-12--integrações-docline)): chaves de API com escopos, webhooks de saída assinados, sincronização com o CRM Docline e a Lista Não Contatar compartilhada (depende das APIs da Docline).
+7. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

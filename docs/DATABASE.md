@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** Fase 0 (modelo conceitual para aprovação) · **Banco:** PostgreSQL · **ORM:** Prisma
+> **Status:** modelo aprovado; tabelas das Fases 1 a 11 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-7)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -39,7 +39,7 @@
 
 | Domínio | Tabelas |
 |---|---|
-| Identidade e equipe | `users`, `teams`, `user_territories`, `user_availability` (+ tabelas do Better Auth: `sessions`, `accounts`, `verifications`) |
+| Identidade e equipe | `users`, `teams`, `invitations`, `user_territories`, `user_availability` (+ tabelas do Better Auth: `sessions`, `accounts`, `verifications`, `rate_limits`) |
 | Referência | `states`, `municipalities`, `holidays`, `priority_cities`, `lead_sources`, `segments`, `loss_reasons` |
 | Núcleo de leads | `leads`, `lead_people`, `contact_points`, `lead_origins`, `tags`, `lead_tags`, `lead_notes`, `lead_assignments` |
 | Timeline e auditoria | `lead_events`, `audit_logs` |
@@ -127,6 +127,8 @@ erDiagram
 ```mermaid
 erDiagram
   TEAMS ||--o{ USERS : "agrupa"
+  USERS ||--o{ INVITATIONS : "recebe"
+  USERS ||--o{ SESSIONS : "abre"
   USERS ||--o{ USER_TERRITORIES : "atende"
   USERS ||--o{ AUDIT_LOGS : "autor"
   LEADS ||--o{ CONTACT_PERMISSIONS : "base legal por canal"
@@ -156,7 +158,9 @@ erDiagram
 | timezone | text | padrão `America/Fortaleza` |
 | last_login_at | timestamptz | |
 
-**`teams`** (Fase 1): `name`, `manager_id`.
+**`teams`** (Fase 1): `name` (único), `manager_id`.
+**`invitations`** (Fase 1): convite de acesso. `user_id`, `token_hash` (SHA-256 do token; o token em claro só existe no link enviado), `expires_at` (72 h), `used_at`, `revoked_at` (reenvio invalida o anterior), `created_by_id`.
+**Tabelas do Better Auth** (Fase 1), nomes em `snake_case` com IDs UUIDv7 gerados pela aplicação: `sessions` (`token` único, `expires_at`, IP, user agent), `accounts` (credencial `providerId = credential`, `password` só com hash; único `(provider_id, account_id)`), `verifications` (tokens de redefinição de senha) e `rate_limits` (limites de tentativa persistidos, válidos entre instâncias).
 **`user_territories`** (Fase 2, estrutura): `user_id`, `state_uf`, `municipality_code` (nulo = UF inteira), `priority`.
 **`user_availability`** (futura): `user_id`, `available`, `max_active_leads`, `max_daily_contacts`, `out_of_office_until`.
 
@@ -381,9 +385,24 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 
 **`campaign_leads`** (Fase 10): PK `(campaign_id, lead_id)`, `eligibility` (`ELIGIBLE`, `INELIGIBLE`), `ineligibility_reasons` text[], `assigned_to_id`, marcos `added_at`, `contacted_at`, `delivered_at`, `replied_at`, `interested_at`, `opportunity_at`, `converted_at`, `opted_out_at`.
 
+> **Implementação (Fase 10).** Como desenhado acima, com estes acréscimos:
+> - **`campaigns`:** status com `BUILDING` (montagem no worker) e sem `objective` obrigatório; `filter_definition` guarda a seleção da lista de leads (filtro + busca) e `filter_label` de onde ela veio (ex.: visão salva); `channel` é o canal da elegibilidade; `cadence_id` nulo = cadência padrão; `daily_contact_limit` vale **por SDR por dia**; `min_days_since_last_contact` (padrão 30) é a regra de frequência; `snapshot_at`, `build_stats` (selecionados, aptos e motivos) e `build_error` registram a montagem; `activated_at`, `completed_at` e `version` (lock otimista).
+> - **`campaign_sdrs`:** SDRs que recebem os leads da campanha.
+> - **`campaign_variants`:** abordagens em teste (A/B): letra única e abordagem única por campanha; a abordagem em uso não pode ser apagada.
+> - **`campaign_leads`:** além do desenho, `status` (`PENDING` → `RELEASED`; `SKIPPED` para quem já era inapto na montagem ou deixou de ser apto na hora de liberar, com os motivos em `ineligibility_reasons`; `REMOVED` por uma pessoa ou ao concluir/arquivar com o lead ainda aguardando), `variant_id`, `priority` (score na montagem), `released_at` e `enrollment_id` (a inscrição na cadência criada na liberação). Os marcos (`contacted_at` … `opted_out_at`) são recalculados por SQL idempotente numa janela de 90 dias a partir da liberação (ou até a liberação do mesmo lead por outra campanha); ver ADR 030.
+> - **Atribuição:** `campaign_id` em `cadence_enrollments` e em `messages` (SET NULL: apagar a campanha não apaga o histórico do lead); estratégia de atribuição `CAMPAIGN` em `lead_assignments`.
+> - A campanha **não envia mensagens**: libera leads para a cadência; cada contato segue o gate e o modo de envio de sempre.
+
 **`daily_metrics`** (Fase 11): `date`, `dimension` (`GLOBAL`, `SDR`, `CITY`, `SOURCE`, `CAMPAIGN`, `APPROACH`, `CHANNEL`, `SEGMENT`), `dimension_id`, `new_leads`, `contacted`, `replied`, `interested`, `opportunities`, `converted`, `opt_outs`, `messages_out`, `messages_in`. Único `(date, dimension, dimension_id)`.
 
 **`insights`** (Fase 11+): `generated_at`, `scope`, `audience_user_id`, `type`, `text`, `data` jsonb (números que sustentam o texto), `valid_until`, `feedback`.
+
+> **Implementação (Fase 11).** Com estes ajustes:
+> - **`daily_metrics`:** recortes `GLOBAL`, `SDR` e `CHANNEL` (as conversões por cidade, origem, campanha, abordagem e segmento saem da view abaixo, pela coorte do 1º contato). Colunas: `new_leads`, `first_contacts`, `leads_contacted` (distintos no dia), `messages_out`, `contacts_logged`, `messages_in`, `leads_replied`, `interested`, `opportunities`, `conversions`, `opt_outs` e `computed_at`. Chave `(date, dimension, dimension_id)`, com `dimension_id` vazio no `GLOBAL`. No `SDR`, a atividade é de quem fez; respostas, interesse e opt-outs vão para o responsável do lead. `first_contacts`, `leads_replied` e `interested` contam cada lead uma vez (o dia do 1º contato, da 1ª resposta depois dele e do 1º interesse, tirados da view abaixo), então somam entre dias; `leads_contacted` não soma. No `CHANNEL`, mensagens e contatos vão para o canal do evento (ligação = `PHONE`; reunião, visita e outros = `OTHER`); resposta, interesse, oportunidade, conversão e opt-out, para o canal do 1º contato. Recalculado pelo job `analytics.rollup` (apaga e grava os dias numa transação; dia sem movimento ganha a linha `GLOBAL` zerada).
+> - **`analytics_lead_facts`** (*materialized view*, criada em SQL na migração e atualizada com `REFRESH … CONCURRENTLY`): uma linha por lead não mesclado com as dimensões (cidade, UF, segmento, origem, responsável, faixa de score), o canal, a abordagem, quem fez e a campanha do 1º contato, e as datas dos marcos (1ª resposta depois do 1º contato, 1º interesse, 1ª oportunidade, ganho e tipo, opt-out). Só ids, códigos e datas.
+> - **`insights`:** além do desenho, `source` (`AI` ou `TEMPLATE`), `ai_generation_id`, `priority` e quem deu o feedback. O insight da carteira (`USER`) sai junto com a pessoa.
+> - **`ai_generations`:** `lead_id` opcional e o tipo `INSIGHT` (a redação dos insights entra no mesmo orçamento e painel de custo da IA).
+> - **`users`:** `auto_assign` (entra na distribuição automática), `max_active_leads` (teto próprio) e `away_until` (ausente até o dia).
 
 | Tabela | Uso | Fase |
 |---|---|---|
@@ -393,7 +412,110 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `integration_connections` | `provider`, `status`, `config` (não secreta), `credentials_encrypted`, `last_check_at`, `last_error` | 7 |
 | `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` | 12 |
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
-| `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
+| `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | não criada: a distribuição automática da Fase 11 usa uma configuração só em `app_settings` (`leads.auto_assign`, última rodada em `leads.auto_assign.last_run`); o "ponteiro" do rodízio é a última atribuição automática de cada SDR em `lead_assignments` |
+
+### 4.11 Implementação até a Fase 9
+
+Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
+
+Tabelas de segurança, fora do modelo original:
+
+- **`login_throttles`:** falhas de login por conta + IP ou dispositivo, e por conta. As chaves usam o HMAC do e-mail ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)).
+- **`two_factors`:** segredo TOTP e códigos de recuperação cifrados (plugin do Better Auth), mais a coluna `users.two_factor_enabled` ([SECURITY §3](./SECURITY.md#3-autenticação)).
+
+O seed de desenvolvimento (`pnpm db:seed:dev`) marca seus leads com `is_test_data`.
+
+Diferenças em relação às seções acima:
+
+| Tabela | Diferença | Motivo |
+|---|---|---|
+| `leads` | Colunas de pipeline, score, atividade (exceto `last_activity_at`) e desfecho entram nas Fases 4–5; `merged_into_id`, `import_batch_id` e `custom_fields` na Fase 3; `google_place_id` na Fase 9. Sem `search_vector`: a busca usa `name_search` (trigram), CNPJ e os valores normalizados de `contact_points`. Acrescentadas `archived_at` e `anonymized_at`. | Cada coluna nasce na fase que a usa |
+| `leads` (cont.) | `cnpj_hash` (HMAC do CNPJ, como `contact_points.value_hash`) | Encontrar os leads de uma supressão de CNPJ ao incluí-la ou revogá-la |
+| `lead_sources` | `default_legal_basis` (base legal sugerida no cadastro, [LGPD §4](./LGPD.md#4-bases-legais-por-origem)) e `position` | O cadastro exige base legal "com padrão por origem" (MVP M02) |
+| `tags` | `name_search` único | Evita "Parceiro" e "parceiro" ao mesmo tempo |
+| `lead_notes` | Remoção lógica (`removed_at`, `removed_by_id`), auditada | Corrigir observação com dado que não deveria estar ali ([LGPD §11](./LGPD.md#11-minimização-e-qualidade)) |
+| `lead_assignments` | Estratégia `CLAIM` | SDR "puxa do pool" do seu território ([SECURITY §4.2](./SECURITY.md#42-matriz-de-permissões-inicial)) |
+| `lead_origins` | `import_batch_id`, `prospecting_search_id`, `campaign_id` e `referrer_lead_id` entram nas fases dessas entidades | — |
+| `contact_permissions` | Na Fase 2, uma permissão por lead e canal (único parcial sem pessoa/ponto de contato) | Granularidade por ponto de contato quando houver envio por API (Fase 7) |
+| `data_subject_requests` | Status `RECEIVED`, `IN_PROGRESS`, `COMPLETED`, `REJECTED`; campo `notes` | — |
+
+**Fase 3 (importação e deduplicação):** `import_batches`, `import_rows`, `import_mapping_templates`, `duplicate_candidates` e `lead_merges`, como nas seções acima, mais:
+
+- **`import_files`:** bytes do arquivo enviado, só até a leitura no worker, apagados em seguida ([SECURITY §8](./SECURITY.md#8-upload-de-arquivos)).
+- **`import_batches`:** `sheet_names` (para escolher outra aba), `progress` (barra de progresso) e `error`. O status começa em `UPLOADED` e passa a `MAPPING` depois da leitura.
+- **`import_rows`:** `raw` guarda as células como texto; `status` e `error` registram o resultado da gravação de cada linha.
+- **`leads`:** ganha `custom_fields` (colunas extras) e `merged_into_id` (o sobrevivente da mesclagem).
+- **`lead_origins`:** ganha `import_batch_id`.
+- **`duplicate_candidates`:** além do índice único, um `CHECK (lead_a_id < lead_b_id)` impede o mesmo par nas duas ordens. Par `KEPT_SEPARATE` ou `MERGED` nunca volta à fila; `IGNORED` volta só se surgir uma regra nova entre os motivos.
+- **Índices da deduplicação:** `leads(website_domain)` (mesmo site) e os trigram de `name_core`; `import_rows(result_lead_id)` e `import_rows(matched_lead_id)` para a anonimização achar as linhas ainda não purgadas de um lead.
+- **Mesclagem** (`lead_merges`): o mesclado vira `MERGED` com `merged_into_id`; contatos, pessoas, origens (sem `is_first_touch`), observações, eventos, responsáveis, bases legais por canal que o sobrevivente não tem e solicitações de titulares passam para o sobrevivente; tags são copiadas; contato repetido fica no mesclado. Leads já mesclados no mesclado passam a apontar para o sobrevivente (cadeia de um nível). Nenhuma linha é apagada.
+
+**Fase 4 (pipeline e score):** `pipelines`, `pipeline_stages`, `lead_stage_history`, `loss_reasons`, `priority_cities`, `scoring_models`, `scoring_rules` e `lead_score_history`, como nas seções acima, mais:
+
+- **`leads`:** ganha `pipeline_id`, `stage_id`, `stage_entered_at`, `lost_at`, `loss_reason_id`, `converted_at`, `score`, `score_band`, `score_model_id` e `score_computed_at`. `conversion_type` fica para a oportunidade (Fases 5–6). A etapa é obrigatória na aplicação, mas a coluna aceita nulo: os leads existentes recebem "Novo" no seed, que roda depois das migrações.
+- **`pipelines`:** `key` estável (`DEFAULT`); só um `is_default` (único parcial).
+- **`pipeline_stages`:** `description`; `owner_role` é `SDR`, `SALES` ou nulo.
+- **`lead_stage_history`:** `automation_source` também aceita `MERGE` (mesclagem). Uma única passagem aberta por lead (único parcial em `lead_id` onde `left_at` é nulo).
+- **`loss_reasons`:** `position`; `applies_to_stage_keys` vazio vale para todas as etapas de perda.
+- **`scoring_models`:** `notes` e `created_by_id`; um único `ACTIVE` (único parcial).
+- **`lead_score_history`:** `previous_score` e `previous_band`, para mostrar a mudança sem consultar a linha anterior.
+- **Recálculo do score:** os critérios ficam no código (`modules/scoring/domain/criteria.ts`); o modelo no banco escolhe critérios, parâmetros e pesos. Mudar um lead (contatos, cidade, tipo, tags) recalcula na mesma transação; ações em massa, cidades prioritárias e a ativação de um modelo recalculam no worker (`score.recompute-lead` e `score.recompute-all`). `lead_score_history` recebe uma linha só quando o score ou a faixa mudam; o primeiro cálculo não gera evento `score.changed` na timeline.
+- **Configuração inicial** (`seed/sales-config.ts`): só cria o que falta, então renomear, reordenar ou recolorir etapas não é desfeito no próximo deploy. Os leads sem etapa vão para "Novo" com a primeira linha do histórico (`backfillLeadStages`, também chamada na subida do worker).
+
+**Fase 5 (operação do SDR):** `tasks`, `activities`, `messages`, `cadences`, `cadence_steps`, `cadence_enrollments` e `opportunities`, como nas seções acima, mais:
+
+- **`notifications`** (nova): avisos no app (sino do cabeçalho). `user_id`, `type` (ex.: `handoff.created`, `task.overdue`), `title`, `body`, `lead_id`, `link`, `read_at`.
+- **`leads`:** ganha `first_contact_at`, `last_contact_at` (último contato de saída), `first_reply_at`, `last_inbound_at` e `next_action_at` (vencimento da próxima tarefa aberta).
+- **`tasks`:** sem `priority_score`; a prioridade da Minha Fila é calculada na leitura, para não ficar desatualizada. Ganha `message_type` e `channel` (copiados do passo da cadência), `overdue_notified_at` (o aviso de atraso sai uma vez) e `created_by_id`.
+- **`activities`:** `task_id` (tarefa concluída com o registro) e `contact_point_id`.
+- **`messages`:** `is_first_contact` (limite diário de primeiros contatos por SDR), `task_id`, `canceled_at`, `classified_at` e `opt_out_match` (expressão de opt-out encontrada no texto recebido). `conversation_id`, `template_id`, `whatsapp_template_id`, `ai_generation_id`, `approach_id` e `campaign_id` entram com as tabelas dessas fases (6, 7 e 10). `body` é dado pessoal e é apagado na anonimização.
+- **`cadences`:** `key` estável (`DEFAULT`) e um único `is_default` (único parcial). A janela (`send_window_start`/`end`) é texto `HH:MM` na hora local do lead.
+- **`cadence_enrollments`:** `last_step_executed_at` e `paused_until` (resposta "fora do escritório"). `current_step_position` nulo significa "todos os passos executados", e então `next_step_due_at` é o prazo para "Sem resposta". `campaign_id` entra na Fase 10. O único parcial vale para `ACTIVE` e `PAUSED`: uma inscrição em andamento por lead.
+- **`opportunities`:** `accept_due_at` (prazo de aceite pelo comercial), `sla_alerted_at`, `conversion_type` (`PARTNER`, `CUSTOMER`) e `notes`. Uma oportunidade `OPEN` por lead (único parcial).
+- **Modelos de mensagem e abordagens** (`message_templates`, `approaches`) ficam para a Fase 6, junto com a IA; na Fase 5 o SDR escreve o texto do contato assistido.
+- **Regras de contato** (janela, limites de frequência, palavras de opt-out, dias para "esquecido", SLAs) ficam em `app_settings`; sem linha gravada, valem os padrões do código.
+
+**Fase 6 (IA e indicadores):** `ai_generations`, `ai_knowledge_items` e `approaches`, como nas seções acima, mais:
+
+- **`ai_generations`:** sem `message_id`. O vínculo é `messages.ai_generation_id`, com único parcial "um envio ativo por rascunho" (`status <> 'CANCELED'`): cancelar o envio permite preparar de novo. Ganha `cached_input_tokens`, `stop_reason`, `error_code` (código da falha do provedor; `IN_PROGRESS` enquanto a chamada corre fora da transação) e `source_message_id` (a resposta que foi classificada). O tipo `INSIGHT` entrou na Fase 11.
+- **`ai_knowledge_items`:** `approved_at`; a versão sobe quando o conteúdo muda, e cada geração grava as versões usadas no contexto. **Sem seed:** os fatos sobre a Docline são cadastrados e aprovados pela própria Docline.
+- **`approaches`:** `guidance` (orientação enviada à IA) e `created_by_id`. `message_templates` não foi criada: a IA com abordagens cobre o MVP, e os modelos aprovados da Meta entram com a Fase 7.
+- **`messages`:** ganha `ai_generation_id`, `approach_id`, `approved_by_id`, `approved_at` e o índice `(approach_id, sent_at)`.
+- **Regras da IA** (limites por tipo, opt-out exigido, termos proibidos, personalização mínima, parecença) em `app_settings` (`ai.rules`); sem linha gravada, valem os padrões do código.
+- **Mesclagem** leva os rascunhos para o sobrevivente; **anonimização** apaga contexto, saída, textos, comentário e motivo de descarte dos rascunhos do lead.
+- **Indicadores** sem `daily_metrics`: consultas agregadas ao vivo, medidas com 100 mil leads ([ARCHITECTURE §13](./ARCHITECTURE.md#13-escalabilidade)).
+
+**Fase 7 (WhatsApp Cloud API):** `whatsapp_templates`, `conversations`, `message_status_events`, `webhook_events` e `integration_connections`, como nas seções acima, mais:
+
+- **`contact_permissions`:** o opt-in do WhatsApp passa a ser **do número** (`contact_point_id` preenchido, único parcial por número e canal), com `evidence_message_id` quando a evidência é uma mensagem recebida. A linha do lead (sem pessoa nem contato) continua guardando a base legal por canal.
+- **`messages`:** ganha `conversation_id`, `whatsapp_template_id`, `template_params` (valores das variáveis; dado pessoal), `send_attempted_at` (o job de envio nunca repete uma chamada de resultado incerto), `delivered_at`, `read_at`, `failed_at`, `error_code`, `error_detail`, `pricing_category`, `billable` e `cost_estimate_usd`, mais os índices `(conversation_id, created_at desc)` e `(channel, mode, sent_at)`.
+- **`whatsapp_templates`:** `meta_template_id` único (não `(name, language)`: a Meta permite recriar um nome depois de apagado); `status` e `quality_score` em texto, porque a Meta acrescenta valores; `body_text` e `body_parameters` para a prévia; `supported`/`unsupported_reason` (o app envia modelos com variáveis só no corpo); `active` (o ADMIN pode tirar um modelo do uso) e `removed_at` (sumiu da conta, fica para o histórico).
+- **`conversations`:** `external_thread_id` é o `wa_id`; `profile_name` (nome do perfil na Meta, dado pessoal). Sem `status`: a janela de atendimento (`service_window_expires_at`) é o que importa. Único `(lead_id, channel, external_thread_id)`.
+- **`webhook_events`:** `external_event_id` é o SHA-256 do corpo recebido (a Meta não manda id de evento); só entram eventos com assinatura válida, então não há `signature_valid`. `contact_hashes` (HMAC dos telefones citados, índice GIN) permite à anonimização apagar os payloads de um lead.
+- **`inbound_unmatched`** (nova): mensagem recebida de um número que não está em nenhum lead ativo, ou que está em mais de um (`candidate_lead_ids`). Nunca vira lead sozinha: uma pessoa vincula ou descarta.
+- **`integration_connections`:** sem `credentials_encrypted`; os tokens ficam só no ambiente. `config` guarda dados não secretos (número exibido, nome verificado, qualidade, limite de mensagens).
+
+**Fase 8 (Instagram):** reaproveita `conversations`, `messages`, `webhook_events` e `inbound_unmatched` (canal `INSTAGRAM`), mais:
+
+- **`instagram_profiles`** (nova): métricas públicas do perfil profissional do lead pelo Business Discovery: `followers_count`, `media_count`, `last_post_at` (critério "Instagram ativo" do score), `status` (`FOUND`, `NOT_FOUND` quando o @ não existe ou não é conta profissional, `ERROR`), `checked_at` e o `handle` consultado. Uma por contato (`contact_point_id` único, apagada com o contato), sem `lead_id`: na mesclagem, vai junto com o contato. Nada de mídias, legendas ou biografia.
+- **`social_comments`** (nova): comentário de um **lead** numa publicação da Docline (`external_comment_id` único por provedor), com o IGSID e o @ do autor, a publicação, o texto (dado pessoal) e a data. `private_reply_message_id` (único) aponta a resposta privada, que a Meta aceita uma vez por comentário e até 7 dias depois dele. Comentários de quem não é lead não viram linha.
+- **`conversations`** e **`inbound_unmatched`:** ganham `handle` (o @ de quem escreveu no Instagram). No Instagram, `external_thread_id` é o IGSID (id de quem escreveu, por conta da empresa).
+- **`webhook_events`:** linhas do Instagram com `provider = instagram:<provedor>`; `contact_hashes` leva o HMAC do @ e do IGSID (`igsid:<id>`). **`integration_connections`:** a conta do Instagram fica em `instagram:<provedor>`, separada do WhatsApp.
+
+**Fase 9 (dados abertos do CNPJ e Prospecção):**
+
+- **`registry_companies`** (nova): recorte da base aberta da Receita Federal com só os estabelecimentos **ativos** de contabilidade (CNAE 6920-6/01 e 6920-6/02). Chave pelo CNPJ (aceita o alfanumérico); razão social sem dígitos de CPF; natureza jurídica e porte; CNAE principal e secundários; município do IBGE (casado pelo nome e UF; nulo se não casar) e o código próprio da Receita; endereço; telefones em E.164 e e-mail como declarados; `dataset_reference` (mês da base). Sem sócios. Separada de `leads`: nada aqui é contatado.
+- **`registry_ingestions`** (nova): cada carga mensal, com o mês, o andamento (`progress`, para retomar), os contadores e a falha. **Uma de cada vez** (índice único parcial em `status = 'RUNNING'`).
+- **`prospecting_searches`** e **`prospecting_results`** (novas): a busca com os parâmetros e, para cada CNPJ encontrado, a comparação com a base (`match_status`, o mesmo da importação, e os motivos), a decisão de uma pessoa (`PENDING`, `APPROVED`, `REJECTED`) e o lead criado. Um resultado por CNPJ em cada busca; os resultados somem com a busca e não guardam conteúdo da fonte.
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts`, `whatsapp-schema.int.test.ts`, `instagram-schema.int.test.ts` e `registry-schema.int.test.ts`):
+
+- `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
+- `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
+- Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição, oportunidade aberta por lead, envio ativo por rascunho da IA e opt-in por número e canal.
+- Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)`, `inbound_unmatched (provider, provider_message_id)` e `social_comments (provider, external_comment_id)`.
+- Uma consulta de perfil por contato (`instagram_profiles.contact_point_id`) e uma resposta privada por comentário (`social_comments.private_reply_message_id`).
+- Uma carga da base aberta por vez (`registry_ingestions`) e um resultado por CNPJ em cada busca da Prospecção (`prospecting_results (search_id, provider_ref)`).
 
 ---
 
@@ -497,7 +619,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `has_website` | — | +10 | |
 | `google_reviews_gte` | `{min: 1}` | +10 | ⚠️ **inativo** até validação jurídica (Google) |
 | `google_reviews_gte` | `{min: 21}` ("mais de 20") | +10 | ⚠️ **inativo** até validação jurídica (Google) |
-| `instagram_active` | `{max_days_since_post: 30}` | +10 | Depende da Fase 8 (Business Discovery) ou de marcação manual |
+| `instagram_active` | `{max_days_since_post: 30}` | +10 | ⚠️ **inativo** no seed; usa a última publicação do @ atual do lead em `instagram_profiles` (Business Discovery, Fase 8). O ADMIN liga depois de ligar a consulta de perfis |
 | `in_priority_city` | — | +15 | Tabela `priority_cities` |
 | `replied_before` | — | +20 | Já houve mensagem `INBOUND` |
 | `showed_interest` | — | +30 | Classificação `INTERESTED` alguma vez |

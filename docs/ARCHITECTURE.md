@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** Fase 0 (proposta para aprovação) · **Última revisão:** 2026-10-05
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API), Fase 9 (dados abertos do CNPJ e Prospecção), Fase 10 (Campanhas) e Fase 11 (Analytics: rollups, relatórios com intervalo de confiança, insights e distribuição automática) · **Última revisão:** 2026-10-10
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -107,9 +107,9 @@ A preferência inicial foi avaliada item a item. Onde a recomendação diverge, 
 | Automação | n8n | ⚠️ **Somente nas bordas** (Fase 12) | Regra de negócio no n8n fica fora do Git, dos testes e da auditoria. n8n pode orquestrar integrações com sistemas Docline consumindo a nossa API, nunca decidir quem é contatado. |
 | Interface | Tailwind CSS + componentes reutilizáveis | ✅ **Tailwind + shadcn/ui (Radix)**, TanStack Table (grade de leads), dnd-kit (Kanban), Recharts (gráficos), React Hook Form + Zod | shadcn/ui gera componentes acessíveis que ficam no nosso código, sem dependência de biblioteca fechada. |
 | Infra | Docker | ✅ **Manter**: `docker compose` no desenvolvimento e um Dockerfile por app | Portabilidade entre Render e qualquer outro provedor. |
-| Deploy | Render | ✅ **Aceitável**, com ⚠️ ressalva | Simples e barato (web service + background worker + Postgres gerenciado). **Ressalva:** a Render não tem região no Brasil (verificar oferta vigente); hospedar fora exige tratamento de transferência internacional (LGPD art. 33). Alternativas com São Paulo: AWS `sa-east-1`, Google Cloud `southamerica-east1`, Supabase. Decisão pendente ([§16](#16-questões-em-aberto)). |
+| Deploy | Render | ✅ **Decidido: Render, região Virginia** ([ADR-019](#15-registro-de-decisões-adrs)) | Simples e barato (web service + background worker + Postgres gerenciado). **Ressalva:** a Render não tem região no Brasil; hospedar fora exige tratamento de transferência internacional (LGPD art. 33). Alternativas com São Paulo avaliadas: Google Cloud `southamerica-east1`, Fly.io `gru`, AWS `sa-east-1`. |
 | Autenticação | (não especificado) | **Better Auth** (e-mail/senha, sessões no banco, adaptador Prisma, 2FA por plugin) + **RBAC próprio no domínio** | Auth.js tem suporte fraco a login por senha; Clerk é pago e leva dados de usuários para fora. Better Auth é open source e roda no nosso banco. Permissões ficam no nosso código, testadas ([SECURITY §4](./SECURITY.md#4-autorização-rbac)). |
-| Planilhas | — | **ExcelJS** (XLSX) + **Papa Parse** (CSV), com detecção de codificação | O pacote `xlsx` publicado no npm está desatualizado e tem vulnerabilidades conhecidas (as versões novas do SheetJS saem só pelo CDN do fornecedor). Exportações do Excel no Brasil costumam vir em Windows-1252 com `;`, o que precisa ser tratado. |
+| Planilhas | — | ~~ExcelJS~~ **leitor próprio de XLSX** (fflate + saxes, ADR-020) + **Papa Parse** (CSV), com detecção de codificação | O pacote `xlsx` publicado no npm está desatualizado e tem vulnerabilidades conhecidas (as versões novas do SheetJS saem só pelo CDN do fornecedor). Exportações do Excel no Brasil costumam vir em Windows-1252 com `;`, o que precisa ser tratado. |
 | Telefones | — | **libphonenumber-js** + regras BR próprias (DDD, 9º dígito, variantes `wa_id`) | Biblioteca de referência; regras brasileiras ficam em módulo próprio testado. |
 | Busca | — | **PostgreSQL** (full-text + `pg_trgm`) | Elasticsearch/OpenSearch só se a busca virar gargalo, o que não se espera até 500 mil leads. |
 | IA | `AI_API_KEY` | Porta `AiProvider` com adaptador padrão **Anthropic (Claude)** via SDK oficial; modelo configurável por variável de ambiente | Ver [AI-SDR §4](./AI-SDR.md#4-provedor-modelos-e-configuração). |
@@ -117,6 +117,26 @@ A preferência inicial foi avaliada item a item. Onde a recomendação diverge, 
 | Observabilidade | — | **pino** (logs estruturados com mascaramento de dados pessoais) + **Sentry** (erros) | Plano gratuito suficiente no início. |
 | Monorepo | — | **pnpm workspaces** (sem Turborepo no início) | Dois apps e três pacotes não justificam um orquestrador de build. Turborepo entra se o build ficar lento. |
 | E-mail transacional | — | Porta `EmailProvider` (SMTP/Resend/SES) | Convites e redefinição de senha. Não é canal de prospecção no MVP. |
+
+### 4.1 Versões adotadas na Fase 1
+
+Node.js 22 · pnpm 10.28 · TypeScript 6.0 · Next.js 16.3 (React 19.3) · Tailwind CSS 4 · Prisma 7.10 (gerador `prisma-client` + adaptador `pg`) · PostgreSQL 16/17 · Better Auth 1.7 · pg-boss 12 · Zod 4 · ESLint 10 · Vitest 5 · Playwright 1.63.
+
+Ajustes em relação à análise acima, decididos durante a implementação:
+
+- **TypeScript 6.0, não 7.x:** a versão 7 (compilador nativo) ainda não é suportada pelo typescript-eslint.
+- **Next.js 16** renomeou o `middleware` para **`proxy`**; a CSP com nonce é aplicada ali (ADR-018).
+- **Prisma 7** exige `prisma.config.ts` e adaptador de driver; o cliente é gerado em `packages/db/src/generated` (não versionado, gerado no `postinstall`).
+- **Ponto de atenção (pg 9):** dentro de transações, o Prisma 7 com o adaptador `pg` carrega relações de um mesmo `select` em consultas paralelas na mesma conexão; o pg 8 as enfileira (resultado correto) e emite um aviso de *deprecation*. Antes de atualizar para o pg 9, avaliar `relationLoadStrategy: 'join'` (recurso `relationJoins`) nas leituras com muitas relações, como o detalhe do lead.
+- **Índices parciais** (Fase 2) declarados no schema com o recurso `partialIndexes` do Prisma, ainda em *preview*: assim a checagem de drift do CI os cobre. Se o recurso mudar, a alternativa é SQL manual na migração, perdendo essa checagem.
+- **Componentes de UI** escritos no próprio projeto sobre Radix (no estilo shadcn/ui), sem depender do gerador do shadcn.
+- **Sentry (Fase 2, F2-17):** opcional, ativado por `SENTRY_DSN`. Usa `@sentry/node` 10 sem instrumentação automática, sem tracing e sem breadcrumbs: só envia o que a aplicação captura.
+  - **Web:** erros 5xx da API v1 (`apiHandler`) e erros de páginas e server actions (`onRequestError` em `instrumentation.ts`), com `requestId` e rota.
+  - **Worker:** falhas de job, com o nome do job; o pg-boss segue fazendo a retentativa.
+  - **Sem dados pessoais:** nada de usuário, cookies, cabeçalhos ou corpo; e-mails e sequências de 8 ou mais dígitos viram marcadores em toda mensagem.
+  - **Sem DSN:** nada é enviado, e os erros continuam nos logs pino com `requestId`.
+- **IP do cliente:** lido só do `X-Forwarded-For`, com a lista `TRUSTED_PROXIES` (CIDR) definindo quais saltos são confiáveis; a mesma regra serve ao rate limit e à auditoria ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)).
+- **Cadeia de suprimentos:** `minimumReleaseAge` de 24 h no pnpm (já barrou uma versão publicada no mesmo dia) e sobrescritas de versão para dependências transitivas vulneráveis (`pnpm-workspace.yaml`).
 
 ---
 
@@ -213,12 +233,14 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `distribution` | Atribuição de responsável (manual no MVP; estratégias depois) | lead_assignments, distribution_rules | 2 (manual) / futura |
 | `tasks` | Atividades, follow-ups, "Minha Fila SDR" | tasks, activities | 5 |
 | `cadence` | Cadências configuráveis, inscrição, avanço, parada automática | cadences, cadence_steps, cadence_enrollments | 5 |
-| `messaging` | Mensagens (assistidas/API), templates, abordagens, conversas | messages, message_templates, approaches, conversations | 5 (assistido) / 7 |
-| `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
+| `messaging` | Mensagens assistidas e registradas, respostas e classificação | messages | 5 |
+| `whatsapp` | Envio pela Cloud API (texto na janela, modelo com opt-in), webhooks (status, respostas), conversas, modelos, números sem lead, saúde do número | conversations, whatsapp_templates, message_status_events, webhook_events, inbound_unmatched, integration_connections | 7 |
+| `instagram` | Respostas pela API (texto em 24 h, resposta privada a comentário em 7 dias), webhooks (mensagens, ecos, "visto", comentários), quem não é lead, conta conectada, métricas públicas dos perfis (Business Discovery) para o score | conversations, social_comments, instagram_profiles, webhook_events, inbound_unmatched, integration_connections | 8 |
+| `ai-sdr` | Geração de abordagens, classificação de respostas e a redação dos insights (prompt `portfolio_insights`) | ai_generations, ai_knowledge_items | 6 / 11 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
-| `prospecting` | Buscas em fontes autorizadas, aprovação de novos leads | prospecting_searches, prospecting_results, registry_companies | 9 |
-| `campaigns` | Seleção por filtros, elegibilidade, acompanhamento | campaigns, campaign_leads | 10 |
-| `analytics` | Indicadores, funis, rollups, insights | daily_metrics, insights | 6 (básico) / 11 |
+| `prospecting` | Carga mensal do recorte de contabilidade da base aberta do CNPJ, buscas com comparação com a base, aprovação humana de novos leads, potencial por cidade e enriquecimento pelo CNPJ | registry_ingestions, registry_companies, prospecting_searches, prospecting_results | 9 |
+| `campaigns` | Retrato de um filtro de leads, elegibilidade com motivos, distribuição entre SDRs, liberação diária para a cadência (nunca envia), funil por janela de atribuição e teste A/B de abordagens | campaigns, campaign_sdrs, campaign_variants, campaign_leads | 10 |
+| `analytics` | Indicadores ao vivo (dashboard), rollups diários e fatos por lead, conversão por recorte com intervalo de confiança, desempenho por SDR, evolução mensal, canais e insights da carteira (fatos em SQL, texto da IA conferido) | daily_metrics, analytics_lead_facts (view), insights | 6 (básico) / 11 |
 
 Cada módulo segue o mesmo layout:
 
@@ -254,7 +276,7 @@ Um único serviço, `ContactabilityService.check(lead, channel, mode)`, responde
 2. pelo `ai-sdr`, antes de gerar mensagem;
 3. pelo `messaging`, antes de registrar ou enviar;
 4. pelos **adaptadores de envio** de novo, como defesa em profundidade;
-5. pelo `campaigns`, para calcular elegibilidade.
+5. pelo `campaigns`, para calcular elegibilidade (Fase 10): o gate devolve, junto com os textos, **códigos de motivo** (`GateReasonCode`), que a campanha traduz nos seus motivos de inelegibilidade. A campanha usa o modo assistido e ignora o horário (vale na hora de cada contato); a liberação para a cadência confere tudo de novo.
 
 ### 7.4 Configuração de negócio versionada
 
@@ -362,6 +384,20 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 ### 9.2 Endpoints por módulo
 
+> **Implementado até a Fase 5** (`apps/web/src/app/api/v1`): identidade e auditoria (Fase 1); leads (`search`, `count`, `check-duplicates`, cadastro, detalhe, edição, `archive` e **`unarchive`**, `timeline`, `history`, notas, pessoas, contatos, tags, `assign`, **`claim`** — SDR assume do pool —, `contactability`, `opt-out`, `permissions/{channel}`, `anonymize`, `bulk`); `tags`, `lead-sources`, `segments`, **`states`** e **`municipalities?q=`** (autocompletar); `users/{id}/territories`; `saved-views`; `suppressions` (+ `revoke`); `data-subject-requests`; **`legal-basis-assessments`** (Fase 2); importação (`imports`: upload multipart, lote, `mapping`, `preview`, `rows/{rowId}`, **`decisions`** — mesma decisão para todas as linhas de uma situação —, `commit`, `report` e **`cancel`**) e duplicados (`duplicates`, comparação, `merge`, `keep-separate`, `ignore` e `scan`), na Fase 3. Em negrito, rotas que não estavam na lista abaixo. Possível duplicado no cadastro responde `409` com `code: POSSIBLE_DUPLICATE` e a lista em `duplicates`. O upload confere o tamanho antes de ler o corpo; `commit` e `scan` respondem `202` (o trabalho segue no worker). **`POST /exports`** devolve o CSV na própria resposta (`text/csv`, separador `;`, BOM UTF-8). Erros possíveis: `429 RATE_LIMITED` (5 exportações em 24 h) e `422` (seleção vazia ou acima de 20.000 leads). Não implementadas: `/import-mapping-templates` (o modelo é salvo no `mapping` e sugerido pelo cabeçalho) e `/normalize/preview` (a prévia da importação cobre).
+>
+> **Fase 4:** `GET /pipelines`, `GET /pipelines/{id}` e `PUT /pipelines/{id}/stages` (`default` aponta para o pipeline padrão); `POST /pipelines/{id}/board` e **`POST /pipelines/{id}/board/cards`** (próxima página de uma coluna); `POST /leads/{id}/stage` (com `version`; conflito → `409`), `GET /leads/{id}/stage-history`, **`GET /leads/{id}/score`** (explicação por critério e histórico) e **`GET /loss-reasons`**; `GET /scoring/models/active`, **`GET /scoring/models`**, `POST /scoring/models` (abre o rascunho ou devolve o aberto), **`PUT` e `DELETE /scoring/models/{id}`** (salvar e descartar o rascunho), `simulate` e `activate`; **`GET/POST /priority-cities`** e **`DELETE /priority-cities/{code}`**. O quadro é `POST`, e não `GET`, porque recebe a mesma seleção da lista de leads (DSL e busca) no corpo.
+>
+> **Fase 5:** `GET /queue` (Minha Fila; `?userId=` para gestor e ADMIN); `POST /tasks`, `PATCH /tasks/{id}` (reagendar) e `POST /tasks/{id}/complete|cancel|skip` (pular passo de cadência); `GET /leads/{id}/tasks`; `POST /leads/{id}/activities`; `POST /leads/{id}/messages/assisted` (prepara o envio assistido e devolve o link), `POST /leads/{id}/messages/logged` (envio feito fora do sistema), `GET /leads/{id}/messages`, **`GET /messages?view=pending|sent|replies|unclassified`** e `POST /messages/{id}/confirm|cancel|classify`; `POST /leads/{id}/replies` (resposta recebida, com a detecção de opt-out); `GET/POST /leads/{id}/cadence` e `POST /leads/{id}/cadence/pause|resume|stop`; `GET/POST /cadences` (`?all=1` inclui as inativas), `PUT /cadences/{id}` e **`POST /cadences/{id}/default`**; `POST /leads/{id}/handoff`, `GET /leads/{id}/opportunities`, **`GET /opportunities`** e `POST /opportunities/{id}/accept|won|lost`; **`GET /sales-owners`**; **`GET /notifications`** e **`POST /notifications/read`**; `GET/PUT /settings/contact-rules`; **`POST /leads/pull`** (puxar do pool do território). As rotas seguem o recurso do lead em vez de `/enrollments/{id}` e `/messages/inbound`, porque cada lead tem no máximo uma inscrição em andamento e a resposta sempre pertence a um lead. Ficam para a Fase 6: `/message-templates`, `/approaches` e `/ai/*`.
+>
+> **Fase 7 (WhatsApp Cloud API):** `GET /leads/{id}/whatsapp` (números com opt-in e janela, gate do modo API, conversa e modelos liberados), `POST /leads/{id}/whatsapp/messages` (`kind: text` na janela ou `kind: template` com opt-in; responde `202`, o worker envia), `POST /leads/{id}/whatsapp/opt-in` e `/opt-in/revoke`, `POST /messages/{id}/retry`, `GET /conversations?filter=attention|open|all`, `GET /whatsapp/templates`, `POST /whatsapp/templates/sync`, `PATCH /whatsapp/templates/{id}`, `GET /whatsapp/unmatched` e `POST /whatsapp/unmatched/{id}/link|retry|dismiss`, `GET /whatsapp/overview`, `POST /whatsapp/health/check` e `GET/PUT /whatsapp/settings`. O webhook fica fora da v1: `GET/POST /api/webhooks/whatsapp`, sem sessão e sem checagem de origem, autenticado pela assinatura da Meta (`X-Hub-Signature-256`); responde `404` no modo assistido. Não implementadas: `/message-templates` (os modelos são os aprovados da Meta) e `/integrations/{provider}/test` (a verificação do número cobre).
+
+> **Fase 8 (Instagram API):** `GET /leads/{id}/instagram` (@ com métricas públicas, janela, gate, mensagens e comentários), `POST /leads/{id}/instagram/messages` (`202`, só com a janela de 24 h aberta), `POST /leads/{id}/instagram/refresh` (métricas, no máximo uma vez por hora), `POST /instagram/comments/{id}/private-reply` (`202`), `POST /instagram/messages/{id}/retry`, `GET /instagram/conversations`, `GET /instagram/unmatched` e `POST /instagram/unmatched/{id}/link|retry|dismiss`, `GET /instagram/overview`, `POST /instagram/account/check` e `GET/PUT /instagram/settings`. Webhook fora da v1: `GET/POST /api/webhooks/instagram`, com a mesma assinatura da Meta; `404` no modo assistido.
+>
+> **Fase 9 (dados abertos do CNPJ e Prospecção):** `GET/POST /prospecting/searches` (histórico e busca; `201`), `GET /prospecting/searches/{id}` (resultados com os dados da base aberta e a comparação), `POST /prospecting/searches/{id}/approve` (até 100 por pedido, uma transação por resultado; devolve criados, completados, já decididos e os erros de cada um) e `/reject`, `GET /prospecting/potential?uf=`; `GET /registry` (painel), `PUT /registry/settings` e `POST /registry/ingestions` (rodar ou repetir a carga; o worker faz o trabalho), só ADMIN; `GET/POST /leads/{id}/registry` (o que a base aberta tem do CNPJ do lead e "completar"). Os resultados não ficam em `/results` à parte: vêm com a busca.
+>
+> **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
+
 > Legenda de fase: **MVP** = Fases 1–6. Números indicam fases posteriores.
 
 **Identidade, equipe e configurações**
@@ -371,7 +407,7 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /me` | Usuário atual, perfil e permissões efetivas | MVP |
 | `GET/POST /users`, `PATCH /users/{id}` | Gestão de usuários (convite, perfil, ativar/desativar) | MVP |
 | `GET/PUT /users/{id}/territories` | Territórios (UF/cidade) do usuário | 2 (estrutura) |
-| `GET/PUT /settings/{key}` | Configurações de negócio (horários, limites, palavras de opt-out…) | MVP |
+| `GET/PUT /settings/contact-rules` | Regras de contato: janela, limites, prazos da fila, palavras de opt-out (ADMIN altera) | MVP |
 | `GET/POST/PATCH/DELETE /saved-views` | Visões e filtros salvos | MVP |
 | `GET /audit-logs` | Consulta de auditoria (ADMIN) | MVP |
 | `GET /health` | Health check (sem autenticação, sem dados) | MVP |
@@ -397,7 +433,9 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /leads/{id}/stage` | Mover de etapa (motivo obrigatório em perdas) | MVP |
 | `GET /leads/{id}/contactability` | Resultado do gate por canal | MVP |
 | `POST /leads/{id}/activities` | Registrar contato (ligação, reunião, visita) | MVP |
+| `POST /leads/pull` | Puxar os próximos leads do pool do território (com trava) | MVP |
 | `POST /leads/{id}/handoff` | Qualificar e transferir ao Comercial (cria oportunidade) | MVP |
+| `GET /opportunities`, `POST /opportunities/{id}/accept\|won\|lost` | Oportunidades: aceite, ganho e perda | MVP |
 | `POST /leads/bulk` | Ação em massa por ids ou filtro (`dryRun` obrigatório antes) | MVP |
 | `GET/POST/PATCH /tags`, `GET /lead-sources`, `GET /segments` | Cadastros auxiliares | MVP |
 
@@ -432,11 +470,11 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /scoring/models` | Nova versão (rascunho) | MVP |
 | `POST /scoring/models/{id}/simulate` | Impacto na distribuição de faixas antes de ativar | MVP |
 | `POST /scoring/models/{id}/activate` | Ativar e recalcular tudo (job) | MVP |
-| `GET /queue/me` | "Minha Fila SDR" com seções e prioridade | MVP |
-| `GET/POST /tasks`, `PATCH /tasks/{id}` | Tarefas: criar, concluir, reagendar | MVP |
+| `GET /queue` | "Minha Fila SDR" com seções e prioridade | MVP |
+| `POST /tasks`, `PATCH /tasks/{id}`, `POST /tasks/{id}/complete\|cancel\|skip` | Tarefas: criar, reagendar, concluir, cancelar, pular passo | MVP |
 | `GET/POST /cadences`, `PUT /cadences/{id}` | Cadências (ADMIN) | MVP |
-| `POST /leads/{id}/enrollments` | Inscrever lead em cadência | MVP |
-| `POST /enrollments/{id}/pause\|resume\|stop` | Controle da inscrição | MVP |
+| `POST /leads/{id}/cadence` | Inscrever lead em cadência | MVP |
+| `POST /leads/{id}/cadence/pause\|resume\|stop` | Controle da inscrição | MVP |
 
 **Mensagens, IA e conformidade**
 
@@ -448,17 +486,18 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `POST /ai/generations/{id}/discard` | Descartar com motivo | MVP |
 | `POST /ai/classify-reply` | Sugerir classificação para uma resposta recebida | MVP (SHOULD) |
 | `GET /leads/{id}/messages` | Histórico de mensagens | MVP |
-| `POST /messages` | Criar mensagem (modo `ASSISTED` no MVP; `API` na Fase 7) | MVP |
-| `POST /messages/{id}/confirm-sent` | Confirmar envio feito pelo humano (modo assistido) | MVP |
-| `POST /leads/{id}/messages/inbound` | Registrar resposta recebida manualmente | MVP |
-| `GET/POST /message-templates`, `GET/POST /approaches` | Templates internos e abordagens | MVP |
+| `POST /leads/{id}/messages/assisted` | Preparar envio assistido (gate, link `wa.me`/Instagram/e-mail); `API` na Fase 7 | MVP |
+| `POST /messages/{id}/confirm\|cancel` | Confirmar ou cancelar o envio feito pelo humano (modo assistido) | MVP |
+| `POST /leads/{id}/replies`, `POST /messages/{id}/classify` | Registrar resposta recebida manualmente e classificá-la | MVP |
+| `GET /notifications`, `POST /notifications/read` | Avisos no app | MVP |
+| `GET/POST /message-templates`, `GET/POST /approaches` | Templates internos e abordagens | MVP (Fase 6) |
 | `GET/POST /suppressions`, `POST /suppressions/{id}/revoke` | Lista Não Contatar (revogação só ADMIN, com motivo) | MVP |
 | `POST /leads/{id}/opt-out` | Registrar opt-out (todos os canais ou um) | MVP |
 | `PUT /leads/{id}/permissions/{channel}` | Base legal e opt-in por canal | MVP |
 | `GET/POST/PATCH /data-subject-requests` | Solicitações de titulares (LGPD art. 18) | MVP (registro manual) |
 | `POST /leads/{id}/anonymize` | Anonimização (ADMIN) | MVP |
 | `GET/POST /api/webhooks/whatsapp` | Verificação e eventos da Meta | 7 |
-| `GET/POST /api/webhooks/instagram` | Eventos do Instagram | 8 |
+| `GET/POST /api/webhooks/instagram` | Verificação e eventos da Meta (mensagens, ecos, "visto", comentários) | 8 |
 
 **Analytics, prospecção, campanhas, integrações**
 
@@ -466,12 +505,20 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 |---|---|---|
 | `GET /analytics/overview?from&to` | KPIs do período | MVP |
 | `GET /analytics/funnel` | Funil por etapa | MVP |
-| `GET /analytics/breakdown?dimension=city\|source\|sdr\|channel\|approach\|campaign` | Quebra por dimensão | MVP (básico) / 11 |
-| `GET /analytics/timeseries?granularity=day\|month` | Evolução diária e mensal | MVP (básico) / 11 |
-| `GET /analytics/insights` | Insights da carteira | 11+ |
-| `POST /prospecting/searches`, `GET /prospecting/searches/{id}/results`, `POST /prospecting/searches/{id}/approve` | Busca em fontes autorizadas, comparação com a base, aprovação | 9 |
-| `GET/POST/PATCH /campaigns`, `POST /campaigns/{id}/build`, `POST /campaigns/{id}/activate\|pause`, `GET /campaigns/{id}/metrics` | Campanhas | 10 |
-| `POST /exports` | Exportação assíncrona e auditada (ADMIN/GESTOR) | 2 |
+| `GET /analytics/breakdown?dimension=city\|source\|sdr` | Quebra por dimensão (ao vivo) | MVP |
+| `GET /analytics/timeseries` | Evolução diária (ao vivo) | MVP |
+| `GET /analytics/export?report=overview\|funnel\|city\|source\|sdr\|daily` | CSV do relatório (ADMIN/GESTOR, auditado) | MVP |
+| `GET /analytics/conversion?dimension=city\|state\|segment\|source\|owner\|firstContactUser\|campaign\|approach\|channel&from&to&userId` | Conversão pela coorte do 1º contato, com intervalo de confiança (rollups) | 11 |
+| `GET /analytics/sdr-performance`, `GET /analytics/monthly?fromMonth&toMonth&userId`, `GET /analytics/channels` | Desempenho por SDR, evolução mensal, canais (rollups) | 11 |
+| `GET /analytics/performance-export?report=conversion\|sdrPerformance\|monthly\|channels` | CSV dos relatórios da Fase 11 (auditado) | 11 |
+| `POST /analytics/rollup` | Recalcular os indicadores de um período (worker) | 11 |
+| `GET /insights`, `POST /insights/refresh`, `POST /insights/{id}/feedback` | Insights vigentes (equipe ou própria carteira), gerar agora (gestão) e avaliar | 11 |
+| `GET/PUT /settings/auto-assign`, `POST /settings/auto-assign/run`, `PATCH /users/{id}/availability` | Distribuição automática e disponibilidade dos SDRs (`lead.assign`) | 11 |
+| `GET/POST /prospecting/searches`, `GET /prospecting/searches/{id}`, `POST /prospecting/searches/{id}/approve\|reject`, `GET /prospecting/potential` | Busca na base aberta do CNPJ, comparação com a base, aprovação e recusa, potencial por cidade | 9 |
+| `GET /registry`, `PUT /registry/settings`, `POST /registry/ingestions`, `GET/POST /leads/{id}/registry` | Carga da base aberta (ADMIN) e enriquecimento do lead pelo CNPJ | 9 |
+| `GET/POST /campaigns`, `GET/PATCH /campaigns/{id}`, `POST /campaigns/{id}/actions` (`build`, `activate`, `pause`, `resume`, `complete`, `archive`), `GET /campaigns/{id}/leads`, `POST /campaigns/{id}/leads/{leadId}/remove` | Campanhas (`campaign.manage`): o detalhe traz retrato, motivos, distribuição por SDR, funil e A/B | 10 |
+| `GET /leads/{id}/campaigns` | Campanhas do lead e a abordagem sorteada (escopo do lead) | 10 |
+| `POST /exports` | Exportação auditada (ADMIN/GESTOR); síncrona no MVP, ver nota acima | 2 |
 | `GET /integrations`, `POST /integrations/{provider}/test` | Status e teste de conexões | 7+ |
 
 ---
@@ -480,21 +527,38 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 | Job | Gatilho | O que faz | Fase |
 |---|---|---|---|
-| `import.preview` | Mapeamento salvo | Lê o arquivo em streaming, normaliza, valida, casa com a base e com a Lista Não Contatar, grava `import_rows` | 3 |
-| `import.commit` | Confirmação | Cria e atualiza leads em lotes de 500, emite eventos, gera candidatos a duplicado e relatório | 3 |
-| `dedup.check-lead` | `lead.created` / `lead.updated` (identificadores) | Busca candidatos para um lead (índices exatos + trigram por cidade) | 3 |
-| `dedup.scan` | Diário (madrugada) e manual | Varredura completa em blocos (*blocking* por cidade/UF) | 3 |
-| `score.recompute-lead` | Eventos que mudam critérios | Recalcula score e grava histórico se mudou | 4 |
-| `score.recompute-all` | Ativação de modelo | Recalcula toda a base em lotes | 4 |
-| `cadence.tick` | A cada 5 min | Passos vencidos → tarefas (modo assistido) ou envios (Fase 7); fim da cadência → `NO_RESPONSE` | 5 |
-| `tasks.overdue-scan` | De hora em hora | Marca atrasos, recalcula prioridade, notifica | 5 |
-| `leads.forgotten-scan` | Diário | Marca leads sem atividade há N dias em etapas abertas | 5 |
-| `retention.enforce` | Diário | Purga `import_rows` vencidas, anonimiza conforme política | 3+ |
+| `import.parse` | Upload | Lê o arquivo (CSV/XLSX) com limites, grava as linhas como texto em `import_rows` e apaga os bytes na mesma transação | 3 |
+| `import.preview` | Mapeamento salvo | Normaliza e valida cada linha, casa com a base, com o próprio arquivo e com a Lista Não Contatar (lotes de 1.000 linhas) e propõe a decisão pela política do lote | 3 |
+| `import.commit` | Confirmação | Grava as linhas confirmadas, uma transação por linha (erro numa linha não derruba as outras), pelo mesmo caminho do cadastro manual. Emite eventos, sinaliza possíveis duplicados e gera o relatório. Retoma de onde parou | 3 |
+| `import.purge` | Diário (04:17 UTC) | Apaga as `import_rows` 30 dias após o lote e cancela lotes abandonados há mais de 7 dias | 3 |
+| `dedup.check-lead` | Cadastro manual, edição de nome/CNPJ/site/cidade, contato novo ou reativado, mesclagem (enfileirado na transação) | Busca candidatos para os leads (índices exatos + trigram por cidade) e atualiza a fila de revisão. Na importação, a busca roda na própria linha, para o relatório contar os sinalizados | 3 |
+| `dedup.scan` | Diário (03:43 UTC) e manual (`POST /duplicates/scan`) | Varredura completa em blocos por UF, um bloco por transação; cada par é visto uma vez | 3 |
+| `score.recompute-lead` | Ações em massa de tags (lotes de 1.000 leads). As mudanças de um lead só (contatos, cidade, tipo, tags) recalculam na própria transação | Recalcula o score; grava histórico e o evento `score.changed` quando o score ou a faixa mudam | 4 |
+| `score.recompute-all` | Ativação de modelo, inclusão ou retirada de cidade prioritária (só os leads da cidade) e subida do worker com leads sem score | Recalcula a base em lotes de 500 leads por transação | 4 |
+| `cadence.tick` | A cada 5 min | Conclui as cadências sem resposta no prazo (lead em `NO_RESPONSE`), retoma pausas vencidas e recria a tarefa de um passo que ficou sem tarefa. Cada passo vira tarefa já na inscrição e a cada passo executado (modo assistido); envios automáticos só na Fase 7 | 5 |
+| `tasks.overdue-scan` | De hora em hora (minuto 7) | Avisa cada pessoa das tarefas que atrasaram (uma vez por tarefa) e os gestores das transferências sem aceite no prazo. A prioridade da fila é calculada na leitura | 5 |
+| `leads.forgotten-scan` | Diário (10:20 UTC, 07:20 em Fortaleza) | Avisa cada responsável de quantos leads estão esquecidos: etapa aberta, sem próxima ação e sem atividade há N dias (regras de contato) | 5 |
+| `retention.enforce` | Diário | Anonimiza conforme a política de retenção (as `import_rows` têm job próprio, `import.purge`) | 5+ |
 | `ai.generate-batch` | Agendado (opcional) | Pré-gera rascunhos para a fila do dia seguinte (Batch API, custo menor) | 6+ |
-| `webhook.process` | Webhook recebido | Processa eventos da Meta (status, mensagens, opt-out) | 7 |
-| `message.send` | Mensagem aprovada no modo API | Envia via provedor com retentativa e idempotência | 7 |
-| `registry.ingest` | Mensal | Ingestão filtrada dos dados abertos do CNPJ | 9 |
-| `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
+| `whatsapp.send` | Envio pedido pela pessoa (na mesma transação da mensagem `QUEUED`) | Confere o gate de novo, marca a tentativa, chama a Cloud API fora da transação e grava o desfecho. **Sem nova tentativa automática** (ADR-022) | 7 |
+| `whatsapp.webhook` | Webhook gravado na inbox | Processa item a item (status, respostas, modelos, qualidade), cada um na sua transação e idempotente; até 3 novas tentativas | 7 |
+| `whatsapp.suggest-classification` | Resposta recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação (F7-07); nunca classifica sozinha | 7 |
+| `whatsapp.sync-templates` | Diário (06:41 UTC) e manual | Sincroniza os modelos da conta na Meta | 7 |
+| `whatsapp.health-check` | De hora em hora (minuto 23) e por webhook de qualidade/conta | Qualidade, limite e situação do número; piora avisa os ADMINs | 7 |
+| `webhooks.purge` | Diário (04:47 UTC) | Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias (WhatsApp e Instagram) | 7 |
+| `instagram.send` | Resposta pedida pela pessoa (na mesma transação da mensagem `QUEUED`) | Confere os prazos da Meta e o gate de novo, chama a API fora da transação e grava o desfecho. **Sem nova tentativa automática** (ADR-022) | 8 |
+| `instagram.webhook` | Webhook gravado na inbox | Consulta o @ de quem escreve pela primeira vez (fora da transação) e processa item a item (mensagens, ecos, "visto", comentários); até 3 novas tentativas | 8 |
+| `instagram.suggest-classification` | Mensagem recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação; nunca classifica sozinha | 8 |
+| `instagram.account-check` | Diário (07:13 UTC) | Confere o token e a conta profissional; erro de permissão avisa os ADMINs | 8 |
+| `instagram.discovery` | De hora em hora (minuto 17) | Business Discovery dos @ dos leads, com teto por rodada; recalcula o score (ADR-026) | 8 |
+| `registry.check` | Diário (06:31 UTC, 03:31 em Fortaleza) e "Rodar a carga agora" | Confere se a Receita publicou um mês novo **e completo**; abre a carga (uma por vez) ou retoma a interrompida; carga parada há mais de 72 h é dada como falha | 9 |
+| `registry.ingest` | Aberto pelo `registry.check` | Carga do mês em streaming: estabelecimentos ativos de contabilidade, depois razão social, natureza e porte só das raízes guardadas; apaga o que saiu da base (menos se a queda passar de 30%: avisa os ADMINs). Retoma do arquivo em que parou; até 3 novas tentativas se o servidor da Receita cair | 9 |
+| `prospecting.purge` | Diário (04:27 UTC) | Apaga os resultados das buscas com mais de 30 dias (a busca fica no histórico) | 9 |
+| `campaign.build` | "Montar" na campanha (na mesma transação) | Congela o filtro (até 5.000 leads), avalia a elegibilidade de cada lead (gate do canal em lotes de 250 + regras da campanha), distribui os aptos entre os SDRs e sorteia as variantes; grava tudo de uma vez se a campanha não mudou no meio. Falha volta ao rascunho com o erro | 10 |
+| `campaign.tick` | De hora em hora (minuto 11) e logo após ativar ou retomar | Conclui as campanhas vencidas; libera até o limite diário de cada SDR (dias de expediente das regras de contato, fuso do SDR), um lead por transação, com trava por campanha e elegibilidade conferida de novo; atualiza os marcos do funil. **Nunca envia mensagem** (ADR-029) | 10 |
+| `analytics.rollup` | De hora em hora (minuto 53; às 03h de Fortaleza refaz a semana) e "recalcular período" | Atualiza a *materialized view* `analytics_lead_facts` (`REFRESH … CONCURRENTLY`, sem bloquear leitura) e recalcula `daily_metrics` de hoje e ontem por equipe, pessoa e canal (apaga e grava os dias na mesma transação, 31 dias por transação); retoma do último dia calculado e, na 1ª execução, preenche o histórico (até 36 meses) | 11 |
+| `analytics.insights` | Diário (10:05 UTC, 07:05 em Fortaleza) e "Atualizar" no dashboard | Fatos em SQL da equipe e de cada SDR ativo; uma chamada à IA por público para redigir, com o texto conferido (ADR-032); o lote novo substitui o anterior; apaga insights com mais de 180 dias | 11 |
+| `leads.auto-assign` | De hora em hora (minuto 41), logo após ligar e "Distribuir agora" | Se ligada: até 500 leads do pool por rodada para os SDRs disponíveis, por território ou rodízio, sem passar do limite de leads ativos; 50 por transação, cada lead só se ainda estiver sem responsável (ADR-033); avisa cada SDR | 11 |
 
 Política padrão: até 5 tentativas com backoff exponencial e jitter; depois vai para *dead letter* com alerta. Jobs de varredura usam *singleton* (uma execução por vez).
 
@@ -539,10 +603,10 @@ central-sdr-docline/
 │   │   └── seed/                     # dados de referência + empresas fictícias
 │   ├── integrations/
 │   │   └── src/
-│   │       ├── whatsapp/{assisted,meta-cloud,fake}/
-│   │       ├── instagram/{assisted,meta-graph,fake}/
-│   │       ├── google/{places,fake}/
-│   │       ├── enrichment/{receita-open-data,brasilapi,ibge,fake}/
+│   │       ├── whatsapp/             # meta-cloud.ts (Graph API) e signature.ts (webhooks); o simulado fica no core
+│   │       ├── instagram/            # meta-graph.ts (Graph API com Facebook Login); o simulado fica no core
+│   │       ├── google/{places,fake}/   # planejado (F9-03, aguardando parecer jurídico)
+│   │       ├── company-registry/     # receita-open-data.ts (arquivos oficiais, streaming); a base simulada fica no core
 │   │       ├── ai/{anthropic,fake}/
 │   │       ├── crm/{docline,webhook,fake}/
 │   │       ├── email/{smtp,resend,console}/
@@ -610,6 +674,31 @@ O volume de **leads** é pequeno para o PostgreSQL. O que cresce são **eventos,
 | ~500 mil | Particionamento mensal de `lead_events`, `messages`, `audit_logs`; réplica de leitura para analytics; filas por prioridade; avaliar Redis só para cache e rate limit distribuído |
 | > 500 mil / BI | Exportação incremental para um armazém analítico (BigQuery, ClickHouse ou DuckDB/Parquet) alimentado pelos eventos |
 
+**Medição (Fase 6, `pnpm perf:100k`).** Banco próprio (`*_perf`) com 100 mil leads fictícios, ~116 mil mensagens, 3,3 mil oportunidades, tarefas e opt-outs; mediana de 5 leituras pelos casos de uso da aplicação, num contêiner de desenvolvimento com Postgres local:
+
+| Leitura | Mediana |
+|---|---:|
+| Lista de leads (50) · lista filtrada · busca por nome · ficha | 6–11 ms |
+| Contagem total | 25 ms |
+| Minha Fila (SDR) | 68 ms |
+| Kanban | 212 ms |
+| Dashboard da equipe: 30 / 90 / 366 dias | 0,5 / 0,7 / 1,2 s |
+| Dashboard do SDR (30 dias) | 186 ms |
+| Relatório por cidade (366 dias) · exportação diária (366 dias) | 111 ms · 482 ms |
+
+A primeira versão do dashboard levava 4,6 s (30 dias) e 6,9 s (366 dias): uma passada pelos leads por dimensão e subconsultas por lead. Agora respostas, interesse e oportunidades são agregados por lead antes (hash join) e o total, a cidade, a origem e o SDR saem de uma passada só (`GROUPING SETS`).
+
+**Rollups (Fase 11, mesma base de 100 mil leads, mediana de 3 leituras).** O dashboard continua ao vivo (números do momento, filtro por pessoa); os relatórios novos leem os rollups (ADR-031):
+
+| Leitura ou tarefa | Mediana |
+|---|---:|
+| 1ª execução do rollup (401 dias de histórico) | 4,2 s |
+| Rollup de hora em hora (fatos por lead + 2 dias) | 0,87 s |
+| Conversão por cidade (366 dias) | 32 ms |
+| Desempenho por SDR (90 dias) | 51 ms |
+| Evolução mensal (12 meses) | 65 ms |
+| Canais (90 dias) | 13 ms |
+
 Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em listas; colunas de busca normalizadas e indexadas (o `unaccent` não é `IMMUTABLE`, então a normalização é feita na aplicação e gravada em `name_search`); contagens com filtros indexados; Kanban carrega contagem por coluna e pagina os cards de cada uma.
 
 ---
@@ -626,10 +715,11 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 
 ### 14.2 Topologia (produção)
 
-- **Web Service** (`apps/web`, Docker), com *health check* em `/api/health` e *pre-deploy* `prisma migrate deploy`.
-- **Background Worker** (`apps/worker`, Docker).
+- **Uma imagem Docker** (`Dockerfile`) para os dois serviços; o comando define o papel (ADR-016).
+- **Web Service** (`docker/start-web.sh`), com *health check* em `/api/health` e *pre-deploy* `pnpm db:deploy && pnpm db:seed` (migrações + dados de referência).
+- **Background Worker** (`docker/start-worker.sh`), executado com `tsx` (ADR-017).
 - **PostgreSQL gerenciado**, plano pago com backup diário e recuperação a um ponto no tempo (verificar plano). Os bancos gratuitos da Render expiram e não servem para produção.
-- Segredos em *environment groups*; `render.yaml` (Blueprint) versionado no repositório (Fase 1).
+- Segredos em *environment groups*; `render.yaml` (Blueprint de staging) versionado no repositório.
 - Teste de restauração de backup trimestral.
 
 ### 14.3 Custos (ordem de grandeza, a validar)
@@ -640,6 +730,7 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | IA (volume de MVP: alguns milhares de gerações/mês) | dezenas de US$/mês (ver [AI-SDR §15](./AI-SDR.md#15-custos-e-controles)) |
 | Sentry, e-mail transacional | planos gratuitos no início |
 | WhatsApp Cloud API (Fase 7) | cobrança por mensagem conforme categoria e país (tabela vigente da Meta) |
+| Instagram API (Fase 8) | sem cobrança por mensagem; limites de chamadas por conta (o teto da consulta de perfis deixa folga) |
 | Google Places (Fase 9) | pago por uso, por SKU e campos solicitados; usar *field masks* e cotas |
 
 ---
@@ -663,20 +754,21 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 013 | **Código em inglês, interface e documentação em pt-BR** | Padrão de mercado e bibliotecas; usuário em português | Código em português | Glossário no [README](../README.md#glossário) |
 | 014 | **Google Places só como apoio** (guardar só `place_id`); **dados abertos CNPJ** como fonte primária de descoberta | Termos da Google Maps Platform; dado público oficial | Copiar dados do Places para a base | Depende de validação jurídica (Fase 9) |
 | 015 | **n8n apenas nas bordas** | Regra de negócio versionada, testada e auditada | Fluxos de negócio no n8n | n8n consome a API com chave e escopo |
-
----
-
-## 16. Questões em aberto
-
-Decisões que dependem da Docline (não bloqueiam a Fase 1, salvo indicação):
-
-1. **Hospedagem:** Render (EUA/Europa) com cláusulas de transferência internacional, ou provedor com região em São Paulo? *(decidir antes do deploy de produção)*
-2. **Base atual da Docline:** formato, volume, onde foi coletada e com qual base legal/consentimento. *(antes da Fase 3)*
-3. **Número de WhatsApp:** já existe conta WhatsApp Business ou WABA? Existe base com opt-in? *(iniciar verificação da empresa na Meta já na Fase 1)*
-4. **Oferta comercial** (programa de parceria, comissionamento, diferenciais) para alimentar a base de conhecimento da IA. *(antes da Fase 6)*
-5. **Cidades prioritárias** e territórios por SDR. *(antes da Fase 4)*
-6. **Etapas de follow-up**: manter FU1/FU2/FU3 como colunas (padrão) ou consolidar em "Em cadência"? *(antes da Fase 4)*
-7. **Login:** e-mail/senha ou SSO com Google Workspace da Docline? *(Fase 1)*
-8. **Encarregado (DPO)** e validação jurídica de LIA, textos de primeira abordagem e política de retenção. *(antes do go-live do MVP)*
-9. **Sistemas Docline** (CRM, Gestão AR, Gestão 360): existem APIs documentadas? *(antes da Fase 12)*
-10. **Equipe:** quantos SDRs e comerciais no piloto? *(dimensionamento e plano de distribuição)*
+| 016 | **Imagem Docker única** para web e worker | Um artefato por versão; a imagem do web traz o CLI do Prisma, então as migrações rodam no pre-deploy | Next `standalone` + imagem separada para o worker | Imagem maior (~1,5 GB descompactada); separar imagens é otimização futura |
+| 017 | **Worker executado com `tsx`** (sem etapa de build) | Resolve os pacotes TypeScript do workspace sem bundler; menos configuração | Bundling com tsup/esbuild | Pequeno custo de transpilação na inicialização |
+| 018 | **CSP com nonce por requisição** no `proxy.ts`; o nonce do documento é registrado para estilos injetados por bibliotecas (Radix) | Política estrita sem `unsafe-inline` para scripts e estilos em produção | `unsafe-inline` em `style-src` | Todas as páginas são dinâmicas; atributos `style=""` liberados via `style-src-attr` |
+| 019 | **Hospedagem na Render, região Virginia (EUA)**, para staging e produção (decisão da Docline em 2026-10-08) | Blueprint (`render.yaml`) e imagem já validados; operação simples; custo baixo; Virginia é a região da Render mais próxima do Brasil | Google Cloud em São Paulo (mais configuração); Fly.io em São Paulo (Postgres gerenciado recente); Railway (sem região no Brasil) | **Transferência internacional** (LGPD art. 33): exige cláusulas-padrão da ANPD no contrato/DPA da Render e validação jurídica **antes de dados pessoais reais**; até lá, só dados fictícios. A Render não muda a região de um serviço existente (trocar = recriar e migrar). A Render acrescenta ao `X-Forwarded-For`: `TRUSTED_PROXIES` deve ser configurado no primeiro deploy ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)) |
+| 020 | **Leitor próprio de XLSX** (fflate para o ZIP, saxes para o XML), só valores das células como texto, em vez do ExcelJS (Fase 3) | O ExcelJS 4.4.0 está sem versão nova desde 2023 e depende de pacotes antigos (`tmp`, `archiver`, `unzipper`). Com o leitor próprio, os limites contra zip bomb são explícitos: o total declarado e o número de entradas são conferidos antes de descompactar, e o buffer tem o tamanho declarado, então o arquivo não cresce além dele. Também recusa macros e lê em streaming, com 3 dependências pequenas | ExcelJS; SheetJS (o pacote `xlsx` do npm está desatualizado) | Não converte datas (vêm como número serial; não há campo de data no mapeamento do lead) nem avalia fórmulas: vale o último resultado gravado no arquivo. Testado com planilhas montadas no próprio teste |
+| 021 | **Opt-in do WhatsApp por número** (`contact_permissions.contact_point_id`), com evidência; a linha do lead guarda só a base legal (Fase 7) | A Meta exige a permissão do próprio número para mensagens iniciadas pela empresa; um lead pode ter vários números | Opt-in no nível do lead (Fase 2) | O opt-in de WhatsApp gravado no lead deixa de liberar a API; o gate do modo API filtra os números (opt-in ou janela aberta); opt-out e o erro 131050 revogam o opt-in; mesclagem leva o opt-in do mesmo número (revogado prevalece) |
+| 022 | **Envio pela API sem reenvio automático**: tentativa marcada antes da chamada, desfecho gravado com atualização condicional e nosso id em `biz_opaque_callback_data` (Fase 7) | A Cloud API não tem chave de idempotência; repetir uma chamada de resultado incerto pode mandar a mesma mensagem duas vezes (pior que não mandar, para quem prospecta) | Retentativas automáticas do pg-boss | Falha conhecida vira "Tentar de novo" para a pessoa; resultado incerto só é repetido depois de 10 minutos sem status e com confirmação; o webhook de status corrige uma falha incerta |
+| 023 | **Cloud API direta pela Graph API oficial com `fetch`**, versão fixada em `META_GRAPH_API_VERSION`; leitura do webhook (formato da Meta) no core; inbox de webhooks idempotente pelo SHA-256 do corpo (Fase 7) | A Meta não mantém SDK oficial para Node; a Cloud API direta é a opção de menor custo; o provedor simulado fala o mesmo formato de webhook, então a mesma leitura serve aos dois | BSP (Twilio, 360dialog…), possível pela porta; SDK de terceiros | Atualizar a versão da Graph API é uma mudança planejada, com os testes do adaptador; um BSP exigiria adaptador e leitura de webhook próprios |
+| 024 | **2FA obrigatória para ADMIN/GESTOR aplicada na borda web** (páginas por `getPageContext` e API v1 por `apiHandler`), com a regra pura `twoFactorGate` no core e `TWO_FACTOR_ENFORCEMENT` (`required` em staging e produção; `reminder` só em dev/test) (0.7.1) | A situação da 2FA vem da sessão do Better Auth, que só existe na borda; jobs e o sistema não têm 2FA; a suíte E2E precisa entrar como ADMIN sem um código novo a cada login | Bloqueio no core (cada caso de uso) ou no `proxy.ts` (consulta à sessão em toda requisição) | Página nova deve usar `getPageContext` (as de "em breve" não leem dados); uma rota da API v1 fora do `apiHandler` não teria o bloqueio; o E2E sobe um segundo servidor com `required` |
+| 025 | **Instagram só responde**: porta própria (`InstagramProvider`), texto só com a janela de 24 h aberta naquele @ e resposta privada a comentário (uma por comentário, até 7 dias) pelo gate do contato assistido; o primeiro contato continua pelo app; ecos conciliam envios e registram respostas dadas pelo app; comentários só de leads já cadastrados (Fase 8) | A API da Meta não permite iniciar conversa; as regras (janela, resposta privada, eco, perfil por IGSID) são diferentes das do WhatsApp; guardar comentários de quem não é lead seria tratar dados sem finalidade | Porta única de mensageria para os dois canais; tag `human_agent` (até 7 dias); guardar todos os comentários | Mesmo desenho de envio do WhatsApp (ADR-022) e mesma inbox de webhooks; o IGSID vira o `external_thread_id` da conversa; a lista de quem não é lead é a do WhatsApp com o canal; comentário não para a cadência |
+| 026 | **Business Discovery mínimo**: job de hora em hora com teto configurável, seleção em SQL (nunca consultados ou com o @ trocado primeiro, depois os vencidos), cada @ consultado uma vez, só seguidores, número de publicações e data da última; o score usa a última publicação conhecida do @ atual; leads com opt-out ou bloqueados não são consultados (Fase 8) | Os limites de chamadas da Meta são por conta e compartilhados com as mensagens; o critério "Instagram ativo" só precisa da data; minimização (LGPD) | Consultar na criação do lead; guardar mídias e legendas; consulta sem teto | Métricas de um @ antigo não valem; falha não apaga o que se sabia; o critério continua inativo no seed até o ADMIN ligar |
+| 027 | **Cópia local filtrada da base aberta do CNPJ** (`registry_companies`), carregada todo mês pelos arquivos oficiais da Receita em streaming, separada de `leads`; a porta (`CompanyRegistrySource`) só entrega arquivos e o core lê o layout (Fase 9) | A busca roda no nosso banco (sem chamada externa por busca, sem limite de terceiros, comparação em SQL com a base); a Receita publica arquivos, não uma API de busca; ler o layout no core deixa a base simulada no mesmo caminho | API de terceiros por consulta (BrasilAPI e afins) para buscar; guardar os arquivos completos | Carga longa e retomável no worker; o mês só entra com a publicação completa; queda grande não apaga nada; formato e endereço conferidos na ativação |
+| 028 | **Prospecção sem cópia dos dados nos resultados e com aprovação humana que refaz a comparação** (Fase 9) | Os resultados guardam só o CNPJ, a comparação e a decisão (30 dias); os dados vêm da cópia da base na leitura. Na aprovação, a base pode ter mudado: compara de novo, completa o existente e recusa quem entrou na Lista Não Contatar. A decisão é reservada por atualização condicional, como no envio pela API | Criar leads direto da busca; guardar os dados no resultado | Uma transação por aprovação (até 100 por pedido); o "recusado antes" vale enquanto o resultado existir (30 dias) |
+| 029 | **Campanha não envia mensagens**: seleciona (retrato congelado do filtro), avalia a elegibilidade com motivos, distribui entre os SDRs e **libera para a cadência** até um limite diário por SDR; cada contato continua sendo do SDR, pelo gate de sempre (assistido; API só com opt-in ou janela aberta). Única mudança nas tabelas existentes: `campaign_id` opcional em inscrições e mensagens (Fase 10) | O requisito proíbe disparos indiscriminados e spam; o gate, a cadência e a Minha Fila já resolvem horário, frequência, opt-out e registro; liberar em lotes diários dá ritmo sem criar outro caminho de envio | Disparo em massa pela API; enviar o passo de cadência `API_MESSAGE` sozinho (F7-09) | O lote do dia vira tarefas na Minha Fila; o limite diário é de leads liberados, não de mensagens; conferir de novo na hora da liberação evita contatar quem entrou na Lista Não Contatar depois da montagem; campanha concluída não para as cadências em andamento |
+| 030 | **Funil por janela de atribuição e A/B por variante sorteada** (Fase 10) | Um marco (contato, entrega, resposta, interesse, oportunidade, conversão, opt-out) conta para a campanha se acontece até 90 dias depois da liberação ou até o lead ser liberado por outra campanha, recalculado por SQL idempotente. O A/B compara a **variante sorteada** (não a abordagem que o SDR acabou usando), alternada dentro da lista de cada SDR, só com 30 contatados por variante e com Bonferroni; nunca declara vencedora | Atribuir pela abordagem gravada na mensagem; ligar a atribuição à data de conclusão; declarar vencedora por p-valor | Mensagens da janela ganham o `campaign_id`; a comparação aponta "diferença provável" e a decisão é do gestor; a Fase 11 (Analytics) pode reaproveitar a atribuição |
+| 031 | **Rollups e fatos por lead para os relatórios** (Fase 11): `analytics_lead_facts` (*materialized view*, um registro por lead com o 1º contato — quando, canal, abordagem, quem, campanha na janela de 90 dias — e os marcos depois dele) e `daily_metrics` (contagens por dia local da equipe, de cada pessoa e de cada canal), atualizados pelo job `analytics.rollup` de hora em hora | Conversão por nove recortes, evolução mensal e canais sobre tabelas pequenas e já agregadas (13–65 ms com 100 mil leads); a coorte do 1º contato tem uma definição só; `REFRESH … CONCURRENTLY` não bloqueia quem lê | Calcular tudo ao vivo (o dashboard de 366 dias já leva ~1 s); triggers a cada evento; tabela de fatos mantida pela aplicação | Números dos relatórios novos com até 1 h de atraso (a tela mostra quando foram calculados); o dashboard continua ao vivo; `leads_contacted` é por dia e não soma entre dias; quem recebe cada número no recorte por pessoa e por canal está em SDR-FLOW §11 |
+| 032 | **Insights: números do banco, texto da IA conferido** (Fase 11): cada insight nasce de um fato calculado em SQL, com texto padrão; a IA só reescreve, e o texto dela só vale se todo número citado existir no fato (porcentagens separadas de contagens), sem telefone, e-mail ou link e no tamanho; senão, vale o texto padrão | A IA não inventa números nem tendências; sem IA (orçamento, cota, falha) o recurso continua funcionando; nenhum dado pessoal sai para o provedor (só contagens, cidades e nomes de abordagens) | A IA ler as tabelas e escrever livremente; insights só com IA | Custo pequeno e previsível (uma chamada por público por dia), registrado em `ai_generations` (tipo `INSIGHT`, sem lead) e fora das métricas de rascunhos; o motivo de cada texto recusado fica gravado |
+| 033 | **Distribuição automática nunca toma lead** (Fase 11): desligada por padrão; quando ligada, só atribui leads do pool (sem responsável, ativos, contatáveis, em etapa de prospecção, fora de campanha em andamento), com a mesma trava do "puxar do pool"; território (cidade, depois UF, rodízio geral opcional) ou rodízio; respeita participação, ausência e limite de leads ativos | Redistribuir carteira é decisão da gestão; a trava evita corrida com o "puxar" e com outra rodada; campanha em andamento já distribuiu os seus leads | Rebalancear carteiras automaticamente; distribuir no cadastro (na transação de criação) | Rodada de hora em hora (até 500 leads); "novos" contam desde que foi ligada, salvo se o pool antigo for incluído; quem ficou no pool aparece com o motivo (sem SDR, sem território, todos no limite) |

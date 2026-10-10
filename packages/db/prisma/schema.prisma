@@ -1,0 +1,2912 @@
+// Docline SDR — schema do banco (PostgreSQL)
+//
+// Fonte conceitual: docs/DATABASE.md. Convenções:
+// - tabelas e colunas em snake_case (via @@map/@map), modelos em PascalCase;
+// - ids UUIDv7; datas em timestamptz (UTC);
+// - sem exclusão física de dados de negócio (status), exceto rotinas de retenção.
+//
+// Fase 1: identidade (Better Auth + domínio), equipes, convites, auditoria,
+// configurações e dados de referência (UFs, municípios, feriados).
+// Fase 2: núcleo de leads, timeline, conformidade (base legal, Lista Não
+// Contatar, titulares), visões salvas e territórios.
+// Fases seguintes: ver docs/DATABASE.md (§4.10: campanhas, Fase 10).
+//
+// Índices parciais usam o recurso "partialIndexes" (preview do Prisma 7), para
+// que a checagem de drift do CI também os cubra (docs/ARCHITECTURE.md §4.1).
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// Identidade e equipe
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SDR
+  SALES
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+
+  @@map("user_status")
+}
+
+/// Usuário interno. Campos base exigidos pelo Better Auth + campos do domínio.
+model User {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  name             String
+  email            String     @unique
+  emailVerified    Boolean    @default(false) @map("email_verified")
+  image            String?
+  role             UserRole   @default(SDR)
+  status           UserStatus @default(INVITED)
+  teamId           String?    @map("team_id") @db.Uuid
+  timezone         String     @default("America/Fortaleza")
+  lastLoginAt      DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  /// Verificação em duas etapas (TOTP) ativa (Better Auth, plugin two-factor).
+  twoFactorEnabled Boolean    @default(false) @map("two_factor_enabled")
+  /// Fase 11: entra na distribuição automática (só SDRs ativos).
+  autoAssign       Boolean    @default(true) @map("auto_assign")
+  /// Teto de leads ativos na carteira (nulo = o padrão da configuração).
+  maxActiveLeads   Int?       @map("max_active_leads")
+  /// Ausente até este dia (inclusive): não recebe leads da distribuição automática.
+  awayUntil        DateTime?  @map("away_until") @db.Date
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  team               Team?        @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams       Team[]       @relation("TeamManager")
+  sessions           Session[]
+  accounts           Account[]
+  twoFactors         TwoFactor[]
+  invitations        Invitation[] @relation("InvitationUser")
+  createdInvitations Invitation[] @relation("InvitationCreator")
+
+  ownedLeads      Lead[]           @relation("LeadOwner")
+  createdLeads    Lead[]           @relation("LeadCreator")
+  leadNotes       LeadNote[]       @relation("LeadNoteAuthor")
+  assignmentsFrom LeadAssignment[] @relation("AssignmentFrom")
+  assignmentsTo   LeadAssignment[] @relation("AssignmentTo")
+  assignmentsMade LeadAssignment[] @relation("AssignmentBy")
+  territories     UserTerritory[]
+  savedViews      SavedView[]
+  insights        Insight[]        @relation("InsightAudience")
+  insightFeedback Insight[]        @relation("InsightFeedbackBy")
+
+  importBatches      ImportBatch[]           @relation("ImportCreator")
+  importsAsOwner     ImportBatch[]           @relation("ImportDefaultOwner")
+  mappingTemplates   ImportMappingTemplate[] @relation("MappingTemplateCreator")
+  duplicateDecisions DuplicateCandidate[]    @relation("CandidateDecider")
+  mergesPerformed    LeadMerge[]             @relation("MergePerformer")
+
+  stageChanges       LeadStageHistory[] @relation("StageChangedBy")
+  priorityCities     PriorityCity[]     @relation("PriorityCityCreator")
+  scoringModels      ScoringModel[]     @relation("ScoringModelCreator")
+  scoringActivations ScoringModel[]     @relation("ScoringModelActivator")
+
+  tasksAssigned      Task[]              @relation("TaskAssignee")
+  tasksCompleted     Task[]              @relation("TaskCompletedBy")
+  tasksCreated       Task[]              @relation("TaskCreatedBy")
+  activities         Activity[]          @relation("ActivityUser")
+  messagesSent       Message[]           @relation("MessageSentBy")
+  messagesClassified Message[]           @relation("MessageClassifiedBy")
+  cadences           Cadence[]           @relation("CadenceCreator")
+  enrollments        CadenceEnrollment[] @relation("EnrollmentBy")
+  opportunitiesAsSdr Opportunity[]       @relation("OpportunitySdr")
+  opportunitiesSales Opportunity[]       @relation("OpportunitySalesOwner")
+  notifications      Notification[]      @relation("NotificationUser")
+  messagesApproved   Message[]           @relation("MessageApprovedBy")
+
+  aiGenerationsRequested AiGeneration[]    @relation("AiGenerationRequestedBy")
+  aiGenerationsApproved  AiGeneration[]    @relation("AiGenerationApprovedBy")
+  aiKnowledgeApproved    AiKnowledgeItem[] @relation("AiKnowledgeApprovedBy")
+  approachesCreated      Approach[]        @relation("ApproachCreator")
+
+  unmatchedResolved    InboundUnmatched[]  @relation("InboundUnmatchedResolver")
+  registryIngestions   RegistryIngestion[]
+  prospectingSearches  ProspectingSearch[]
+  prospectingDecisions ProspectingResult[] @relation("ProspectingDecidedBy")
+  campaignsOwned       Campaign[]          @relation("CampaignOwner")
+  campaignsCreated     Campaign[]          @relation("CampaignCreator")
+  campaignSdrs         CampaignSdr[]
+  campaignLeads        CampaignLead[]
+
+  @@index([role, status])
+  @@index([teamId])
+  @@map("users")
+}
+
+/// Sessão (Better Auth). Token opaco em cookie HttpOnly.
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  token     String   @unique
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Credenciais (Better Auth). `password` guarda apenas o hash.
+model Account {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id") @db.Uuid
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Tokens de verificação (Better Auth): redefinição de senha etc.
+model Verification {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+/// Segundo fator TOTP (Better Auth, plugin two-factor). Segredo e códigos de
+/// recuperação ficam cifrados com o segredo da aplicação (BETTER_AUTH_SECRET).
+model TwoFactor {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id") @db.Uuid
+  /// Falso até o primeiro código válido (a ativação exige confirmar no aplicativo).
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factors")
+}
+
+/// Limites de taxa do Better Auth persistidos no banco (valem entre instâncias).
+model RateLimit {
+  id          String @id @default(uuid(7)) @db.Uuid
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("rate_limits")
+}
+
+/// Falhas de login recentes (docs/SECURITY.md §12). Chave "pair:<hmac do e-mail>:<ip>"
+/// (atraso progressivo só para quem errou, sem trancar o dono da conta) ou
+/// "account:<hmac do e-mail>" (alerta ao ADMIN em picos). Linhas paradas há mais
+/// de 1 dia são apagadas a cada nova falha.
+model LoginThrottle {
+  key             String    @id
+  failures        Int       @default(0)
+  windowStartedAt DateTime  @map("window_started_at") @db.Timestamptz(3)
+  blockedUntil    DateTime? @map("blocked_until") @db.Timestamptz(3)
+  alertedAt       DateTime? @map("alerted_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([updatedAt])
+  @@map("login_throttles")
+}
+
+model Team {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String   @unique
+  managerId String?  @map("manager_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  manager User?  @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members User[] @relation("TeamMembers")
+
+  @@map("teams")
+}
+
+/// Convite de acesso (sem cadastro público). Guardamos só o hash do token.
+model Invitation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User  @relation("InvitationUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("invitations")
+}
+
+// -----------------------------------------------------------------------------
+// Auditoria e configurações
+// -----------------------------------------------------------------------------
+
+enum ActorType {
+  USER
+  SYSTEM
+  AUTOMATION
+  INTEGRATION
+  AI
+
+  @@map("actor_type")
+}
+
+/// Log imutável de mutações e eventos de segurança. UPDATE/DELETE/TRUNCATE são
+/// bloqueados por trigger (ver migração); purga só pela rotina de retenção.
+model AuditLog {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  occurredAt DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  action     String
+  entityType String    @map("entity_type")
+  entityId   String?   @map("entity_id")
+  changes    Json?
+  metadata   Json?
+  ip         String?
+  userAgent  String?   @map("user_agent")
+  requestId  String?   @map("request_id")
+
+  @@index([entityType, entityId, occurredAt(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+/// Configurações de negócio editáveis (horários, limites, palavras de opt-out…).
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("app_settings")
+}
+
+// -----------------------------------------------------------------------------
+// Dados de referência
+// -----------------------------------------------------------------------------
+
+model State {
+  uf       String @id @db.Char(2)
+  name     String
+  ibgeCode Int    @unique @map("ibge_code")
+  region   String
+  timezone String
+
+  municipalities Municipality[]
+  leads          Lead[]
+  territories    UserTerritory[]
+
+  @@map("states")
+}
+
+model Municipality {
+  ibgeCode   Int      @id @map("ibge_code")
+  name       String
+  nameSearch String   @map("name_search")
+  uf         String   @db.Char(2)
+  ddd        Int?
+  timezone   String
+  isCapital  Boolean  @default(false) @map("is_capital")
+  latitude   Decimal? @db.Decimal(9, 6)
+  longitude  Decimal? @db.Decimal(9, 6)
+  population Int?
+
+  state             State             @relation(fields: [uf], references: [uf])
+  leads             Lead[]
+  territories       UserTerritory[]
+  priorityCity      PriorityCity?
+  registryCompanies RegistryCompany[]
+
+  @@index([uf, nameSearch])
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "municipalities_name_search_trgm_idx")
+  @@map("municipalities")
+}
+
+enum HolidayScope {
+  NATIONAL
+  STATE
+  MUNICIPAL
+
+  @@map("holiday_scope")
+}
+
+/// Feriados e pontos facultativos usados no calendário de cadências.
+/// `key` determinística evita duplicidade (ex.: NATIONAL:2026-12-25).
+model Holiday {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  key              String       @unique
+  date             DateTime     @db.Date
+  scope            HolidayScope
+  uf               String?      @db.Char(2)
+  municipalityCode Int?         @map("municipality_code")
+  name             String
+  isOptional       Boolean      @default(false) @map("is_optional")
+
+  @@index([date])
+  @@map("holidays")
+}
+
+// -----------------------------------------------------------------------------
+// Cadastros auxiliares de leads (Fase 2)
+// -----------------------------------------------------------------------------
+
+enum LegalBasis {
+  CONSENT
+  LEGITIMATE_INTEREST
+  CONTRACT
+  NOT_ASSESSED
+
+  @@map("legal_basis")
+}
+
+/// Origem de um lead (Google, indicação, base Docline…). `defaultLegalBasis` é a
+/// base legal sugerida no cadastro (docs/LGPD.md §4); o usuário confirma.
+model LeadSource {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  key               String     @unique
+  name              String
+  defaultLegalBasis LegalBasis @default(NOT_ASSESSED) @map("default_legal_basis")
+  position          Int        @default(0)
+  active            Boolean    @default(true)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads         Lead[]
+  origins       LeadOrigin[]
+  importBatches ImportBatch[]
+  contactPoints ContactPoint[]
+
+  @@map("lead_sources")
+}
+
+model Segment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  key       String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads Lead[]
+
+  @@map("segments")
+}
+
+model Tag {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  /// Chave sem acento/maiúsculas: impede "Parceiro" e "parceiro" ao mesmo tempo.
+  nameSearch  String   @unique @map("name_search")
+  color       String   @default("slate")
+  category    String?
+  active      Boolean  @default(true)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads LeadTag[]
+
+  @@map("tags")
+}
+
+// -----------------------------------------------------------------------------
+// Núcleo de leads (Fase 2)
+// -----------------------------------------------------------------------------
+
+enum LeadType {
+  ACCOUNTING_FIRM
+  ACCOUNTANT
+  REFERRAL_PARTNER
+  COMPANY
+  OTHER
+
+  @@map("lead_type")
+}
+
+enum LeadStatus {
+  ACTIVE
+  ARCHIVED
+  MERGED
+  ANONYMIZED
+
+  @@map("lead_status")
+}
+
+/// Cache do gate de contactabilidade (docs/SDR-FLOW.md §9), para filtros e contagens.
+enum ContactStatus {
+  CONTACTABLE
+  RESTRICTED
+  NO_LEGAL_BASIS
+  OPTED_OUT
+  BLOCKED
+
+  @@map("contact_status")
+}
+
+enum LeadCreatedVia {
+  MANUAL
+  IMPORT
+  PROSPECTING
+  API
+  MERGE
+
+  @@map("lead_created_via")
+}
+
+/// Organização prospectada (escritório, empresa, parceiro). Colunas de pipeline,
+/// score, atividade e desfecho entram nas Fases 4–5 (docs/DATABASE.md §4.3).
+model Lead {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  /// Código legível sequencial (exibido como L-000123).
+  code              Int            @unique @default(autoincrement())
+  companyName       String?        @map("company_name")
+  tradeName         String?        @map("trade_name")
+  /// Nome fantasia ou, na falta, a razão social.
+  displayName       String         @map("display_name")
+  nameSearch        String         @map("name_search")
+  nameCore          String         @map("name_core")
+  leadType          LeadType       @default(ACCOUNTING_FIRM) @map("lead_type")
+  segmentId         String?        @map("segment_id") @db.Uuid
+  category          String?
+  cnaeMain          String?        @map("cnae_main") @db.VarChar(7)
+  cnpj              String?        @db.VarChar(14)
+  cnpjRoot          String?        @map("cnpj_root") @db.VarChar(8)
+  /// HMAC do CNPJ (cruzamento com a Lista Não Contatar, como em contact_points).
+  cnpjHash          String?        @map("cnpj_hash")
+  addressLine       String?        @map("address_line")
+  addressNumber     String?        @map("address_number")
+  addressComplement String?        @map("address_complement")
+  neighborhood      String?
+  cityRaw           String?        @map("city_raw")
+  municipalityCode  Int?           @map("municipality_code")
+  stateUf           String?        @map("state_uf") @db.Char(2)
+  postalCode        String?        @map("postal_code") @db.Char(8)
+  websiteUrl        String?        @map("website_url")
+  websiteDomain     String?        @map("website_domain")
+  /// Primeira origem (first-touch); histórico completo em lead_origins.
+  originSourceId    String         @map("origin_source_id") @db.Uuid
+  originDetail      String?        @map("origin_detail")
+  originUrl         String?        @map("origin_url")
+  collectedAt       DateTime       @map("collected_at") @db.Timestamptz(3)
+  createdVia        LeadCreatedVia @default(MANUAL) @map("created_via")
+  ownerId           String?        @map("owner_id") @db.Uuid
+  previousOwnerId   String?        @map("previous_owner_id") @db.Uuid
+  assignedAt        DateTime?      @map("assigned_at") @db.Timestamptz(3)
+  hasPhone          Boolean        @default(false) @map("has_phone")
+  hasWhatsapp       Boolean        @default(false) @map("has_whatsapp")
+  hasEmail          Boolean        @default(false) @map("has_email")
+  hasInstagram      Boolean        @default(false) @map("has_instagram")
+  hasWebsite        Boolean        @default(false) @map("has_website")
+  contactStatus     ContactStatus  @default(NO_LEGAL_BASIS) @map("contact_status")
+  lastActivityAt    DateTime       @default(now()) @map("last_activity_at") @db.Timestamptz(3)
+  status            LeadStatus     @default(ACTIVE)
+  archivedAt        DateTime?      @map("archived_at") @db.Timestamptz(3)
+  anonymizedAt      DateTime?      @map("anonymized_at") @db.Timestamptz(3)
+  description       String?
+  /// Colunas extras de importação, como texto (docs/MVP.md M04).
+  customFields      Json?          @map("custom_fields")
+  /// Lead que absorveu este na mesclagem (status MERGED).
+  mergedIntoId      String?        @map("merged_into_id") @db.Uuid
+  /// Etapa atual (Fase 4). Todo cadastro entra em NEW; leads antigos recebem
+  /// NEW no seed e na subida do worker (`backfillLeadStages`).
+  pipelineId        String?        @map("pipeline_id") @db.Uuid
+  stageId           String?        @map("stage_id") @db.Uuid
+  stageEnteredAt    DateTime?      @map("stage_entered_at") @db.Timestamptz(3)
+  /// Desfecho: preenchidos ao entrar numa etapa de perda (LOST) ou de ganho (WON).
+  lostAt            DateTime?      @map("lost_at") @db.Timestamptz(3)
+  lossReasonId      String?        @map("loss_reason_id") @db.Uuid
+  convertedAt       DateTime?      @map("converted_at") @db.Timestamptz(3)
+  /// Cache do último cálculo de score (histórico em lead_score_history).
+  score             Int?
+  scoreBand         ScoreBand?     @map("score_band")
+  scoreModelId      String?        @map("score_model_id") @db.Uuid
+  scoreComputedAt   DateTime?      @map("score_computed_at") @db.Timestamptz(3)
+  /// Atividade comercial (Fase 5): alimentam a fila, os "esquecidos" e as métricas.
+  firstContactAt    DateTime?      @map("first_contact_at") @db.Timestamptz(3)
+  /// Último contato de saída (mensagem confirmada ou ligação atendida).
+  lastContactAt     DateTime?      @map("last_contact_at") @db.Timestamptz(3)
+  firstReplyAt      DateTime?      @map("first_reply_at") @db.Timestamptz(3)
+  lastInboundAt     DateTime?      @map("last_inbound_at") @db.Timestamptz(3)
+  /// Vencimento da próxima tarefa aberta.
+  nextActionAt      DateTime?      @map("next_action_at") @db.Timestamptz(3)
+  isTestData        Boolean        @default(false) @map("is_test_data")
+  /// Lock otimista: PATCH envia a versão lida; divergência → 409.
+  version           Int            @default(1)
+  createdById       String?        @map("created_by_id") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  segment            Segment?             @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  municipality       Municipality?        @relation(fields: [municipalityCode], references: [ibgeCode])
+  state              State?               @relation(fields: [stateUf], references: [uf])
+  originSource       LeadSource           @relation(fields: [originSourceId], references: [id])
+  owner              User?                @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy          User?                @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  people             LeadPerson[]
+  contactPoints      ContactPoint[]
+  origins            LeadOrigin[]
+  tags               LeadTag[]
+  notes              LeadNote[]
+  assignments        LeadAssignment[]
+  events             LeadEvent[]
+  permissions        ContactPermission[]
+  suppressions       SuppressionEntry[]
+  dsrs               DataSubjectRequest[]
+  mergedInto         Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  absorbed           Lead[]               @relation("LeadMergedInto")
+  candidatesA        DuplicateCandidate[] @relation("CandidateA")
+  candidatesB        DuplicateCandidate[] @relation("CandidateB")
+  merges             LeadMerge[]          @relation("MergeSurvivor")
+  mergedAway         LeadMerge[]          @relation("MergeMerged")
+  pipeline           Pipeline?            @relation(fields: [pipelineId], references: [id])
+  stage              PipelineStage?       @relation(fields: [stageId], references: [id])
+  lossReason         LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+  scoreModel         ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
+  stageHistory       LeadStageHistory[]
+  scoreHistory       LeadScoreHistory[]
+  tasks              Task[]
+  activities         Activity[]
+  messages           Message[]
+  enrollments        CadenceEnrollment[]
+  opportunities      Opportunity[]
+  notifications      Notification[]
+  aiGenerations      AiGeneration[]
+  conversations      Conversation[]
+  inboundLinked      InboundUnmatched[]   @relation("InboundUnmatchedLead")
+  /// Fase 8: comentários do lead nas publicações da Docline no Instagram.
+  socialComments     SocialComment[]
+  /// Fase 9: resultados de prospecção que bateram com o lead ou o criaram.
+  prospectingMatches ProspectingResult[]  @relation("ProspectingMatchedLead")
+  prospectingCreated ProspectingResult[]  @relation("ProspectingCreatedLead")
+  /// Fase 10: participação em campanhas.
+  campaignLeads      CampaignLead[]
+
+  @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
+  @@index([cnpjRoot])
+  @@index([cnpjHash])
+  @@index([ownerId, status])
+  @@index([status, stateUf])
+  @@index([municipalityCode])
+  @@index([contactStatus])
+  @@index([lastActivityAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_search_trgm_idx")
+  @@index([nameCore(ops: raw("gin_trgm_ops"))], type: Gin, map: "leads_name_core_trgm_idx")
+  /// Quadro do pipeline: cards de uma etapa por prioridade.
+  @@index([stageId, status, score(sort: Desc)])
+  @@index([ownerId, stageId])
+  @@index([scoreBand])
+  /// Minha Fila: leads do SDR com resposta pendente ou sem atividade.
+  @@index([ownerId, lastInboundAt])
+  /// Deduplicação por site (mesmo domínio).
+  @@index([websiteDomain])
+  @@map("leads")
+}
+
+enum LeadPersonStatus {
+  ACTIVE
+  LEFT
+  ANONYMIZED
+
+  @@map("lead_person_status")
+}
+
+/// Pessoa do lead (contador, sócio, recepção).
+model LeadPerson {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  leadId          String           @map("lead_id") @db.Uuid
+  fullName        String           @map("full_name")
+  firstName       String?          @map("first_name")
+  roleTitle       String?          @map("role_title")
+  isPrimary       Boolean          @default(false) @map("is_primary")
+  isDecisionMaker Boolean          @default(false) @map("is_decision_maker")
+  notes           String?
+  status          LeadPersonStatus @default(ACTIVE)
+  createdById     String?          @map("created_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead          Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoints ContactPoint[]
+  permissions   ContactPermission[]
+
+  @@index([leadId])
+  @@map("lead_people")
+}
+
+enum ContactPointType {
+  PHONE
+  EMAIL
+  INSTAGRAM
+
+  @@map("contact_point_type")
+}
+
+enum PhoneKind {
+  MOBILE
+  LANDLINE
+  SERVICE
+  UNKNOWN
+
+  @@map("phone_kind")
+}
+
+enum WhatsappStatus {
+  UNKNOWN
+  PROBABLE
+  CONFIRMED
+  NOT_ON_WHATSAPP
+
+  @@map("whatsapp_status")
+}
+
+enum ContactPointStatus {
+  ACTIVE
+  INVALID
+  BOUNCED
+  WRONG_PERSON
+  REMOVED
+
+  @@map("contact_point_status")
+}
+
+/// Fonte da verdade dos canais: um registro por valor. WhatsApp é um PHONE com
+/// `whatsappStatus` (evita duplicar o mesmo número).
+model ContactPoint {
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  leadId             String             @map("lead_id") @db.Uuid
+  personId           String?            @map("person_id") @db.Uuid
+  type               ContactPointType
+  valueRaw           String             @map("value_raw")
+  /// Telefone em E.164; e-mail minúsculo; Instagram sem "@".
+  valueNormalized    String             @map("value_normalized")
+  /// HMAC do valor normalizado (cruzamento com a Lista Não Contatar).
+  valueHash          String             @map("value_hash")
+  label              String?
+  phoneKind          PhoneKind?         @map("phone_kind")
+  whatsappStatus     WhatsappStatus     @default(UNKNOWN) @map("whatsapp_status")
+  isPrimary          Boolean            @default(false) @map("is_primary")
+  status             ContactPointStatus @default(ACTIVE)
+  /// Origem deste dado (LGPD).
+  sourceId           String?            @map("source_id") @db.Uuid
+  sourceDetail       String?            @map("source_detail")
+  collectedAt        DateTime?          @map("collected_at") @db.Timestamptz(3)
+  verifiedAt         DateTime?          @map("verified_at") @db.Timestamptz(3)
+  verificationMethod String?            @map("verification_method")
+  normalizationFlags String[]           @default([]) @map("normalization_flags")
+  createdById        String?            @map("created_by_id") @db.Uuid
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead             Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  person           LeadPerson?         @relation(fields: [personId], references: [id], onDelete: SetNull)
+  source           LeadSource?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  permissions      ContactPermission[]
+  messages         Message[]
+  activities       Activity[]
+  conversations    Conversation[]
+  /// Fase 8: consulta do perfil (só em contatos do tipo INSTAGRAM).
+  instagramProfile InstagramProfile?
+  socialComments   SocialComment[]
+
+  @@unique([leadId, type, valueNormalized])
+  @@unique([leadId, type], map: "contact_points_primary_key", where: raw("is_primary AND status = 'ACTIVE'"))
+  @@index([type, valueNormalized])
+  @@index([type, valueHash])
+  @@index([personId])
+  @@map("contact_points")
+}
+
+/// Origens de um lead (após mesclagens, pode haver várias). Exatamente uma é a primeira (first-touch).
+model LeadOrigin {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  leadId        String   @map("lead_id") @db.Uuid
+  sourceId      String   @map("source_id") @db.Uuid
+  detail        String?
+  url           String?
+  collectedAt   DateTime @map("collected_at") @db.Timestamptz(3)
+  referrerName  String?  @map("referrer_name")
+  isFirstTouch  Boolean  @default(false) @map("is_first_touch")
+  /// Lote de importação de onde o lead (ou esta aparição dele) veio.
+  importBatchId String?  @map("import_batch_id") @db.Uuid
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  source      LeadSource   @relation(fields: [sourceId], references: [id])
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId], map: "lead_origins_first_touch_key", where: raw("is_first_touch"))
+  @@index([leadId])
+  @@index([importBatchId])
+  @@map("lead_origins")
+}
+
+model LeadTag {
+  leadId    String   @map("lead_id") @db.Uuid
+  tagId     String   @map("tag_id") @db.Uuid
+  addedById String?  @map("added_by_id") @db.Uuid
+  addedAt   DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+  @@index([tagId])
+  @@map("lead_tags")
+}
+
+/// Observação livre (sem dados sensíveis: docs/LGPD.md §11). Remoção é lógica e auditada.
+model LeadNote {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  leadId      String    @map("lead_id") @db.Uuid
+  authorId    String?   @map("author_id") @db.Uuid
+  body        String
+  pinned      Boolean   @default(false)
+  removedAt   DateTime? @map("removed_at") @db.Timestamptz(3)
+  removedById String?   @map("removed_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead   Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User? @relation("LeadNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@map("lead_notes")
+}
+
+enum AssignmentStrategy {
+  MANUAL
+  /// SDR puxou o lead do pool não atribuído do seu território.
+  CLAIM
+  IMPORT
+  ROUND_ROBIN
+  TERRITORY
+  PRIORITY
+  AVAILABILITY
+
+  /// Distribuição dos leads de uma campanha (Fase 10).
+  CAMPAIGN
+
+  @@map("assignment_strategy")
+}
+
+/// Histórico de responsáveis.
+model LeadAssignment {
+  id           String             @id @default(uuid(7)) @db.Uuid
+  leadId       String             @map("lead_id") @db.Uuid
+  fromUserId   String?            @map("from_user_id") @db.Uuid
+  toUserId     String?            @map("to_user_id") @db.Uuid
+  strategy     AssignmentStrategy @default(MANUAL)
+  assignedById String?            @map("assigned_by_id") @db.Uuid
+  reason       String?
+  assignedAt   DateTime           @default(now()) @map("assigned_at") @db.Timestamptz(3)
+
+  lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromUser   User? @relation("AssignmentFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toUser     User? @relation("AssignmentTo", fields: [toUserId], references: [id], onDelete: SetNull)
+  assignedBy User? @relation("AssignmentBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([leadId, assignedAt(sort: Desc)])
+  @@map("lead_assignments")
+}
+
+enum Channel {
+  WHATSAPP
+  INSTAGRAM
+  EMAIL
+  PHONE
+  SMS
+  OTHER
+
+  @@map("channel")
+}
+
+/// Timeline do lead (eventos de negócio). Append-only por trigger: só `lead_id`
+/// pode mudar (mesclagem, Fase 3). Payloads não guardam dados pessoais em claro.
+model LeadEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  leadId      String    @map("lead_id") @db.Uuid
+  occurredAt  DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  type        String
+  actorType   ActorType @map("actor_type")
+  actorId     String?   @map("actor_id") @db.Uuid
+  payload     Json?
+  subjectType String?   @map("subject_type")
+  subjectId   String?   @map("subject_id")
+  channel     Channel?
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt(sort: Desc)])
+  @@index([type, occurredAt])
+  @@map("lead_events")
+}
+
+// -----------------------------------------------------------------------------
+// Conformidade (Fase 2): base legal, opt-in, Lista Não Contatar, titulares
+// -----------------------------------------------------------------------------
+
+/// Avaliação documentada de base legal (ex.: LIA de legítimo interesse).
+model LegalBasisAssessment {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  name        String
+  legalBasis  LegalBasis @map("legal_basis")
+  purpose     String
+  documentUrl String?    @map("document_url")
+  version     Int        @default(1)
+  approvedBy  String?    @map("approved_by")
+  approvedAt  DateTime?  @map("approved_at") @db.Timestamptz(3)
+  validUntil  DateTime?  @map("valid_until") @db.Timestamptz(3)
+  active      Boolean    @default(true)
+  createdById String?    @map("created_by_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  permissions ContactPermission[]
+
+  @@map("legal_basis_assessments")
+}
+
+enum ContactChannel {
+  ALL
+  WHATSAPP
+  INSTAGRAM
+  EMAIL
+  PHONE
+
+  @@map("contact_channel")
+}
+
+enum OptInStatus {
+  NONE
+  GRANTED
+  REVOKED
+
+  @@map("opt_in_status")
+}
+
+enum OptInMethod {
+  INBOUND_MESSAGE
+  FORM
+  EVENT
+  EXISTING_RELATIONSHIP
+  VERBAL_RECORDED
+  CLICK_TO_WHATSAPP
+
+  @@map("opt_in_method")
+}
+
+/// Base legal LGPD e opt-in de plataforma por canal (são exigências diferentes:
+/// docs/LGPD.md §6). Fase 2: no nível do lead. Fase 7: o opt-in do WhatsApp é
+/// do número (`contact_point_id`), com a evidência.
+model ContactPermission {
+  id                     String         @id @default(uuid(7)) @db.Uuid
+  leadId                 String         @map("lead_id") @db.Uuid
+  personId               String?        @map("person_id") @db.Uuid
+  contactPointId         String?        @map("contact_point_id") @db.Uuid
+  channel                ContactChannel
+  legalBasis             LegalBasis     @map("legal_basis")
+  legalBasisAssessmentId String?        @map("legal_basis_assessment_id") @db.Uuid
+  optInStatus            OptInStatus    @default(NONE) @map("opt_in_status")
+  optInAt                DateTime?      @map("opt_in_at") @db.Timestamptz(3)
+  optInMethod            OptInMethod?   @map("opt_in_method")
+  evidence               String?
+  /// Mensagem recebida que comprova o opt-in (método INBOUND_MESSAGE).
+  evidenceMessageId      String?        @map("evidence_message_id") @db.Uuid
+  recordedById           String?        @map("recorded_by_id") @db.Uuid
+  recordedAt             DateTime       @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  validUntil             DateTime?      @map("valid_until") @db.Timestamptz(3)
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead            Lead                  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  person          LeadPerson?           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  contactPoint    ContactPoint?         @relation(fields: [contactPointId], references: [id], onDelete: Cascade)
+  assessment      LegalBasisAssessment? @relation(fields: [legalBasisAssessmentId], references: [id], onDelete: SetNull)
+  evidenceMessage Message?              @relation("PermissionEvidence", fields: [evidenceMessageId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId, channel], map: "contact_permissions_lead_channel_key", where: raw("person_id IS NULL AND contact_point_id IS NULL"))
+  /// Opt-in por número (Fase 7): um registro por número e canal.
+  @@unique([contactPointId, channel], map: "contact_permissions_point_channel_key", where: raw("contact_point_id IS NOT NULL"))
+  @@index([leadId])
+  @@map("contact_permissions")
+}
+
+enum SuppressionType {
+  PHONE
+  EMAIL
+  INSTAGRAM
+  CNPJ
+  LEAD
+
+  @@map("suppression_type")
+}
+
+enum SuppressionScope {
+  ALL_CHANNELS
+  WHATSAPP
+  INSTAGRAM
+  EMAIL
+  PHONE
+
+  @@map("suppression_scope")
+}
+
+enum SuppressionReason {
+  OPT_OUT
+  DATA_SUBJECT_REQUEST
+  COMPLAINT
+  LEGAL
+  INVALID_CONTACT
+  INTERNAL_DECISION
+
+  @@map("suppression_reason")
+}
+
+enum SuppressionSource {
+  INBOUND_KEYWORD
+  SDR
+  ADMIN
+  IMPORT
+  WEBHOOK
+  DSR
+
+  @@map("suppression_source")
+}
+
+/// Lista Não Contatar: por identificador (HMAC), independente do lead, e
+/// sobrevive à anonimização. Revogação só por ADMIN, com motivo (docs/LGPD.md §8).
+model SuppressionEntry {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  type         SuppressionType
+  valueHash    String            @map("value_hash")
+  /// Ex.: "+55 88 9****-9999", para exibição.
+  valueMasked  String            @map("value_masked")
+  scope        SuppressionScope  @default(ALL_CHANNELS)
+  reason       SuppressionReason
+  source       SuppressionSource
+  leadId       String?           @map("lead_id") @db.Uuid
+  notes        String?
+  createdById  String?           @map("created_by_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt    DateTime?         @map("revoked_at") @db.Timestamptz(3)
+  revokedById  String?           @map("revoked_by_id") @db.Uuid
+  revokeReason String?           @map("revoke_reason")
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@unique([type, valueHash, scope], map: "suppression_entries_active_key", where: raw("revoked_at IS NULL"))
+  @@index([type, valueHash])
+  @@index([leadId])
+  @@index([createdAt(sort: Desc)])
+  @@map("suppression_entries")
+}
+
+enum DataSubjectRequestType {
+  CONFIRMATION
+  ACCESS
+  CORRECTION
+  ANONYMIZATION
+  DELETION
+  PORTABILITY
+  SHARING_INFO
+  CONSENT_REVOCATION
+  OPPOSITION
+
+  @@map("data_subject_request_type")
+}
+
+enum DataSubjectRequestStatus {
+  RECEIVED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+
+  @@map("data_subject_request_status")
+}
+
+/// Solicitações de titulares (LGPD art. 18), registradas manualmente no MVP.
+model DataSubjectRequest {
+  id               String                   @id @default(uuid(7)) @db.Uuid
+  requesterName    String                   @map("requester_name")
+  requesterContact String                   @map("requester_contact")
+  type             DataSubjectRequestType
+  leadId           String?                  @map("lead_id") @db.Uuid
+  status           DataSubjectRequestStatus @default(RECEIVED)
+  receivedAt       DateTime                 @map("received_at") @db.Timestamptz(3)
+  dueAt            DateTime                 @map("due_at") @db.Timestamptz(3)
+  resolvedAt       DateTime?                @map("resolved_at") @db.Timestamptz(3)
+  handledById      String?                  @map("handled_by_id") @db.Uuid
+  responseSummary  String?                  @map("response_summary")
+  notes            String?
+  createdById      String?                  @map("created_by_id") @db.Uuid
+  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([status, dueAt])
+  @@index([leadId])
+  @@map("data_subject_requests")
+}
+
+// -----------------------------------------------------------------------------
+// Plataforma (Fase 2): visões salvas e territórios
+// -----------------------------------------------------------------------------
+
+/// Filtro salvo da lista (pessoal ou compartilhado com a equipe).
+model SavedView {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  name      String
+  entity    String   @default("leads")
+  filter    Json
+  columns   Json?
+  sort      Json?
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, entity, name])
+  @@index([entity, shared])
+  @@map("saved_views")
+}
+
+/// Território atendido por um usuário: UF inteira (`municipalityCode` nulo) ou cidade.
+/// Define o pool não atribuído que o SDR enxerga (docs/SECURITY.md §4.1).
+model UserTerritory {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  stateUf          String   @map("state_uf") @db.Char(2)
+  municipalityCode Int?     @map("municipality_code")
+  priority         Int      @default(0)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state        State         @relation(fields: [stateUf], references: [uf])
+  municipality Municipality? @relation(fields: [municipalityCode], references: [ibgeCode])
+
+  @@unique([userId, stateUf], map: "user_territories_state_key", where: raw("municipality_code IS NULL"))
+  @@unique([userId, municipalityCode], map: "user_territories_city_key", where: raw("municipality_code IS NOT NULL"))
+  @@index([stateUf, municipalityCode])
+  @@map("user_territories")
+}
+
+// -----------------------------------------------------------------------------
+// Importação e deduplicação (Fase 3) — docs/DATABASE.md §4
+// -----------------------------------------------------------------------------
+
+enum ImportFileType {
+  CSV
+  XLSX
+
+  @@map("import_file_type")
+}
+
+enum ImportStatus {
+  /// Arquivo recebido; aguardando a leitura no worker.
+  UPLOADED
+  /// Linhas lidas; aguardando mapeamento e configuração do lote.
+  MAPPING
+  PREVIEWING
+  PREVIEW_READY
+  COMMITTING
+  COMPLETED
+  FAILED
+  CANCELED
+
+  @@map("import_status")
+}
+
+enum DuplicatePolicy {
+  /// Cria o lead novo e sinaliza o possível duplicado para revisão.
+  CREATE_AND_FLAG
+  SKIP
+  /// Completa só os campos vazios do lead existente.
+  UPDATE_EMPTY_FIELDS
+
+  @@map("duplicate_policy")
+}
+
+enum ImportMatchStatus {
+  NEW
+  EXISTING
+  POSSIBLE_DUPLICATE
+  DUPLICATE_IN_FILE
+  SUPPRESSED
+  INVALID
+
+  @@map("import_match_status")
+}
+
+enum ImportRowDecision {
+  IMPORT
+  SKIP
+  /// Só registra a origem no lead existente.
+  LINK_EXISTING
+  UPDATE_EXISTING
+
+  @@map("import_row_decision")
+}
+
+enum ImportRowStatus {
+  PENDING
+  DONE
+  ERROR
+
+  @@map("import_row_status")
+}
+
+/// Lote de importação de planilha (docs/MVP.md M04).
+model ImportBatch {
+  id                     String          @id @default(uuid(7)) @db.Uuid
+  fileName               String          @map("file_name")
+  fileSize               Int             @map("file_size")
+  /// Detecta reimportação do mesmo arquivo.
+  fileSha256             String          @map("file_sha256")
+  fileType               ImportFileType  @map("file_type")
+  encoding               String?
+  delimiter              String?
+  sheetName              String?         @map("sheet_name")
+  /// Abas da planilha, para o usuário escolher outra (reenviando o arquivo).
+  sheetNames             String[]        @default([]) @map("sheet_names")
+  /// Linha do cabeçalho (1 = primeira linha lida).
+  headerRow              Int             @default(1) @map("header_row")
+  rowCount               Int             @default(0) @map("row_count")
+  status                 ImportStatus    @default(UPLOADED)
+  /// Coluna → campo, e colunas extras para `custom_fields`.
+  mapping                Json?
+  duplicatePolicy        DuplicatePolicy @default(CREATE_AND_FLAG) @map("duplicate_policy")
+  sourceId               String?         @map("source_id") @db.Uuid
+  sourceDetail           String?         @map("source_detail")
+  collectedAt            DateTime?       @map("collected_at") @db.Timestamptz(3)
+  defaultLegalBasis      LegalBasis?     @map("default_legal_basis")
+  legalBasisAssessmentId String?         @map("legal_basis_assessment_id") @db.Uuid
+  defaultOwnerId         String?         @map("default_owner_id") @db.Uuid
+  defaultTagIds          String[]        @default([]) @map("default_tag_ids") @db.Uuid
+  /// Contagens da prévia e do relatório final.
+  stats                  Json?
+  /// Linhas já processadas na etapa atual (barra de progresso).
+  progress               Int             @default(0)
+  error                  String?
+  createdById            String          @map("created_by_id") @db.Uuid
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt            DateTime?       @map("completed_at") @db.Timestamptz(3)
+  /// Depois desta data, as linhas temporárias são apagadas (docs/LGPD.md §12).
+  purgeAfter             DateTime?       @map("purge_after") @db.Timestamptz(3)
+
+  createdBy    User         @relation("ImportCreator", fields: [createdById], references: [id])
+  defaultOwner User?        @relation("ImportDefaultOwner", fields: [defaultOwnerId], references: [id], onDelete: SetNull)
+  source       LeadSource?  @relation(fields: [sourceId], references: [id])
+  rows         ImportRow[]
+  file         ImportFile?
+  origins      LeadOrigin[]
+
+  @@index([fileSha256])
+  @@index([createdById, createdAt(sort: Desc)])
+  @@index([status, purgeAfter])
+  @@map("import_batches")
+}
+
+/// Bytes do arquivo enviado, só até a leitura no worker (apagados em seguida;
+/// docs/SECURITY.md §8: o arquivo não fica guardado).
+model ImportFile {
+  batchId   String   @id @map("batch_id") @db.Uuid
+  content   Bytes
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@map("import_files")
+}
+
+/// Linha da planilha: valores brutos, normalizados, validação e casamento.
+/// Temporária: purgada 30 dias após o lote (docs/LGPD.md §12).
+model ImportRow {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  batchId       String             @map("batch_id") @db.Uuid
+  /// Linha na planilha (1 = primeira linha lida, contando o cabeçalho).
+  rowNumber     Int                @map("row_number")
+  /// Células como texto.
+  raw           Json
+  normalized    Json?
+  errors        Json?
+  warnings      Json?
+  matchStatus   ImportMatchStatus? @map("match_status")
+  matchedLeadId String?            @map("matched_lead_id") @db.Uuid
+  matchReasons  Json?              @map("match_reasons")
+  decision      ImportRowDecision?
+  resultLeadId  String?            @map("result_lead_id") @db.Uuid
+  status        ImportRowStatus    @default(PENDING)
+  error         String?
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, matchStatus])
+  /// Anonimização: achar as linhas ainda não purgadas de um lead.
+  @@index([resultLeadId])
+  @@index([matchedLeadId])
+  @@map("import_rows")
+}
+
+/// Mapeamento reutilizável, sugerido quando o cabeçalho de uma nova planilha bate.
+model ImportMappingTemplate {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  name            String
+  /// Chave do cabeçalho normalizado, para sugerir o modelo automaticamente.
+  headerSignature String   @map("header_signature")
+  mapping         Json
+  createdById     String?  @map("created_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User? @relation("MappingTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([name])
+  @@index([headerSignature])
+  @@map("import_mapping_templates")
+}
+
+enum DuplicateConfidence {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@map("duplicate_confidence")
+}
+
+enum DuplicateStatus {
+  PENDING
+  MERGED
+  KEPT_SEPARATE
+  IGNORED
+
+  @@map("duplicate_status")
+}
+
+enum DuplicateSource {
+  IMPORT
+  SCAN
+  /// Cadastro ou edição pela interface/API.
+  MANUAL
+  PROSPECTING
+
+  @@map("duplicate_source")
+}
+
+/// Par de leads possivelmente duplicados (sempre `lead_a_id < lead_b_id`).
+model DuplicateCandidate {
+  id           String              @id @default(uuid(7)) @db.Uuid
+  leadAId      String              @map("lead_a_id") @db.Uuid
+  leadBId      String              @map("lead_b_id") @db.Uuid
+  /// 0 a 1.
+  score        Float
+  confidence   DuplicateConfidence
+  /// `[{rule, detail, weight}]`, sem dados pessoais em claro.
+  reasons      Json
+  status       DuplicateStatus     @default(PENDING)
+  detectedBy   DuplicateSource     @map("detected_by")
+  detectedAt   DateTime            @default(now()) @map("detected_at") @db.Timestamptz(3)
+  decidedById  String?             @map("decided_by_id") @db.Uuid
+  decidedAt    DateTime?           @map("decided_at") @db.Timestamptz(3)
+  decisionNote String?             @map("decision_note")
+
+  leadA     Lead        @relation("CandidateA", fields: [leadAId], references: [id], onDelete: Cascade)
+  leadB     Lead        @relation("CandidateB", fields: [leadBId], references: [id], onDelete: Cascade)
+  decidedBy User?       @relation("CandidateDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  merges    LeadMerge[]
+
+  @@unique([leadAId, leadBId])
+  @@index([status, confidence, score(sort: Desc)])
+  @@index([leadBId])
+  @@map("duplicate_candidates")
+}
+
+/// Mesclagem: o lead mesclado vira MERGED e aponta para o sobrevivente; a cópia
+/// integral fica em `merged_snapshot` (nada é excluído; docs/MVP.md M06).
+model LeadMerge {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  survivorLeadId String   @map("survivor_lead_id") @db.Uuid
+  mergedLeadId   String   @map("merged_lead_id") @db.Uuid
+  candidateId    String?  @map("candidate_id") @db.Uuid
+  /// Campo → "survivor" | "merged", como escolhido na tela.
+  fieldChoices   Json     @map("field_choices")
+  /// Cópia do lead mesclado e ids dos filhos movidos.
+  mergedSnapshot Json     @map("merged_snapshot")
+  performedById  String?  @map("performed_by_id") @db.Uuid
+  performedAt    DateTime @default(now()) @map("performed_at") @db.Timestamptz(3)
+
+  survivor    Lead                @relation("MergeSurvivor", fields: [survivorLeadId], references: [id])
+  merged      Lead                @relation("MergeMerged", fields: [mergedLeadId], references: [id])
+  candidate   DuplicateCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  performedBy User?               @relation("MergePerformer", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([survivorLeadId])
+  @@index([mergedLeadId])
+  @@map("lead_merges")
+}
+
+// -----------------------------------------------------------------------------
+// Pipeline e score (Fase 4)
+// -----------------------------------------------------------------------------
+
+enum StageCategory {
+  OPEN
+  WON
+  LOST
+  /// Parado, à espera de reativação (ex.: Sem resposta).
+  PARKED
+
+  @@map("stage_category")
+}
+
+/// Perfil que costuma trabalhar a etapa (informativo no quadro).
+enum StageOwner {
+  SDR
+  SALES
+
+  @@map("stage_owner")
+}
+
+/// Quem moveu o lead quando não foi uma pessoa.
+enum StageChangeSource {
+  CADENCE
+  INBOUND
+  IMPORT
+  HANDOFF
+  RULE
+  MERGE
+
+  @@map("stage_change_source")
+}
+
+enum ScoreBand {
+  COLD
+  WARM
+  HOT
+  PRIORITY
+
+  @@map("score_band")
+}
+
+enum ScoringModelStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@map("scoring_model_status")
+}
+
+/// CLAMP: soma limitada a 0–100. SCALE: soma reescalada entre o mínimo e o máximo possíveis.
+enum ScoreNormalization {
+  CLAMP
+  SCALE
+
+  @@map("score_normalization")
+}
+
+model Pipeline {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// Chave estável (o padrão é DEFAULT).
+  key       String   @unique
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  stages PipelineStage[]
+  leads  Lead[]
+
+  @@unique([isDefault], map: "pipelines_default_key", where: raw("is_default"))
+  @@map("pipelines")
+}
+
+/// Etapa do pipeline (docs/DATABASE.md §8.1). Nome, cor, ordem e SLA são
+/// editáveis; a `key` é estável e usada pelas regras e automações.
+model PipelineStage {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  pipelineId         String        @map("pipeline_id") @db.Uuid
+  key                String
+  name               String
+  position           Int
+  category           StageCategory
+  ownerRole          StageOwner?   @map("owner_role")
+  color              String        @default("slate")
+  requiresLossReason Boolean       @default(false) @map("requires_loss_reason")
+  slaHours           Int?          @map("sla_hours")
+  /// Etapa do seed: não pode ser desativada (as automações dependem dela).
+  isSystem           Boolean       @default(false) @map("is_system")
+  active             Boolean       @default(true)
+  description        String?
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  pipeline    Pipeline           @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads       Lead[]
+  historyFrom LeadStageHistory[] @relation("StageFrom")
+  historyTo   LeadStageHistory[] @relation("StageTo")
+
+  @@unique([pipelineId, key])
+  @@index([pipelineId, position])
+  @@map("pipeline_stages")
+}
+
+model LossReason {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  key                String   @unique
+  name               String
+  /// Etapas de perda em que o motivo aparece (vazio = todas).
+  appliesToStageKeys String[] @default([]) @map("applies_to_stage_keys")
+  position           Int      @default(0)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  leads         Lead[]
+  history       LeadStageHistory[]
+  opportunities Opportunity[]
+
+  @@map("loss_reasons")
+}
+
+/// Passagem do lead por uma etapa; a linha aberta (`left_at` nulo) é a atual.
+model LeadStageHistory {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  leadId           String             @map("lead_id") @db.Uuid
+  fromStageId      String?            @map("from_stage_id") @db.Uuid
+  toStageId        String             @map("to_stage_id") @db.Uuid
+  /// Nulo quando foi o sistema (ver `automation_source`).
+  changedById      String?            @map("changed_by_id") @db.Uuid
+  automationSource StageChangeSource? @map("automation_source")
+  lossReasonId     String?            @map("loss_reason_id") @db.Uuid
+  note             String?
+  enteredAt        DateTime           @map("entered_at") @db.Timestamptz(3)
+  leftAt           DateTime?          @map("left_at") @db.Timestamptz(3)
+  /// Tempo na etapa, preenchido na saída.
+  durationSeconds  Int?               @map("duration_seconds")
+
+  lead       Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromStage  PipelineStage? @relation("StageFrom", fields: [fromStageId], references: [id])
+  toStage    PipelineStage  @relation("StageTo", fields: [toStageId], references: [id])
+  changedBy  User?          @relation("StageChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  lossReason LossReason?    @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId], map: "lead_stage_history_open_key", where: raw("left_at IS NULL"))
+  @@index([leadId, enteredAt(sort: Desc)])
+  @@index([toStageId, enteredAt])
+  @@map("lead_stage_history")
+}
+
+/// Cidades em que a Docline quer concentrar a prospecção (critério do score).
+model PriorityCity {
+  municipalityCode Int      @id @map("municipality_code")
+  /// Peso relativo, para uso futuro (hoje o critério só confere se a cidade está na lista).
+  weight           Int      @default(1)
+  active           Boolean  @default(true)
+  notes            String?
+  createdById      String?  @map("created_by_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  municipality Municipality @relation(fields: [municipalityCode], references: [ibgeCode])
+  createdBy    User?        @relation("PriorityCityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("priority_cities")
+}
+
+/// Versão do modelo de score: só uma ACTIVE; rascunhos são editáveis e simuláveis.
+model ScoringModel {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  name          String
+  version       Int                @unique
+  status        ScoringModelStatus @default(DRAFT)
+  normalization ScoreNormalization @default(CLAMP)
+  /// `[{band, min, max}]`, cobrindo 0–100 sem buracos.
+  bands         Json
+  notes         String?
+  createdById   String?            @map("created_by_id") @db.Uuid
+  activatedAt   DateTime?          @map("activated_at") @db.Timestamptz(3)
+  activatedById String?            @map("activated_by_id") @db.Uuid
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  rules       ScoringRule[]
+  history     LeadScoreHistory[]
+  leads       Lead[]
+  createdBy   User?              @relation("ScoringModelCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  activatedBy User?              @relation("ScoringModelActivator", fields: [activatedById], references: [id], onDelete: SetNull)
+
+  @@unique([status], map: "scoring_models_active_key", where: raw("status = 'ACTIVE'"))
+  @@map("scoring_models")
+}
+
+/// Regra do modelo: critério registrado no código, parâmetros e pontos (aceita negativos).
+model ScoringRule {
+  id           String  @id @default(uuid(7)) @db.Uuid
+  modelId      String  @map("model_id") @db.Uuid
+  criterionKey String  @map("criterion_key")
+  params       Json    @default("{}")
+  points       Int
+  active       Boolean @default(true)
+  position     Int
+  description  String?
+
+  model ScoringModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([modelId, position])
+  @@map("scoring_rules")
+}
+
+/// Histórico de score: só grava quando o score ou a faixa mudam.
+model LeadScoreHistory {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  leadId        String     @map("lead_id") @db.Uuid
+  modelId       String     @map("model_id") @db.Uuid
+  score         Int
+  band          ScoreBand
+  previousScore Int?       @map("previous_score")
+  previousBand  ScoreBand? @map("previous_band")
+  /// `[{criterion, label, matched, points, detail}]`.
+  breakdown     Json
+  /// O que provocou o cálculo (ex.: contact_state, lead.update, model.activated).
+  trigger       String
+  computedAt    DateTime   @map("computed_at") @db.Timestamptz(3)
+
+  lead  Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  model ScoringModel @relation(fields: [modelId], references: [id])
+
+  @@index([leadId, computedAt(sort: Desc)])
+  @@map("lead_score_history")
+}
+
+// -----------------------------------------------------------------------------
+// Operação SDR (Fase 5): tarefas, atividades, mensagens, cadências,
+// oportunidades e notificações
+// -----------------------------------------------------------------------------
+
+enum TaskType {
+  FIRST_CONTACT
+  FOLLOW_UP
+  REPLY_NEEDED
+  CALL
+  MEETING
+  HANDOFF_REVIEW
+  CUSTOM
+
+  @@map("task_type")
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  CANCELED
+  SKIPPED
+
+  @@map("task_status")
+}
+
+/// Tarefa do SDR (ou do comercial, na transferência). Passos de cadência viram
+/// tarefas: nada é enviado sem ação humana no MVP.
+model Task {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  leadId            String          @map("lead_id") @db.Uuid
+  assigneeId        String?         @map("assignee_id") @db.Uuid
+  type              TaskType
+  title             String
+  description       String?
+  dueAt             DateTime        @map("due_at") @db.Timestamptz(3)
+  status            TaskStatus      @default(OPEN)
+  /// Resultado informado ao concluir (texto curto).
+  outcome           String?
+  completedAt       DateTime?       @map("completed_at") @db.Timestamptz(3)
+  completedById     String?         @map("completed_by_id") @db.Uuid
+  /// Passo de cadência que gerou a tarefa.
+  enrollmentId      String?         @map("enrollment_id") @db.Uuid
+  cadenceStepId     String?         @map("cadence_step_id") @db.Uuid
+  /// Mensagem sugerida e canal do passo (copiados do passo na criação).
+  messageType       MessageType?    @map("message_type")
+  channel           CadenceChannel?
+  /// Aviso de atraso já enviado (o job de atrasados avisa uma vez).
+  overdueNotifiedAt DateTime?       @map("overdue_notified_at") @db.Timestamptz(3)
+  createdById       String?         @map("created_by_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead        Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignee    User?              @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  completedBy User?              @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  enrollment  CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  cadenceStep CadenceStep?       @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
+  messages    Message[]
+  activities  Activity[]
+
+  /// Uma tarefa aberta por inscrição de cadência (o passo atual).
+  @@unique([enrollmentId], map: "tasks_open_enrollment_key", where: raw("status = 'OPEN' AND enrollment_id IS NOT NULL"))
+  @@index([assigneeId, status, dueAt])
+  @@index([leadId, status])
+  @@index([status, dueAt])
+  @@map("tasks")
+}
+
+enum ActivityType {
+  CALL
+  MEETING
+  VISIT
+  EMAIL_EXTERNAL
+  OTHER
+
+  @@map("activity_type")
+}
+
+enum ActivityOutcome {
+  CONNECTED
+  NO_ANSWER
+  BUSY
+  WRONG_NUMBER
+  VOICEMAIL
+  HELD
+  NO_SHOW
+
+  @@map("activity_outcome")
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+
+  @@map("message_direction")
+}
+
+/// Interação que não é mensagem: ligação, reunião, visita.
+model Activity {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  leadId          String           @map("lead_id") @db.Uuid
+  userId          String?          @map("user_id") @db.Uuid
+  type            ActivityType
+  direction       MessageDirection @default(OUTBOUND)
+  outcome         ActivityOutcome?
+  notes           String?
+  occurredAt      DateTime         @map("occurred_at") @db.Timestamptz(3)
+  durationSeconds Int?             @map("duration_seconds")
+  /// Tarefa concluída com este registro.
+  taskId          String?          @map("task_id") @db.Uuid
+  contactPointId  String?          @map("contact_point_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User?         @relation("ActivityUser", fields: [userId], references: [id], onDelete: SetNull)
+  task         Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  contactPoint ContactPoint? @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, occurredAt(sort: Desc)])
+  @@map("activities")
+}
+
+enum MessageMode {
+  /// O humano enviou no app (WhatsApp, Instagram) e confirmou no sistema.
+  ASSISTED
+  /// Enviado pelo sistema (Fase 7).
+  API
+  /// Registro manual retroativo (contato fora do fluxo, resposta colada).
+  LOGGED
+
+  @@map("message_mode")
+}
+
+enum MessageType {
+  FIRST_CONTACT
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  FOLLOW_UP_3
+  INTERESTED_REPLY
+  OBJECTION_REPLY
+  SCHEDULING
+  REACTIVATION
+  OTHER
+
+  @@map("message_type")
+}
+
+enum MessageStatus {
+  PENDING_CONFIRMATION
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+  CANCELED
+
+  @@map("message_status")
+}
+
+enum ReplyClassification {
+  INTERESTED
+  QUESTION
+  OBJECTION
+  NOT_INTERESTED
+  OPT_OUT
+  OUT_OF_OFFICE
+  WRONG_CONTACT
+  OTHER
+
+  @@map("reply_classification")
+}
+
+enum ClassificationSource {
+  RULE
+  AI
+  HUMAN
+
+  @@map("classification_source")
+}
+
+/// Mensagem enviada ou recebida. `body` é o texto efetivamente enviado (ou o
+/// recebido, colado pelo SDR): dado pessoal, apagado na anonimização.
+model Message {
+  id                       String                @id @default(uuid(7)) @db.Uuid
+  leadId                   String                @map("lead_id") @db.Uuid
+  contactPointId           String?               @map("contact_point_id") @db.Uuid
+  channel                  Channel
+  direction                MessageDirection
+  mode                     MessageMode
+  messageType              MessageType?          @map("message_type")
+  body                     String?
+  status                   MessageStatus
+  /// Primeiro contato do lead (conta no limite diário por SDR).
+  isFirstContact           Boolean               @default(false) @map("is_first_contact")
+  taskId                   String?               @map("task_id") @db.Uuid
+  enrollmentId             String?               @map("enrollment_id") @db.Uuid
+  /// Fase 10: campanha a que o contato é atribuído (preenchida pelas métricas da campanha).
+  campaignId               String?               @map("campaign_id") @db.Uuid
+  cadenceStepId            String?               @map("cadence_step_id") @db.Uuid
+  sentById                 String?               @map("sent_by_id") @db.Uuid
+  sentAt                   DateTime?             @map("sent_at") @db.Timestamptz(3)
+  receivedAt               DateTime?             @map("received_at") @db.Timestamptz(3)
+  canceledAt               DateTime?             @map("canceled_at") @db.Timestamptz(3)
+  classification           ReplyClassification?
+  classificationSource     ClassificationSource? @map("classification_source")
+  classificationConfidence Decimal?              @map("classification_confidence") @db.Decimal(4, 3)
+  classifiedById           String?               @map("classified_by_id") @db.Uuid
+  classifiedAt             DateTime?             @map("classified_at") @db.Timestamptz(3)
+  /// Rascunho da IA que originou o envio (Fase 6) e abordagem usada (atribuição).
+  aiGenerationId           String?               @map("ai_generation_id") @db.Uuid
+  approachId               String?               @map("approach_id") @db.Uuid
+  /// Quem aprovou o texto antes do envio assistido.
+  approvedById             String?               @map("approved_by_id") @db.Uuid
+  approvedAt               DateTime?             @map("approved_at") @db.Timestamptz(3)
+  /// Expressão de opt-out encontrada no texto recebido (regra determinística).
+  optOutMatch              String?               @map("opt_out_match")
+  /// Fase 7: conversa do WhatsApp (janela de atendimento) e modelo aprovado usado.
+  conversationId           String?               @map("conversation_id") @db.Uuid
+  whatsappTemplateId       String?               @map("whatsapp_template_id") @db.Uuid
+  /// Valores das variáveis do modelo (dado pessoal; apagado na anonimização).
+  templateParams           Json?                 @map("template_params")
+  /// Envio pela API já tentado: o job nunca repete uma chamada de resultado incerto.
+  sendAttemptedAt          DateTime?             @map("send_attempted_at") @db.Timestamptz(3)
+  deliveredAt              DateTime?             @map("delivered_at") @db.Timestamptz(3)
+  readAt                   DateTime?             @map("read_at") @db.Timestamptz(3)
+  failedAt                 DateTime?             @map("failed_at") @db.Timestamptz(3)
+  errorCode                String?               @map("error_code")
+  errorDetail              String?               @map("error_detail")
+  /// Cobrança informada pela Meta no status (categoria e se é cobrada) e custo estimado.
+  pricingCategory          String?               @map("pricing_category")
+  billable                 Boolean?
+  costEstimateUsd          Decimal?              @map("cost_estimate_usd") @db.Decimal(10, 6)
+  provider                 String?
+  providerMessageId        String?               @map("provider_message_id")
+  idempotencyKey           String?               @unique @map("idempotency_key")
+  createdById              String?               @map("created_by_id") @db.Uuid
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead              Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint      ContactPoint?        @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  task              Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  enrollment        CadenceEnrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  campaign          Campaign?            @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  cadenceStep       CadenceStep?         @relation(fields: [cadenceStepId], references: [id], onDelete: SetNull)
+  sentBy            User?                @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  classifiedBy      User?                @relation("MessageClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
+  aiGeneration      AiGeneration?        @relation("MessageFromGeneration", fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  approach          Approach?            @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  approvedBy        User?                @relation("MessageApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  /// Sugestões de classificação da IA para esta resposta recebida.
+  aiClassifications AiGeneration[]       @relation("ReplyClassificationSource")
+  conversation      Conversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  whatsappTemplate  WhatsappTemplate?    @relation(fields: [whatsappTemplateId], references: [id], onDelete: SetNull)
+  statusEvents      MessageStatusEvent[]
+  /// Opt-ins comprovados por esta mensagem.
+  optInEvidenceFor  ContactPermission[]  @relation("PermissionEvidence")
+  /// Fase 8: comentário respondido em particular por esta mensagem.
+  privateReplyFor   SocialComment?       @relation("CommentPrivateReply")
+
+  @@unique([provider, providerMessageId])
+  /// Um envio em andamento ou feito por rascunho da IA (cancelados não contam).
+  @@unique([aiGenerationId], map: "messages_ai_generation_active_key", where: raw("status <> 'CANCELED'"))
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([sentById, status])
+  @@index([campaignId])
+  /// Limite diário de primeiros contatos por SDR.
+  @@index([sentById, sentAt], map: "messages_first_contact_idx", where: raw("is_first_contact"))
+  /// Taxa de resposta por abordagem (analytics).
+  @@index([approachId, sentAt])
+  /// Conversa do WhatsApp (Fase 7).
+  @@index([conversationId, createdAt(sort: Desc)])
+  /// Custo e resultado do mês por modelo (Fase 7).
+  @@index([channel, mode, sentAt])
+  @@map("messages")
+}
+
+enum CadenceChannel {
+  WHATSAPP
+  INSTAGRAM
+  EMAIL
+  PHONE
+  ANY
+
+  @@map("cadence_channel")
+}
+
+enum CadenceStepAction {
+  ASSISTED_MESSAGE
+  API_MESSAGE
+  CALL
+  TASK
+
+  @@map("cadence_step_action")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  STOPPED
+
+  @@map("enrollment_status")
+}
+
+enum EnrollmentStopReason {
+  REPLIED
+  OPTED_OUT
+  /// Lead bloqueado na Lista Não Contatar (reclamação, decisão interna, ordem legal).
+  BLOCKED
+  MANUAL
+  STAGE_CHANGED
+  LEAD_ARCHIVED
+  LEAD_MERGED
+  CONTACT_INVALID
+
+  @@map("enrollment_stop_reason")
+}
+
+/// Cadência de follow-up (docs/SDR-FLOW.md §4). Editar passos ou regras sobe a
+/// `version`; as inscrições guardam a versão em que entraram.
+model Cadence {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  /// Chave estável (a padrão é DEFAULT).
+  key                 String   @unique
+  name                String
+  description         String?
+  version             Int      @default(1)
+  active              Boolean  @default(true)
+  isDefault           Boolean  @default(false) @map("is_default")
+  stopOnReply         Boolean  @default(true) @map("stop_on_reply")
+  useBusinessDays     Boolean  @default(true) @map("use_business_days")
+  /// Janela de vencimento das tarefas, na hora local do lead ("08:00").
+  sendWindowStart     String   @default("08:00") @map("send_window_start") @db.VarChar(5)
+  sendWindowEnd       String   @default("18:00") @map("send_window_end") @db.VarChar(5)
+  /// Dias após o último passo, sem resposta, para ir a "Sem resposta".
+  noResponseAfterDays Int      @default(3) @map("no_response_after_days")
+  createdById         String?  @map("created_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  steps       CadenceStep[]
+  enrollments CadenceEnrollment[]
+  campaigns   Campaign[]
+  createdBy   User?               @relation("CadenceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([isDefault], map: "cadences_default_key", where: raw("is_default"))
+  @@map("cadences")
+}
+
+model CadenceStep {
+  id             String            @id @default(uuid(7)) @db.Uuid
+  cadenceId      String            @map("cadence_id") @db.Uuid
+  position       Int
+  /// Dia do passo contado do início da cadência (D0, D2, D5…).
+  dayOffset      Int               @map("day_offset")
+  channel        CadenceChannel    @default(WHATSAPP)
+  action         CadenceStepAction @default(ASSISTED_MESSAGE)
+  messageType    MessageType       @map("message_type")
+  /// Etapa para onde o lead vai quando o passo é executado.
+  targetStageKey String?           @map("target_stage_key")
+  instructions   String?
+
+  cadence  Cadence   @relation(fields: [cadenceId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+  messages Message[]
+
+  @@unique([cadenceId, position])
+  @@map("cadence_steps")
+}
+
+/// Lead numa cadência: uma inscrição ACTIVE ou PAUSED por lead.
+model CadenceEnrollment {
+  id                  String                @id @default(uuid(7)) @db.Uuid
+  leadId              String                @map("lead_id") @db.Uuid
+  cadenceId           String                @map("cadence_id") @db.Uuid
+  cadenceVersion      Int                   @map("cadence_version")
+  status              EnrollmentStatus      @default(ACTIVE)
+  stopReason          EnrollmentStopReason? @map("stop_reason")
+  /// Passo à espera de execução (nulo: todos executados; corre o prazo de "Sem resposta").
+  currentStepPosition Int?                  @map("current_step_position")
+  /// Vencimento do passo atual ou, sem passo, do prazo de "Sem resposta".
+  nextStepDueAt       DateTime?             @map("next_step_due_at") @db.Timestamptz(3)
+  lastStepExecutedAt  DateTime?             @map("last_step_executed_at") @db.Timestamptz(3)
+  /// Pausa com data de retomada (ex.: resposta "fora do escritório").
+  pausedUntil         DateTime?             @map("paused_until") @db.Timestamptz(3)
+  enrolledById        String?               @map("enrolled_by_id") @db.Uuid
+  enrolledAt          DateTime              @map("enrolled_at") @db.Timestamptz(3)
+  endedAt             DateTime?             @map("ended_at") @db.Timestamptz(3)
+  /// Fase 10: campanha que liberou o lead para esta cadência (atribuição).
+  campaignId          String?               @map("campaign_id") @db.Uuid
+
+  lead          Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  cadence       Cadence        @relation(fields: [cadenceId], references: [id])
+  enrolledBy    User?          @relation("EnrollmentBy", fields: [enrolledById], references: [id], onDelete: SetNull)
+  campaign      Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  tasks         Task[]
+  messages      Message[]
+  campaignLeads CampaignLead[]
+
+  @@unique([leadId], map: "cadence_enrollments_active_key", where: raw("status = 'ACTIVE' OR status = 'PAUSED'"))
+  @@index([status, nextStepDueAt])
+  @@index([leadId, enrolledAt(sort: Desc)])
+  @@index([campaignId])
+  @@map("cadence_enrollments")
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+
+  @@map("opportunity_status")
+}
+
+enum ConversionType {
+  PARTNER
+  CUSTOMER
+
+  @@map("conversion_type")
+}
+
+/// Transferência ao Comercial (docs/SDR-FLOW.md §8): uma oportunidade aberta por lead.
+model Opportunity {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  leadId          String            @map("lead_id") @db.Uuid
+  sdrId           String?           @map("sdr_id") @db.Uuid
+  salesOwnerId    String?           @map("sales_owner_id") @db.Uuid
+  status          OpportunityStatus @default(OPEN)
+  handoffAt       DateTime          @map("handoff_at") @db.Timestamptz(3)
+  /// Prazo de aceite pelo comercial (SLA).
+  acceptDueAt     DateTime          @map("accept_due_at") @db.Timestamptz(3)
+  acceptedAt      DateTime?         @map("accepted_at") @db.Timestamptz(3)
+  /// Aviso ao gestor de aceite atrasado já enviado.
+  slaAlertedAt    DateTime?         @map("sla_alerted_at") @db.Timestamptz(3)
+  /// Checklist de qualificação (docs/SDR-FLOW.md §8.1).
+  qualification   Json
+  productInterest String?           @map("product_interest")
+  expectedValue   Decimal?          @map("expected_value") @db.Decimal(12, 2)
+  wonAt           DateTime?         @map("won_at") @db.Timestamptz(3)
+  lostAt          DateTime?         @map("lost_at") @db.Timestamptz(3)
+  lossReasonId    String?           @map("loss_reason_id") @db.Uuid
+  conversionType  ConversionType?   @map("conversion_type")
+  notes           String?
+  externalCrmId   String?           @map("external_crm_id")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead       Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sdr        User?       @relation("OpportunitySdr", fields: [sdrId], references: [id], onDelete: SetNull)
+  salesOwner User?       @relation("OpportunitySalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+  lossReason LossReason? @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+
+  @@unique([leadId], map: "opportunities_open_key", where: raw("status = 'OPEN'"))
+  @@index([salesOwnerId, status])
+  @@index([status, acceptDueAt])
+  @@map("opportunities")
+}
+
+/// Aviso no app (sino do cabeçalho). Sem dados pessoais além do nome do lead.
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// Ex.: handoff.created, handoff.sla, task.overdue, leads.forgotten.
+  type      String
+  title     String
+  body      String?
+  leadId    String?   @map("lead_id") @db.Uuid
+  /// Caminho interno da tela (ex.: /leads/{id}).
+  link      String?
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User  @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// ─── Fase 6: IA de prospecção (docs/AI-SDR.md) ─────────────────────────────
+
+/// O que a IA gerou: os 8 tipos de mensagem e a sugestão de classificação de resposta.
+enum AiGenerationKind {
+  FIRST_CONTACT
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  FOLLOW_UP_3
+  INTERESTED_REPLY
+  OBJECTION_REPLY
+  SCHEDULING
+  REACTIVATION
+  REPLY_CLASSIFICATION
+  /// Redação dos insights da carteira (Fase 11): números vêm do banco.
+  INSIGHT
+
+  @@map("ai_generation_kind")
+}
+
+/// Ciclo do rascunho (docs/AI-SDR.md §10). Autoaprovação não existe.
+enum AiGenerationStatus {
+  GENERATED
+  EDITED
+  APPROVED
+  DISCARDED
+  SENT
+  FAILED
+  BLOCKED
+
+  @@map("ai_generation_status")
+}
+
+/// Abordagem comparável em analytics (ex.: "parceria para escritórios"), com a orientação para a IA.
+model Approach {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  key         String   @unique
+  name        String
+  description String?
+  /// O que se espera comprovar com a abordagem (análise e testes A/B).
+  hypothesis  String?
+  /// Orientação de ângulo e argumento para a IA (sem fatos: fatos vêm da base de conhecimento).
+  guidance    String?
+  active      Boolean  @default(true)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy         User?              @relation("ApproachCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  generations       AiGeneration[]
+  messages          Message[]
+  whatsappTemplates WhatsappTemplate[]
+  campaignVariants  CampaignVariant[]
+
+  @@map("approaches")
+}
+
+/// Fato aprovado sobre a Docline que a IA pode citar (a única fonte de afirmações sobre a empresa).
+model AiKnowledgeItem {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  key          String    @unique
+  title        String
+  content      String
+  active       Boolean   @default(true)
+  /// Sobe a cada alteração de conteúdo; a geração registra as versões usadas.
+  version      Int       @default(1)
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime? @map("approved_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  approvedBy User? @relation("AiKnowledgeApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@map("ai_knowledge_items")
+}
+
+/// Cada chamada à IA, com contexto enviado, saída, edição humana, custo e desfecho (docs/AI-SDR.md §11).
+model AiGeneration {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  /// Nulo só nos insights da carteira (Fase 11), que não são de um lead.
+  leadId            String?            @map("lead_id") @db.Uuid
+  requestedById     String?            @map("requested_by_id") @db.Uuid
+  kind              AiGenerationKind
+  channel           Channel?
+  approachId        String?            @map("approach_id") @db.Uuid
+  /// Resposta recebida que foi classificada (só em REPLY_CLASSIFICATION).
+  sourceMessageId   String?            @map("source_message_id") @db.Uuid
+  promptId          String             @map("prompt_id")
+  promptVersion     Int                @map("prompt_version")
+  provider          String
+  model             String
+  /// Esforço, limite de tokens e fallback usados.
+  params            Json
+  /// Contexto minimizado efetivamente enviado (whitelist do ContextBuilder).
+  inputSnapshot     Json               @map("input_snapshot")
+  /// Saída estruturada completa, validada pelo schema.
+  output            Json?
+  textGenerated     String?            @map("text_generated")
+  textFinal         String?            @map("text_final")
+  /// Quanto o humano alterou o rascunho (0 = nada, 1 = tudo).
+  editDistanceRatio Decimal?           @map("edit_distance_ratio") @db.Decimal(4, 3)
+  guardrailFlags    Json               @default("[]") @map("guardrail_flags")
+  status            AiGenerationStatus
+  discardReason     String?            @map("discard_reason")
+  rating            Int?
+  feedback          String?
+  inputTokens       Int?               @map("input_tokens")
+  outputTokens      Int?               @map("output_tokens")
+  cachedInputTokens Int?               @map("cached_input_tokens")
+  costEstimateUsd   Decimal?           @map("cost_estimate_usd") @db.Decimal(10, 6)
+  latencyMs         Int?               @map("latency_ms")
+  stopReason        String?            @map("stop_reason")
+  /// Código do erro do provedor ou do guardrail que bloqueou (FAILED/BLOCKED).
+  errorCode         String?            @map("error_code")
+  approvedById      String?            @map("approved_by_id") @db.Uuid
+  approvedAt        DateTime?          @map("approved_at") @db.Timestamptz(3)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead          Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  requestedBy   User?     @relation("AiGenerationRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedBy    User?     @relation("AiGenerationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approach      Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  sourceMessage Message?  @relation("ReplyClassificationSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  messages      Message[] @relation("MessageFromGeneration")
+  insights      Insight[]
+
+  @@index([leadId, createdAt(sort: Desc)])
+  /// Cota diária por pessoa.
+  @@index([requestedById, createdAt])
+  /// Orçamento do mês e painel de custo.
+  @@index([createdAt])
+  @@index([sourceMessageId])
+  @@map("ai_generations")
+}
+
+// ─── Fase 7: WhatsApp Cloud API (docs/INTEGRATIONS.md §6.2) ────────────────
+
+enum WhatsappTemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+
+  @@map("whatsapp_template_category")
+}
+
+/// Espelho dos modelos (templates) da conta na Meta, sincronizado pela API e
+/// pelo webhook de situação. Nunca é apagado: mensagens enviadas apontam para ele.
+model WhatsappTemplate {
+  id                String                   @id @default(uuid(7)) @db.Uuid
+  /// Id do modelo na Meta.
+  metaTemplateId    String                   @unique @map("meta_template_id")
+  name              String
+  language          String
+  category          WhatsappTemplateCategory
+  /// Situação na Meta (APPROVED, PENDING, REJECTED, PAUSED, DISABLED…). Texto
+  /// porque a Meta acrescenta valores; só APPROVED pode ser enviado.
+  status            String
+  /// Qualidade do modelo na Meta (GREEN, YELLOW, RED, UNKNOWN).
+  qualityScore      String?                  @map("quality_score")
+  rejectedReason    String?                  @map("rejected_reason")
+  /// POSITIONAL ({{1}}) ou NAMED ({{nome}}).
+  parameterFormat   String                   @default("POSITIONAL") @map("parameter_format")
+  /// Componentes como vieram da Meta (cabeçalho, corpo, rodapé, botões).
+  components        Json
+  /// Corpo com as variáveis, para a prévia e para gravar o texto enviado.
+  bodyText          String                   @map("body_text")
+  /// Variáveis do corpo, na ordem em que aparecem ("1", "2"… ou os nomes).
+  bodyParameters    String[]                 @default([]) @map("body_parameters")
+  /// O app envia modelos com corpo de texto, sem variáveis no cabeçalho ou nos botões.
+  supported         Boolean                  @default(true)
+  unsupportedReason String?                  @map("unsupported_reason")
+  /// Abordagem a que o modelo pertence (atribuição em analytics).
+  approachId        String?                  @map("approach_id") @db.Uuid
+  /// O ADMIN pode tirar um modelo aprovado do uso dos SDRs.
+  active            Boolean                  @default(true)
+  /// Deixou de existir na conta da Meta (fica para o histórico).
+  removedAt         DateTime?                @map("removed_at") @db.Timestamptz(3)
+  lastSyncedAt      DateTime                 @map("last_synced_at") @db.Timestamptz(3)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  approach Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([name, language])
+  @@map("whatsapp_templates")
+}
+
+/// Conversa do WhatsApp com um número do lead. Guarda a janela de atendimento:
+/// texto livre só até 24 h depois da última mensagem do contato.
+model Conversation {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  leadId                 String    @map("lead_id") @db.Uuid
+  channel                Channel
+  contactPointId         String?   @map("contact_point_id") @db.Uuid
+  /// Identificador do contato no canal (no WhatsApp, o `wa_id`).
+  externalThreadId       String    @map("external_thread_id")
+  /// Nome do perfil informado pela Meta (dado pessoal; apagado na anonimização).
+  profileName            String?   @map("profile_name")
+  /// No Instagram, o @ de quem escreveu (o `externalThreadId` é o IGSID).
+  handle                 String?
+  lastInboundAt          DateTime? @map("last_inbound_at") @db.Timestamptz(3)
+  lastOutboundAt         DateTime? @map("last_outbound_at") @db.Timestamptz(3)
+  serviceWindowExpiresAt DateTime? @map("service_window_expires_at") @db.Timestamptz(3)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint ContactPoint? @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  messages     Message[]
+
+  @@unique([leadId, channel, externalThreadId])
+  @@index([channel, externalThreadId])
+  /// Conversas com resposta recente (tela Conversas).
+  @@index([lastInboundAt(sort: Desc)])
+  @@map("conversations")
+}
+
+/// Histórico de status de uma mensagem enviada pela API (um registro por status).
+model MessageStatusEvent {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  messageId      String        @map("message_id") @db.Uuid
+  status         MessageStatus
+  occurredAt     DateTime      @map("occurred_at") @db.Timestamptz(3)
+  webhookEventId String?       @map("webhook_event_id") @db.Uuid
+  errorCode      String?       @map("error_code")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message      Message       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@unique([messageId, status])
+  @@map("message_status_events")
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+
+  @@map("webhook_event_status")
+}
+
+/// Inbox de webhooks recebidos (docs/INTEGRATIONS.md §13): só entram com
+/// assinatura válida; idempotência pelo hash do corpo; payload purgado em 90 dias.
+model WebhookEvent {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  provider        String
+  /// SHA-256 do corpo recebido (a Meta não manda id do evento).
+  externalEventId String             @map("external_event_id")
+  payload         Json
+  /// HMAC dos telefones citados, para a anonimização achar os payloads de um lead.
+  contactHashes   String[]           @default([]) @map("contact_hashes")
+  status          WebhookEventStatus @default(PENDING)
+  attempts        Int                @default(0)
+  error           String?
+  receivedAt      DateTime           @map("received_at") @db.Timestamptz(3)
+  processedAt     DateTime?          @map("processed_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  statusEvents   MessageStatusEvent[]
+  unmatched      InboundUnmatched[]
+  socialComments SocialComment[]
+
+  @@unique([provider, externalEventId])
+  @@index([status, receivedAt])
+  @@index([receivedAt])
+  @@index([contactHashes], type: Gin)
+  @@map("webhook_events")
+}
+
+enum InboundUnmatchedStatus {
+  PENDING
+  LINKED
+  DISMISSED
+
+  @@map("inbound_unmatched_status")
+}
+
+/// Mensagem recebida de um número que não está em nenhum lead ativo, ou que
+/// está em mais de um. Nunca vira lead sozinha: uma pessoa decide.
+model InboundUnmatched {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  channel           Channel
+  provider          String
+  providerMessageId String                 @map("provider_message_id")
+  /// Identificador do contato no canal (no WhatsApp, o `wa_id`) e o telefone em E.164.
+  externalThreadId  String                 @map("external_thread_id")
+  phoneE164         String?                @map("phone_e164")
+  /// No Instagram, o @ de quem escreveu (o `externalThreadId` é o IGSID).
+  handle            String?
+  profileName       String?                @map("profile_name")
+  /// Tipo da mensagem na Meta (text, image, button…) e o texto, quando há.
+  messageKind       String                 @map("message_kind")
+  body              String?
+  receivedAt        DateTime               @map("received_at") @db.Timestamptz(3)
+  /// Leads com o mesmo número, quando há mais de um (a pessoa escolhe).
+  candidateLeadIds  String[]               @default([]) @map("candidate_lead_ids") @db.Uuid
+  webhookEventId    String?                @map("webhook_event_id") @db.Uuid
+  status            InboundUnmatchedStatus @default(PENDING)
+  resolvedLeadId    String?                @map("resolved_lead_id") @db.Uuid
+  resolvedById      String?                @map("resolved_by_id") @db.Uuid
+  resolvedAt        DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+  resolvedLead Lead?         @relation("InboundUnmatchedLead", fields: [resolvedLeadId], references: [id], onDelete: SetNull)
+  resolvedBy   User?         @relation("InboundUnmatchedResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerMessageId])
+  @@index([status, receivedAt(sort: Desc)])
+  @@map("inbound_unmatched")
+}
+
+enum IntegrationHealth {
+  UNKNOWN
+  ACTIVE
+  DEGRADED
+  ERROR
+
+  @@map("integration_health")
+}
+
+/// Situação de uma integração (ex.: o número do WhatsApp na Meta). Sem segredos:
+/// credenciais ficam no ambiente.
+model IntegrationConnection {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  provider    String            @unique
+  status      IntegrationHealth @default(UNKNOWN)
+  /// Dados não secretos: número exibido, nome verificado, qualidade, limite de mensagens.
+  config      Json              @default("{}")
+  lastCheckAt DateTime?         @map("last_check_at") @db.Timestamptz(3)
+  lastError   String?           @map("last_error")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("integration_connections")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 8: Instagram (docs/INTEGRATIONS.md §7.2, docs/DATABASE.md §4.12)
+// -----------------------------------------------------------------------------
+
+/// Resultado da consulta de um perfil pelo Business Discovery.
+enum InstagramProfileStatus {
+  /// Conta profissional encontrada (métricas preenchidas).
+  FOUND
+  /// O @ não existe ou não é conta profissional (a API só mostra essas).
+  NOT_FOUND
+  /// A consulta falhou; nova tentativa no próximo ciclo.
+  ERROR
+
+  @@map("instagram_profile_status")
+}
+
+/// Métricas públicas do perfil profissional do lead no Instagram (F8-04). Só o
+/// que o score usa e a ficha mostra: nada de mídias, legendas ou biografia.
+/// Pertence ao contato (na mesclagem, vai junto com ele para o lead que fica).
+model InstagramProfile {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  contactPointId String                 @unique @map("contact_point_id") @db.Uuid
+  /// @ consultado (sem @): se o contato mudar, a consulta vale de novo.
+  handle         String
+  status         InstagramProfileStatus
+  followersCount Int?                   @map("followers_count")
+  mediaCount     Int?                   @map("media_count")
+  lastPostAt     DateTime?              @map("last_post_at") @db.Timestamptz(3)
+  checkedAt      DateTime               @map("checked_at") @db.Timestamptz(3)
+  errorCode      String?                @map("error_code")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  contactPoint ContactPoint @relation(fields: [contactPointId], references: [id], onDelete: Cascade)
+
+  @@index([checkedAt])
+  @@map("instagram_profiles")
+}
+
+/// Comentário de um lead numa publicação da Docline (F8-02). Comentários de
+/// quem não é lead não são guardados (só o payload bruto, por 90 dias).
+model SocialComment {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  leadId                String   @map("lead_id") @db.Uuid
+  contactPointId        String?  @map("contact_point_id") @db.Uuid
+  channel               Channel
+  provider              String
+  externalCommentId     String   @map("external_comment_id")
+  /// IGSID de quem comentou e o @ (dados pessoais; apagados na anonimização).
+  externalUserId        String   @map("external_user_id")
+  authorHandle          String   @map("author_handle")
+  /// Publicação comentada (id na Meta e onde foi publicada: FEED, REELS…).
+  mediaId               String   @map("media_id")
+  mediaProductType      String?  @map("media_product_type")
+  /// Resposta a outro comentário.
+  parentCommentId       String?  @map("parent_comment_id")
+  body                  String?
+  commentedAt           DateTime @map("commented_at") @db.Timestamptz(3)
+  /// Resposta privada (uma por comentário, até 7 dias depois dele).
+  privateReplyMessageId String?  @unique @map("private_reply_message_id") @db.Uuid
+  webhookEventId        String?  @map("webhook_event_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lead                Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactPoint        ContactPoint? @relation(fields: [contactPointId], references: [id], onDelete: SetNull)
+  privateReplyMessage Message?      @relation("CommentPrivateReply", fields: [privateReplyMessageId], references: [id], onDelete: SetNull)
+  webhookEvent        WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalCommentId])
+  @@index([leadId, commentedAt(sort: Desc)])
+  @@map("social_comments")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 9: dados abertos do CNPJ e prospecção (docs/INTEGRATIONS.md §9.1)
+// -----------------------------------------------------------------------------
+
+enum RegistryIngestionStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("registry_ingestion_status")
+}
+
+/// Uma carga mensal dos dados abertos do CNPJ (F9-01). Uma de cada vez; a
+/// carga interrompida continua de onde parou (`progress`).
+model RegistryIngestion {
+  id            String                  @id @default(uuid(7)) @db.Uuid
+  /// `receita_open_data` ou `fake`.
+  provider      String
+  /// Mês da base publicada pela Receita (AAAA-MM).
+  reference     String                  @db.Char(7)
+  status        RegistryIngestionStatus @default(RUNNING)
+  /// Arquivos já lidos (retomada) e etapa atual.
+  progress      Json                    @default("{}")
+  /// Contadores: linhas lidas, mantidas, removidas, municípios sem correspondência…
+  stats         Json                    @default("{}")
+  /// Nome da falha (sem dados pessoais).
+  error         String?
+  requestedById String?                 @map("requested_by_id") @db.Uuid
+  startedAt     DateTime                @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?               @map("finished_at") @db.Timestamptz(3)
+  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requestedBy User? @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@unique([status], map: "registry_ingestions_running_key", where: raw("status = 'RUNNING'"))
+  @@index([startedAt(sort: Desc)])
+  @@map("registry_ingestions")
+}
+
+/// Recorte dos dados abertos do CNPJ (F9-01): só estabelecimentos **ativos**
+/// com os CNAEs de contabilidade. Base de descoberta separada de `leads`: nada
+/// aqui é contatado; vira lead só quando uma pessoa aprova na Prospecção. Sem
+/// sócios e sem CPF (os dígitos de CPF na razão social de empresário individual
+/// são retirados na carga).
+model RegistryCompany {
+  cnpj                     String    @id @db.VarChar(14)
+  cnpjRoot                 String    @map("cnpj_root") @db.VarChar(8)
+  isHeadOffice             Boolean   @map("is_head_office")
+  /// Razão social (da tabela de empresas; nula até a segunda passagem da carga).
+  companyName              String?   @map("company_name")
+  tradeName                String?   @map("trade_name")
+  /// Nome para busca (sem acento, minúsculas): nome fantasia ou razão social.
+  nameSearch               String    @map("name_search")
+  /// Natureza jurídica (ex.: 2135 = empresário individual) e porte da Receita.
+  legalNature              String?   @map("legal_nature") @db.VarChar(4)
+  isIndividualEntrepreneur Boolean   @default(false) @map("is_individual_entrepreneur")
+  companySize              String?   @map("company_size") @db.VarChar(2)
+  cnaeMain                 String    @map("cnae_main") @db.VarChar(7)
+  cnaesSecondary           String[]  @default([]) @map("cnaes_secondary")
+  openedAt                 DateTime? @map("opened_at") @db.Date
+  /// Município do IBGE (casado pelo nome e UF) e o código próprio da Receita.
+  municipalityCode         Int?      @map("municipality_code")
+  receitaMunicipalityCode  Int       @map("receita_municipality_code")
+  cityName                 String?   @map("city_name")
+  uf                       String    @db.Char(2)
+  addressLine              String?   @map("address_line")
+  addressNumber            String?   @map("address_number")
+  addressComplement        String?   @map("address_complement")
+  neighborhood             String?
+  postalCode               String?   @map("postal_code") @db.Char(8)
+  /// Telefones em E.164 e e-mail normalizado, como declarados à Receita.
+  phone1                   String?   @map("phone_1")
+  phone2                   String?   @map("phone_2")
+  email                    String?
+  /// Mês da base em que o estabelecimento apareceu pela última vez.
+  datasetReference         String    @map("dataset_reference") @db.Char(7)
+  ingestedAt               DateTime  @map("ingested_at") @db.Timestamptz(3)
+
+  municipality Municipality? @relation(fields: [municipalityCode], references: [ibgeCode])
+
+  @@index([uf, municipalityCode])
+  @@index([cnpjRoot])
+  @@index([datasetReference])
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "registry_companies_name_search_trgm_idx")
+  @@map("registry_companies")
+}
+
+enum ProspectingDecision {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("prospecting_decision")
+}
+
+/// Uma busca na Prospecção (F9-02): parâmetros e totais. Os resultados são
+/// temporários (30 dias); a busca fica para o histórico.
+model ProspectingSearch {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  /// `CNPJ_OPEN_DATA` (Google Places, se aprovado, entra depois).
+  provider         String
+  /// UF, município, CNAE, só matriz, porte, quantidade…
+  params           Json
+  datasetReference String?   @map("dataset_reference") @db.Char(7)
+  resultCount      Int       @default(0) @map("result_count")
+  requestedById    String?   @map("requested_by_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Quando os resultados foram apagados pela retenção.
+  purgedAt         DateTime? @map("purged_at") @db.Timestamptz(3)
+
+  requestedBy User?               @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  results     ProspectingResult[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("prospecting_searches")
+}
+
+/// Resultado de uma busca: a referência na fonte (o CNPJ), a comparação com a
+/// base e a decisão de uma pessoa. Nada do conteúdo da fonte fica aqui.
+model ProspectingResult {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  searchId      String              @map("search_id") @db.Uuid
+  providerRef   String              @map("provider_ref")
+  matchStatus   ImportMatchStatus   @map("match_status")
+  matchedLeadId String?             @map("matched_lead_id") @db.Uuid
+  matchReasons  Json                @default("[]") @map("match_reasons")
+  decision      ProspectingDecision @default(PENDING)
+  decidedById   String?             @map("decided_by_id") @db.Uuid
+  decidedAt     DateTime?           @map("decided_at") @db.Timestamptz(3)
+  rejectReason  String?             @map("reject_reason")
+  createdLeadId String?             @map("created_lead_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  search      ProspectingSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  matchedLead Lead?             @relation("ProspectingMatchedLead", fields: [matchedLeadId], references: [id], onDelete: SetNull)
+  createdLead Lead?             @relation("ProspectingCreatedLead", fields: [createdLeadId], references: [id], onDelete: SetNull)
+  decidedBy   User?             @relation("ProspectingDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([searchId, providerRef])
+  /// "Recusado antes" nas buscas seguintes.
+  @@index([providerRef, decision])
+  @@map("prospecting_results")
+}
+
+// -----------------------------------------------------------------------------
+// Campanhas (Fase 10)
+// -----------------------------------------------------------------------------
+
+enum CampaignStatus {
+  /// Em edição: filtro, canal, cadência, SDRs, limite e variantes.
+  DRAFT
+  /// Montando a seleção (job `campaign.build`).
+  BUILDING
+  /// Seleção montada: elegibilidade e distribuição para revisar antes de ativar.
+  READY
+  /// Liberando leads para a cadência, dentro do limite diário de cada SDR.
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+
+  @@map("campaign_status")
+}
+
+enum CampaignLeadEligibility {
+  ELIGIBLE
+  INELIGIBLE
+
+  @@map("campaign_lead_eligibility")
+}
+
+enum CampaignLeadStatus {
+  /// Apto, à espera da liberação (limite diário).
+  PENDING
+  /// Liberado: inscrito na cadência, com a tarefa na fila do SDR.
+  RELEASED
+  /// Deixou de ser apto na hora de liberar (motivo em `ineligibility_reasons`).
+  SKIPPED
+  /// Retirado da campanha por uma pessoa.
+  REMOVED
+
+  @@map("campaign_lead_status")
+}
+
+/// Campanha (F10-01): uma seleção de leads por filtro, congelada na montagem,
+/// com canal, cadência, responsável, SDRs, limite diário e abordagens em teste.
+/// A campanha nunca envia mensagens: libera leads para a cadência, e cada
+/// contato segue o gate e o modo de envio de sempre.
+model Campaign {
+  id                      String         @id @default(uuid(7)) @db.Uuid
+  name                    String
+  objective               String?
+  status                  CampaignStatus @default(DRAFT)
+  /// Seleção de leads (filtro da lista + busca), como na lista de leads.
+  filterDefinition        Json           @map("filter_definition")
+  /// De onde veio o filtro (ex.: nome da visão salva), para exibir.
+  filterLabel             String?        @map("filter_label")
+  /// Canal da abordagem (WHATSAPP, INSTAGRAM, EMAIL, PHONE): a elegibilidade
+  /// exige um contato liberado pelo gate nesse canal.
+  channel                 Channel
+  /// Cadência usada na liberação; nula = a cadência padrão.
+  cadenceId               String?        @map("cadence_id") @db.Uuid
+  ownerId                 String         @map("owner_id") @db.Uuid
+  /// Leads liberados por SDR por dia (fuso do SDR).
+  dailyContactLimit       Int            @map("daily_contact_limit")
+  /// Contatado há menos que isso não entra (frequência).
+  minDaysSinceLastContact Int            @default(30) @map("min_days_since_last_contact")
+  startsAt                DateTime?      @map("starts_at") @db.Timestamptz(3)
+  endsAt                  DateTime?      @map("ends_at") @db.Timestamptz(3)
+  /// Quando a seleção foi congelada (montagem).
+  snapshotAt              DateTime?      @map("snapshot_at") @db.Timestamptz(3)
+  /// Totais da montagem (selecionados, aptos, motivos).
+  buildStats              Json?          @map("build_stats")
+  buildError              String?        @map("build_error")
+  activatedAt             DateTime?      @map("activated_at") @db.Timestamptz(3)
+  /// Conclusão. A atribuição do funil não depende dela: vale a janela de cada
+  /// liberação (90 dias ou até o lead ser liberado por outra campanha).
+  completedAt             DateTime?      @map("completed_at") @db.Timestamptz(3)
+  /// Lock otimista da edição.
+  version                 Int            @default(1)
+  createdById             String?        @map("created_by_id") @db.Uuid
+  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  cadence     Cadence?            @relation(fields: [cadenceId], references: [id], onDelete: SetNull)
+  owner       User                @relation("CampaignOwner", fields: [ownerId], references: [id])
+  createdBy   User?               @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sdrs        CampaignSdr[]
+  variants    CampaignVariant[]
+  leads       CampaignLead[]
+  enrollments CadenceEnrollment[]
+  messages    Message[]
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("campaigns")
+}
+
+/// SDRs que recebem os leads da campanha (F10-03).
+model CampaignSdr {
+  campaignId String @map("campaign_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, userId])
+  @@map("campaign_sdrs")
+}
+
+/// Abordagem em teste na campanha (F10-05): variantes A, B… sorteadas de forma
+/// equilibrada entre os leads aptos.
+model CampaignVariant {
+  id         String @id @default(uuid(7)) @db.Uuid
+  campaignId String @map("campaign_id") @db.Uuid
+  /// "A", "B", "C" ou "D".
+  label      String @db.VarChar(1)
+  approachId String @map("approach_id") @db.Uuid
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  approach Approach       @relation(fields: [approachId], references: [id])
+  leads    CampaignLead[]
+
+  @@unique([campaignId, label])
+  @@unique([campaignId, approachId])
+  @@map("campaign_variants")
+}
+
+/// Lead na campanha (F10-02 a F10-04): elegibilidade com motivos, SDR,
+/// variante, liberação e os marcos do funil (preenchidos a partir das
+/// mensagens, das oportunidades e da Lista Não Contatar).
+model CampaignLead {
+  campaignId           String                  @map("campaign_id") @db.Uuid
+  leadId               String                  @map("lead_id") @db.Uuid
+  eligibility          CampaignLeadEligibility
+  /// Códigos dos motivos (ver o domínio das campanhas).
+  ineligibilityReasons String[]                @default([]) @map("ineligibility_reasons")
+  status               CampaignLeadStatus      @default(PENDING)
+  assignedToId         String?                 @map("assigned_to_id") @db.Uuid
+  variantId            String?                 @map("variant_id") @db.Uuid
+  /// Ordem de liberação (score na montagem; maior primeiro).
+  priority             Int                     @default(0)
+  addedAt              DateTime                @map("added_at") @db.Timestamptz(3)
+  releasedAt           DateTime?               @map("released_at") @db.Timestamptz(3)
+  enrollmentId         String?                 @map("enrollment_id") @db.Uuid
+  contactedAt          DateTime?               @map("contacted_at") @db.Timestamptz(3)
+  deliveredAt          DateTime?               @map("delivered_at") @db.Timestamptz(3)
+  repliedAt            DateTime?               @map("replied_at") @db.Timestamptz(3)
+  interestedAt         DateTime?               @map("interested_at") @db.Timestamptz(3)
+  opportunityAt        DateTime?               @map("opportunity_at") @db.Timestamptz(3)
+  convertedAt          DateTime?               @map("converted_at") @db.Timestamptz(3)
+  optedOutAt           DateTime?               @map("opted_out_at") @db.Timestamptz(3)
+
+  campaign   Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead       Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo User?              @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  variant    CampaignVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  enrollment CadenceEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@id([campaignId, leadId])
+  @@index([campaignId, status, assignedToId])
+  @@index([leadId])
+  @@map("campaign_leads")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (Fase 11)
+// ---------------------------------------------------------------------------
+
+/// Recortes do rollup diário. As conversões por cidade, campanha, abordagem,
+/// canal, segmento e origem saem da view `analytics_lead_facts` (coorte do
+/// 1º contato), criada em SQL na migração.
+enum MetricDimension {
+  GLOBAL
+  /// Atividade de quem fez (mensagens, contatos, 1º contatos, oportunidades e
+  /// conversões); respostas, interesse e opt-outs pelo responsável do lead.
+  SDR
+  CHANNEL
+
+  @@map("metric_dimension")
+}
+
+/// Rollup diário (dia local de Fortaleza): contagens de eventos do dia, que
+/// somam por mês. Recalculado pelo job `analytics.rollup` (hoje e ontem de
+/// hora em hora; os últimos 7 dias de madrugada).
+model DailyMetric {
+  date           DateTime        @db.Date
+  dimension      MetricDimension
+  /// Vazio no GLOBAL; id da pessoa no SDR; canal no CHANNEL.
+  dimensionId    String          @default("") @map("dimension_id")
+  newLeads       Int             @default(0) @map("new_leads")
+  firstContacts  Int             @default(0) @map("first_contacts")
+  /// Leads distintos contatados no dia (não somam entre dias).
+  leadsContacted Int             @default(0) @map("leads_contacted")
+  messagesOut    Int             @default(0) @map("messages_out")
+  contactsLogged Int             @default(0) @map("contacts_logged")
+  messagesIn     Int             @default(0) @map("messages_in")
+  /// Leads distintos que responderam no dia.
+  leadsReplied   Int             @default(0) @map("leads_replied")
+  interested     Int             @default(0)
+  opportunities  Int             @default(0)
+  conversions    Int             @default(0)
+  optOuts        Int             @default(0) @map("opt_outs")
+  computedAt     DateTime        @map("computed_at") @db.Timestamptz(3)
+
+  @@id([date, dimension, dimensionId])
+  @@index([dimension, dimensionId, date])
+  @@map("daily_metrics")
+}
+
+enum InsightScope {
+  /// Da equipe (gestão).
+  TEAM
+  /// Da carteira de uma pessoa.
+  USER
+
+  @@map("insight_scope")
+}
+
+enum InsightSource {
+  /// Redigido pela IA, com os números conferidos contra os fatos.
+  AI
+  /// Texto padrão (IA desligada, sem orçamento ou texto recusado na conferência).
+  TEMPLATE
+
+  @@map("insight_source")
+}
+
+enum InsightFeedback {
+  USEFUL
+  NOT_USEFUL
+
+  @@map("insight_feedback")
+}
+
+/// Insight da carteira (docs/AI-SDR.md §13): fatos calculados em SQL e um
+/// texto curto. Sem dados pessoais: só contagens, taxas e ids.
+model Insight {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  generatedAt    DateTime         @map("generated_at") @db.Timestamptz(3)
+  scope          InsightScope
+  /// Dono da carteira (USER); nulo no TEAM.
+  audienceUserId String?          @map("audience_user_id") @db.Uuid
+  /// Código do fato (ex.: PRIORITY_TO_CONTACT).
+  type           String
+  text           String
+  /// Números e ids que sustentam o texto.
+  data           Json
+  source         InsightSource
+  aiGenerationId String?          @map("ai_generation_id") @db.Uuid
+  /// Ordem de exibição (maior primeiro).
+  priority       Int              @default(0)
+  validUntil     DateTime         @map("valid_until") @db.Timestamptz(3)
+  feedback       InsightFeedback?
+  feedbackById   String?          @map("feedback_by_id") @db.Uuid
+  feedbackAt     DateTime?        @map("feedback_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  audienceUser User?         @relation("InsightAudience", fields: [audienceUserId], references: [id], onDelete: Cascade)
+  aiGeneration AiGeneration? @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  feedbackBy   User?         @relation("InsightFeedbackBy", fields: [feedbackById], references: [id], onDelete: SetNull)
+
+  @@index([scope, audienceUserId, generatedAt(sort: Desc)])
+  @@index([validUntil])
+  @@map("insights")
+}
