@@ -107,7 +107,10 @@ model User {
   aiKnowledgeApproved    AiKnowledgeItem[] @relation("AiKnowledgeApprovedBy")
   approachesCreated      Approach[]        @relation("ApproachCreator")
 
-  unmatchedResolved InboundUnmatched[] @relation("InboundUnmatchedResolver")
+  unmatchedResolved    InboundUnmatched[]  @relation("InboundUnmatchedResolver")
+  registryIngestions   RegistryIngestion[]
+  prospectingSearches  ProspectingSearch[]
+  prospectingDecisions ProspectingResult[] @relation("ProspectingDecidedBy")
 
   @@index([role, status])
   @@index([teamId])
@@ -319,10 +322,11 @@ model Municipality {
   longitude  Decimal? @db.Decimal(9, 6)
   population Int?
 
-  state        State           @relation(fields: [uf], references: [uf])
-  leads        Lead[]
-  territories  UserTerritory[]
-  priorityCity PriorityCity?
+  state             State             @relation(fields: [uf], references: [uf])
+  leads             Lead[]
+  territories       UserTerritory[]
+  priorityCity      PriorityCity?
+  registryCompanies RegistryCompany[]
 
   @@index([uf, nameSearch])
   @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "municipalities_name_search_trgm_idx")
@@ -543,45 +547,48 @@ model Lead {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  segment        Segment?             @relation(fields: [segmentId], references: [id], onDelete: SetNull)
-  municipality   Municipality?        @relation(fields: [municipalityCode], references: [ibgeCode])
-  state          State?               @relation(fields: [stateUf], references: [uf])
-  originSource   LeadSource           @relation(fields: [originSourceId], references: [id])
-  owner          User?                @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  createdBy      User?                @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  people         LeadPerson[]
-  contactPoints  ContactPoint[]
-  origins        LeadOrigin[]
-  tags           LeadTag[]
-  notes          LeadNote[]
-  assignments    LeadAssignment[]
-  events         LeadEvent[]
-  permissions    ContactPermission[]
-  suppressions   SuppressionEntry[]
-  dsrs           DataSubjectRequest[]
-  mergedInto     Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  absorbed       Lead[]               @relation("LeadMergedInto")
-  candidatesA    DuplicateCandidate[] @relation("CandidateA")
-  candidatesB    DuplicateCandidate[] @relation("CandidateB")
-  merges         LeadMerge[]          @relation("MergeSurvivor")
-  mergedAway     LeadMerge[]          @relation("MergeMerged")
-  pipeline       Pipeline?            @relation(fields: [pipelineId], references: [id])
-  stage          PipelineStage?       @relation(fields: [stageId], references: [id])
-  lossReason     LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
-  scoreModel     ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
-  stageHistory   LeadStageHistory[]
-  scoreHistory   LeadScoreHistory[]
-  tasks          Task[]
-  activities     Activity[]
-  messages       Message[]
-  enrollments    CadenceEnrollment[]
-  opportunities  Opportunity[]
-  notifications  Notification[]
-  aiGenerations  AiGeneration[]
-  conversations  Conversation[]
-  inboundLinked  InboundUnmatched[]   @relation("InboundUnmatchedLead")
+  segment            Segment?             @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  municipality       Municipality?        @relation(fields: [municipalityCode], references: [ibgeCode])
+  state              State?               @relation(fields: [stateUf], references: [uf])
+  originSource       LeadSource           @relation(fields: [originSourceId], references: [id])
+  owner              User?                @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy          User?                @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  people             LeadPerson[]
+  contactPoints      ContactPoint[]
+  origins            LeadOrigin[]
+  tags               LeadTag[]
+  notes              LeadNote[]
+  assignments        LeadAssignment[]
+  events             LeadEvent[]
+  permissions        ContactPermission[]
+  suppressions       SuppressionEntry[]
+  dsrs               DataSubjectRequest[]
+  mergedInto         Lead?                @relation("LeadMergedInto", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  absorbed           Lead[]               @relation("LeadMergedInto")
+  candidatesA        DuplicateCandidate[] @relation("CandidateA")
+  candidatesB        DuplicateCandidate[] @relation("CandidateB")
+  merges             LeadMerge[]          @relation("MergeSurvivor")
+  mergedAway         LeadMerge[]          @relation("MergeMerged")
+  pipeline           Pipeline?            @relation(fields: [pipelineId], references: [id])
+  stage              PipelineStage?       @relation(fields: [stageId], references: [id])
+  lossReason         LossReason?          @relation(fields: [lossReasonId], references: [id], onDelete: SetNull)
+  scoreModel         ScoringModel?        @relation(fields: [scoreModelId], references: [id], onDelete: SetNull)
+  stageHistory       LeadStageHistory[]
+  scoreHistory       LeadScoreHistory[]
+  tasks              Task[]
+  activities         Activity[]
+  messages           Message[]
+  enrollments        CadenceEnrollment[]
+  opportunities      Opportunity[]
+  notifications      Notification[]
+  aiGenerations      AiGeneration[]
+  conversations      Conversation[]
+  inboundLinked      InboundUnmatched[]   @relation("InboundUnmatchedLead")
   /// Fase 8: comentários do lead nas publicações da Docline no Instagram.
-  socialComments SocialComment[]
+  socialComments     SocialComment[]
+  /// Fase 9: resultados de prospecção que bateram com o lead ou o criaram.
+  prospectingMatches ProspectingResult[]  @relation("ProspectingMatchedLead")
+  prospectingCreated ProspectingResult[]  @relation("ProspectingCreatedLead")
 
   @@unique([cnpj], map: "leads_cnpj_active_key", where: raw("cnpj IS NOT NULL AND status <> 'MERGED'"))
   @@index([cnpjRoot])
@@ -2462,4 +2469,148 @@ model SocialComment {
   @@unique([provider, externalCommentId])
   @@index([leadId, commentedAt(sort: Desc)])
   @@map("social_comments")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 9: dados abertos do CNPJ e prospecção (docs/INTEGRATIONS.md §9.1)
+// -----------------------------------------------------------------------------
+
+enum RegistryIngestionStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("registry_ingestion_status")
+}
+
+/// Uma carga mensal dos dados abertos do CNPJ (F9-01). Uma de cada vez; a
+/// carga interrompida continua de onde parou (`progress`).
+model RegistryIngestion {
+  id            String                  @id @default(uuid(7)) @db.Uuid
+  /// `receita_open_data` ou `fake`.
+  provider      String
+  /// Mês da base publicada pela Receita (AAAA-MM).
+  reference     String                  @db.Char(7)
+  status        RegistryIngestionStatus @default(RUNNING)
+  /// Arquivos já lidos (retomada) e etapa atual.
+  progress      Json                    @default("{}")
+  /// Contadores: linhas lidas, mantidas, removidas, municípios sem correspondência…
+  stats         Json                    @default("{}")
+  /// Nome da falha (sem dados pessoais).
+  error         String?
+  requestedById String?                 @map("requested_by_id") @db.Uuid
+  startedAt     DateTime                @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?               @map("finished_at") @db.Timestamptz(3)
+  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requestedBy User? @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@unique([status], map: "registry_ingestions_running_key", where: raw("status = 'RUNNING'"))
+  @@index([startedAt(sort: Desc)])
+  @@map("registry_ingestions")
+}
+
+/// Recorte dos dados abertos do CNPJ (F9-01): só estabelecimentos **ativos**
+/// com os CNAEs de contabilidade. Base de descoberta separada de `leads`: nada
+/// aqui é contatado; vira lead só quando uma pessoa aprova na Prospecção. Sem
+/// sócios e sem CPF (os dígitos de CPF na razão social de empresário individual
+/// são retirados na carga).
+model RegistryCompany {
+  cnpj                     String    @id @db.VarChar(14)
+  cnpjRoot                 String    @map("cnpj_root") @db.VarChar(8)
+  isHeadOffice             Boolean   @map("is_head_office")
+  /// Razão social (da tabela de empresas; nula até a segunda passagem da carga).
+  companyName              String?   @map("company_name")
+  tradeName                String?   @map("trade_name")
+  /// Nome para busca (sem acento, minúsculas): nome fantasia ou razão social.
+  nameSearch               String    @map("name_search")
+  /// Natureza jurídica (ex.: 2135 = empresário individual) e porte da Receita.
+  legalNature              String?   @map("legal_nature") @db.VarChar(4)
+  isIndividualEntrepreneur Boolean   @default(false) @map("is_individual_entrepreneur")
+  companySize              String?   @map("company_size") @db.VarChar(2)
+  cnaeMain                 String    @map("cnae_main") @db.VarChar(7)
+  cnaesSecondary           String[]  @default([]) @map("cnaes_secondary")
+  openedAt                 DateTime? @map("opened_at") @db.Date
+  /// Município do IBGE (casado pelo nome e UF) e o código próprio da Receita.
+  municipalityCode         Int?      @map("municipality_code")
+  receitaMunicipalityCode  Int       @map("receita_municipality_code")
+  cityName                 String?   @map("city_name")
+  uf                       String    @db.Char(2)
+  addressLine              String?   @map("address_line")
+  addressNumber            String?   @map("address_number")
+  addressComplement        String?   @map("address_complement")
+  neighborhood             String?
+  postalCode               String?   @map("postal_code") @db.Char(8)
+  /// Telefones em E.164 e e-mail normalizado, como declarados à Receita.
+  phone1                   String?   @map("phone_1")
+  phone2                   String?   @map("phone_2")
+  email                    String?
+  /// Mês da base em que o estabelecimento apareceu pela última vez.
+  datasetReference         String    @map("dataset_reference") @db.Char(7)
+  ingestedAt               DateTime  @map("ingested_at") @db.Timestamptz(3)
+
+  municipality Municipality? @relation(fields: [municipalityCode], references: [ibgeCode])
+
+  @@index([uf, municipalityCode])
+  @@index([cnpjRoot])
+  @@index([datasetReference])
+  @@index([nameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "registry_companies_name_search_trgm_idx")
+  @@map("registry_companies")
+}
+
+enum ProspectingDecision {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("prospecting_decision")
+}
+
+/// Uma busca na Prospecção (F9-02): parâmetros e totais. Os resultados são
+/// temporários (30 dias); a busca fica para o histórico.
+model ProspectingSearch {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  /// `CNPJ_OPEN_DATA` (Google Places, se aprovado, entra depois).
+  provider         String
+  /// UF, município, CNAE, só matriz, porte, quantidade…
+  params           Json
+  datasetReference String?   @map("dataset_reference") @db.Char(7)
+  resultCount      Int       @default(0) @map("result_count")
+  requestedById    String?   @map("requested_by_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Quando os resultados foram apagados pela retenção.
+  purgedAt         DateTime? @map("purged_at") @db.Timestamptz(3)
+
+  requestedBy User?               @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  results     ProspectingResult[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("prospecting_searches")
+}
+
+/// Resultado de uma busca: a referência na fonte (o CNPJ), a comparação com a
+/// base e a decisão de uma pessoa. Nada do conteúdo da fonte fica aqui.
+model ProspectingResult {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  searchId      String              @map("search_id") @db.Uuid
+  providerRef   String              @map("provider_ref")
+  matchStatus   ImportMatchStatus   @map("match_status")
+  matchedLeadId String?             @map("matched_lead_id") @db.Uuid
+  matchReasons  Json                @default("[]") @map("match_reasons")
+  decision      ProspectingDecision @default(PENDING)
+  decidedById   String?             @map("decided_by_id") @db.Uuid
+  decidedAt     DateTime?           @map("decided_at") @db.Timestamptz(3)
+  rejectReason  String?             @map("reject_reason")
+  createdLeadId String?             @map("created_lead_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  search      ProspectingSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  matchedLead Lead?             @relation("ProspectingMatchedLead", fields: [matchedLeadId], references: [id], onDelete: SetNull)
+  createdLead Lead?             @relation("ProspectingCreatedLead", fields: [createdLeadId], references: [id], onDelete: SetNull)
+  decidedBy   User?             @relation("ProspectingDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([searchId, providerRef])
+  /// "Recusado antes" nas buscas seguintes.
+  @@index([providerRef, decision])
+  @@map("prospecting_results")
 }

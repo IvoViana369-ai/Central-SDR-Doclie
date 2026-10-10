@@ -399,7 +399,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
 
-### 4.11 Implementação até a Fase 8
+### 4.11 Implementação até a Fase 9
 
 Tabelas criadas na Fase 2: `lead_sources`, `segments`, `tags`, `leads`, `lead_people`, `contact_points`, `lead_origins`, `lead_tags`, `lead_notes`, `lead_assignments`, `lead_events`, `legal_basis_assessments`, `contact_permissions`, `suppression_entries`, `data_subject_requests`, `saved_views`, `user_territories`.
 
@@ -487,13 +487,20 @@ Diferenças em relação às seções acima:
 - **`conversations`** e **`inbound_unmatched`:** ganham `handle` (o @ de quem escreveu no Instagram). No Instagram, `external_thread_id` é o IGSID (id de quem escreveu, por conta da empresa).
 - **`webhook_events`:** linhas do Instagram com `provider = instagram:<provedor>`; `contact_hashes` leva o HMAC do @ e do IGSID (`igsid:<id>`). **`integration_connections`:** a conta do Instagram fica em `instagram:<provedor>`, separada do WhatsApp.
 
-**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts`, `whatsapp-schema.int.test.ts` e `instagram-schema.int.test.ts`):
+**Fase 9 (dados abertos do CNPJ e Prospecção):**
+
+- **`registry_companies`** (nova): recorte da base aberta da Receita Federal com só os estabelecimentos **ativos** de contabilidade (CNAE 6920-6/01 e 6920-6/02). Chave pelo CNPJ (aceita o alfanumérico); razão social sem dígitos de CPF; natureza jurídica e porte; CNAE principal e secundários; município do IBGE (casado pelo nome e UF; nulo se não casar) e o código próprio da Receita; endereço; telefones em E.164 e e-mail como declarados; `dataset_reference` (mês da base). Sem sócios. Separada de `leads`: nada aqui é contatado.
+- **`registry_ingestions`** (nova): cada carga mensal, com o mês, o andamento (`progress`, para retomar), os contadores e a falha. **Uma de cada vez** (índice único parcial em `status = 'RUNNING'`).
+- **`prospecting_searches`** e **`prospecting_results`** (novas): a busca com os parâmetros e, para cada CNPJ encontrado, a comparação com a base (`match_status`, o mesmo da importação, e os motivos), a decisão de uma pessoa (`PENDING`, `APPROVED`, `REJECTED`) e o lead criado. Um resultado por CNPJ em cada busca; os resultados somem com a busca e não guardam conteúdo da fonte.
+
+**Garantias no banco** (testadas em `packages/db/src/leads-schema.int.test.ts`, `pipeline-scoring-schema.int.test.ts`, `sdr-operation-schema.int.test.ts`, `ai-schema.int.test.ts`, `whatsapp-schema.int.test.ts`, `instagram-schema.int.test.ts` e `registry-schema.int.test.ts`):
 
 - `lead_events` é append-only por trigger: só `lead_id` pode mudar (mesclagem); `DELETE`/`TRUNCATE` só na purga autorizada da retenção.
 - `suppression_entries` não pode ser alterada nem apagada, só revogada uma vez; `lead_id` pode virar nulo (o hash continua valendo após a exclusão do lead).
 - Índices únicos parciais (`partialIndexes`, recurso em *preview* do Prisma 7, para que a checagem de drift do CI os cubra): CNPJ ativo, contato principal por tipo, primeira origem, permissão por lead e canal, supressão vigente, territórios, pipeline padrão, passagem aberta por lead, modelo de score ativo, cadência padrão, inscrição em andamento por lead, tarefa aberta por inscrição, oportunidade aberta por lead, envio ativo por rascunho da IA e opt-in por número e canal.
 - Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)`, `inbound_unmatched (provider, provider_message_id)` e `social_comments (provider, external_comment_id)`.
 - Uma consulta de perfil por contato (`instagram_profiles.contact_point_id`) e uma resposta privada por comentário (`social_comments.private_reply_message_id`).
+- Uma carga da base aberta por vez (`registry_ingestions`) e um resultado por CNPJ em cada busca da Prospecção (`prospecting_results (search_id, provider_ref)`).
 
 ---
 
