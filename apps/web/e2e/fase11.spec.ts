@@ -64,12 +64,14 @@ test('gestão vê conversão, desempenho por SDR, evolução mensal e canais', a
     .getByRole('link', { name: 'Conversão' })
     .click();
   await expect(page).toHaveURL(/\/relatorios\/conversao/);
-  await expect(page.getByText('Conversão por cidade')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Conversão por cidade' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Recorte' })
     .getByRole('link', { name: 'Canal do 1º contato' })
     .click();
-  await expect(page.getByText('Conversão por canal do 1º contato')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Conversão por canal do 1º contato' }),
+  ).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Total' })).toBeVisible();
   await expect(page.getByText(/intervalo de confiança de 95%/)).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/relatorio-conversao.png`, fullPage: true });
@@ -84,7 +86,8 @@ test('gestão vê conversão, desempenho por SDR, evolução mensal e canais', a
     .getByRole('navigation', { name: 'Relatórios' })
     .getByRole('link', { name: 'Por SDR' })
     .click();
-  await expect(page.getByText('Desempenho por SDR')).toBeVisible();
+  // Títulos pelo papel: o anunciador de rotas do Next repete o título da página.
+  await expect(page.getByRole('heading', { name: 'Desempenho por SDR' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Equipe', exact: true })).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/relatorio-sdr.png`, fullPage: true });
 
@@ -92,7 +95,7 @@ test('gestão vê conversão, desempenho por SDR, evolução mensal e canais', a
     .getByRole('navigation', { name: 'Relatórios' })
     .getByRole('link', { name: 'Evolução mensal' })
     .click();
-  await expect(page.getByText('Mês a mês')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mês a mês' })).toBeVisible();
   await expect(page.getByRole('cell', { name: /\(parcial\)/ })).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/relatorio-mensal.png`, fullPage: true });
 
@@ -100,7 +103,7 @@ test('gestão vê conversão, desempenho por SDR, evolução mensal e canais', a
     .getByRole('navigation', { name: 'Relatórios' })
     .getByRole('link', { name: 'Canais' })
     .click();
-  await expect(page.getByText('WhatsApp × Instagram')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'WhatsApp × Instagram' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'WhatsApp', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Instagram', exact: true })).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/relatorio-canais.png`, fullPage: true });
@@ -143,7 +146,7 @@ test('insights da carteira no dashboard: gerar agora e avaliar', async ({ page }
   ).toBe(201);
 
   await page.goto('/dashboard');
-  await expect(page.getByText('Insights da equipe')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Insights da equipe' })).toBeVisible();
   await page.getByRole('button', { name: 'Atualizar' }).click();
   await expect(page.getByText(/insights? gerados?\./)).toBeVisible();
   const list = page.getByRole('list', { name: 'Insights' });
