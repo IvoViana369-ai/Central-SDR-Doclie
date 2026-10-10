@@ -75,6 +75,12 @@ Cada etapa gera eventos em `lead_events` (timeline) e, quando altera dados, em `
 | 16 | **Acompanhamento** | Comercial | Negociação, tarefas, registro de atividades | `stage.changed` | `NEGOTIATION` |
 | 17 | **Conversão** | Comercial | Parceiro ou cliente fechado | `opportunity.won` | `CONVERTED` (tipo `PARTNER`/`CUSTOMER`) |
 
+> **Implementação (Fase 9, captação e enriquecimento pela base aberta do CNPJ):**
+> - **Captação (etapa 1):** o GESTOR (ou ADMIN) abre **Prospecção**, busca por UF, cidades, atividade, só matriz, nome e quantidade, e vê cada escritório comparado com a base: "Novo", "Já existe" (com o link do lead), "Possível duplicado", "Repetido na busca" ou "Na Lista Não Contatar". Selecionar e **aprovar** cria o lead com a origem "Dados abertos CNPJ" (responsável escolhido ou o pool), no segmento Contabilidade, com os telefones e o e-mail declarados à Receita **sem marcar WhatsApp**; o que já existe só é completado. Possíveis duplicados vão para a fila de revisão (etapa 3). Recusar tira o escritório das buscas seguintes por 30 dias.
+> - **Onde prospectar:** "Potencial por cidade" mostra, por cidade da UF, os escritórios ativos na base aberta, quantos já são leads, quantos faltam e quantos leads já foram contatados, com as cidades prioritárias marcadas.
+> - **Enriquecimento (etapa 4):** na ficha, o card "Dados abertos do CNPJ" mostra o que a base tem do CNPJ do lead e "Completar com dados abertos" preenche só o que está vazio (razão social, cidade, endereço, CEP, segmento e contatos novos fora da Lista Não Contatar).
+> - Depois de aprovado, o lead segue o fluxo de sempre: qualificação, score, cadência e contato assistido. Nada é enviado automaticamente.
+
 ---
 
 ## 3. Pipeline (Kanban)

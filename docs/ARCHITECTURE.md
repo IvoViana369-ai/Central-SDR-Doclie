@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API) e Fase 8 (Instagram API) · **Última revisão:** 2026-10-09
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API) e Fase 9 (dados abertos do CNPJ e Prospecção) · **Última revisão:** 2026-10-10
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -238,7 +238,7 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `instagram` | Respostas pela API (texto em 24 h, resposta privada a comentário em 7 dias), webhooks (mensagens, ecos, "visto", comentários), quem não é lead, conta conectada, métricas públicas dos perfis (Business Discovery) para o score | conversations, social_comments, instagram_profiles, webhook_events, inbound_unmatched, integration_connections | 8 |
 | `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
-| `prospecting` | Buscas em fontes autorizadas, aprovação de novos leads | prospecting_searches, prospecting_results, registry_companies | 9 |
+| `prospecting` | Carga mensal do recorte de contabilidade da base aberta do CNPJ, buscas com comparação com a base, aprovação humana de novos leads, potencial por cidade e enriquecimento pelo CNPJ | registry_ingestions, registry_companies, prospecting_searches, prospecting_results | 9 |
 | `campaigns` | Seleção por filtros, elegibilidade, acompanhamento | campaigns, campaign_leads | 10 |
 | `analytics` | Indicadores, funis, rollups, insights | daily_metrics, insights | 6 (básico) / 11 |
 
@@ -394,6 +394,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 
 > **Fase 8 (Instagram API):** `GET /leads/{id}/instagram` (@ com métricas públicas, janela, gate, mensagens e comentários), `POST /leads/{id}/instagram/messages` (`202`, só com a janela de 24 h aberta), `POST /leads/{id}/instagram/refresh` (métricas, no máximo uma vez por hora), `POST /instagram/comments/{id}/private-reply` (`202`), `POST /instagram/messages/{id}/retry`, `GET /instagram/conversations`, `GET /instagram/unmatched` e `POST /instagram/unmatched/{id}/link|retry|dismiss`, `GET /instagram/overview`, `POST /instagram/account/check` e `GET/PUT /instagram/settings`. Webhook fora da v1: `GET/POST /api/webhooks/instagram`, com a mesma assinatura da Meta; `404` no modo assistido.
 >
+> **Fase 9 (dados abertos do CNPJ e Prospecção):** `GET/POST /prospecting/searches` (histórico e busca; `201`), `GET /prospecting/searches/{id}` (resultados com os dados da base aberta e a comparação), `POST /prospecting/searches/{id}/approve` (até 100 por pedido, uma transação por resultado; devolve criados, completados, já decididos e os erros de cada um) e `/reject`, `GET /prospecting/potential?uf=`; `GET /registry` (painel), `PUT /registry/settings` e `POST /registry/ingestions` (rodar ou repetir a carga; o worker faz o trabalho), só ADMIN; `GET/POST /leads/{id}/registry` (o que a base aberta tem do CNPJ do lead e "completar"). Os resultados não ficam em `/results` à parte: vêm com a busca.
+>
 > **Decisão (Fase 2): exportação síncrona.** O desenho previa job assíncrono, mas isso exigiria guardar o arquivo com dados pessoais até o download. A geração na hora não deixa nada no servidor, alinhada a SECURITY §8, e cabe no volume do MVP (20.000 leads em poucos segundos). Vira job quando o limite por arquivo precisar subir.
 
 > Legenda de fase: **MVP** = Fases 1–6. Números indicam fases posteriores.
@@ -507,7 +509,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /analytics/timeseries?granularity=day\|month` | Evolução diária e mensal | MVP (básico) / 11 |
 | `GET /analytics/export?report=overview\|funnel\|city\|source\|sdr\|daily` | CSV do relatório (ADMIN/GESTOR, auditado) | MVP |
 | `GET /analytics/insights` | Insights da carteira | 11+ |
-| `POST /prospecting/searches`, `GET /prospecting/searches/{id}/results`, `POST /prospecting/searches/{id}/approve` | Busca em fontes autorizadas, comparação com a base, aprovação | 9 |
+| `GET/POST /prospecting/searches`, `GET /prospecting/searches/{id}`, `POST /prospecting/searches/{id}/approve\|reject`, `GET /prospecting/potential` | Busca na base aberta do CNPJ, comparação com a base, aprovação e recusa, potencial por cidade | 9 |
+| `GET /registry`, `PUT /registry/settings`, `POST /registry/ingestions`, `GET/POST /leads/{id}/registry` | Carga da base aberta (ADMIN) e enriquecimento do lead pelo CNPJ | 9 |
 | `GET/POST/PATCH /campaigns`, `POST /campaigns/{id}/build`, `POST /campaigns/{id}/activate\|pause`, `GET /campaigns/{id}/metrics` | Campanhas | 10 |
 | `POST /exports` | Exportação auditada (ADMIN/GESTOR); síncrona no MVP, ver nota acima | 2 |
 | `GET /integrations`, `POST /integrations/{provider}/test` | Status e teste de conexões | 7+ |
@@ -542,7 +545,9 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `instagram.suggest-classification` | Mensagem recebida sem classificação (se configurado) | Pede à IA a sugestão de classificação; nunca classifica sozinha | 8 |
 | `instagram.account-check` | Diário (07:13 UTC) | Confere o token e a conta profissional; erro de permissão avisa os ADMINs | 8 |
 | `instagram.discovery` | De hora em hora (minuto 17) | Business Discovery dos @ dos leads, com teto por rodada; recalcula o score (ADR-026) | 8 |
-| `registry.ingest` | Mensal | Ingestão filtrada dos dados abertos do CNPJ | 9 |
+| `registry.check` | Diário (06:31 UTC, 03:31 em Fortaleza) e "Rodar a carga agora" | Confere se a Receita publicou um mês novo **e completo**; abre a carga (uma por vez) ou retoma a interrompida; carga parada há mais de 72 h é dada como falha | 9 |
+| `registry.ingest` | Aberto pelo `registry.check` | Carga do mês em streaming: estabelecimentos ativos de contabilidade, depois razão social, natureza e porte só das raízes guardadas; apaga o que saiu da base (menos se a queda passar de 30%: avisa os ADMINs). Retoma do arquivo em que parou; até 3 novas tentativas se o servidor da Receita cair | 9 |
+| `prospecting.purge` | Diário (04:27 UTC) | Apaga os resultados das buscas com mais de 30 dias (a busca fica no histórico) | 9 |
 | `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
 
 Política padrão: até 5 tentativas com backoff exponencial e jitter; depois vai para *dead letter* com alerta. Jobs de varredura usam *singleton* (uma execução por vez).
@@ -590,8 +595,8 @@ central-sdr-docline/
 │   │   └── src/
 │   │       ├── whatsapp/             # meta-cloud.ts (Graph API) e signature.ts (webhooks); o simulado fica no core
 │   │       ├── instagram/            # meta-graph.ts (Graph API com Facebook Login); o simulado fica no core
-│   │       ├── google/{places,fake}/
-│   │       ├── enrichment/{receita-open-data,brasilapi,ibge,fake}/
+│   │       ├── google/{places,fake}/   # planejado (F9-03, aguardando parecer jurídico)
+│   │       ├── company-registry/     # receita-open-data.ts (arquivos oficiais, streaming); a base simulada fica no core
 │   │       ├── ai/{anthropic,fake}/
 │   │       ├── crm/{docline,webhook,fake}/
 │   │       ├── email/{smtp,resend,console}/
@@ -739,20 +744,5 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 024 | **2FA obrigatória para ADMIN/GESTOR aplicada na borda web** (páginas por `getPageContext` e API v1 por `apiHandler`), com a regra pura `twoFactorGate` no core e `TWO_FACTOR_ENFORCEMENT` (`required` em staging e produção; `reminder` só em dev/test) (0.7.1) | A situação da 2FA vem da sessão do Better Auth, que só existe na borda; jobs e o sistema não têm 2FA; a suíte E2E precisa entrar como ADMIN sem um código novo a cada login | Bloqueio no core (cada caso de uso) ou no `proxy.ts` (consulta à sessão em toda requisição) | Página nova deve usar `getPageContext` (as de "em breve" não leem dados); uma rota da API v1 fora do `apiHandler` não teria o bloqueio; o E2E sobe um segundo servidor com `required` |
 | 025 | **Instagram só responde**: porta própria (`InstagramProvider`), texto só com a janela de 24 h aberta naquele @ e resposta privada a comentário (uma por comentário, até 7 dias) pelo gate do contato assistido; o primeiro contato continua pelo app; ecos conciliam envios e registram respostas dadas pelo app; comentários só de leads já cadastrados (Fase 8) | A API da Meta não permite iniciar conversa; as regras (janela, resposta privada, eco, perfil por IGSID) são diferentes das do WhatsApp; guardar comentários de quem não é lead seria tratar dados sem finalidade | Porta única de mensageria para os dois canais; tag `human_agent` (até 7 dias); guardar todos os comentários | Mesmo desenho de envio do WhatsApp (ADR-022) e mesma inbox de webhooks; o IGSID vira o `external_thread_id` da conversa; a lista de quem não é lead é a do WhatsApp com o canal; comentário não para a cadência |
 | 026 | **Business Discovery mínimo**: job de hora em hora com teto configurável, seleção em SQL (nunca consultados ou com o @ trocado primeiro, depois os vencidos), cada @ consultado uma vez, só seguidores, número de publicações e data da última; o score usa a última publicação conhecida do @ atual; leads com opt-out ou bloqueados não são consultados (Fase 8) | Os limites de chamadas da Meta são por conta e compartilhados com as mensagens; o critério "Instagram ativo" só precisa da data; minimização (LGPD) | Consultar na criação do lead; guardar mídias e legendas; consulta sem teto | Métricas de um @ antigo não valem; falha não apaga o que se sabia; o critério continua inativo no seed até o ADMIN ligar |
-
----
-
-## 16. Questões em aberto
-
-Decisões que dependem da Docline (não bloqueiam a Fase 1, salvo indicação):
-
-1. ~~**Hospedagem:** Render (EUA/Europa) com cláusulas de transferência internacional, ou provedor com região em São Paulo?~~ ✅ **Decidido em 2026-10-08:** Render, região Virginia ([ADR-019](#15-registro-de-decisões-adrs)). Continua pendente a **validação jurídica da transferência internacional** (cláusulas-padrão no DPA da Render) antes de usar dados pessoais reais.
-2. **Base atual da Docline:** formato, volume, onde foi coletada e com qual base legal/consentimento. *(antes da Fase 3)*
-3. **Número de WhatsApp:** já existe conta WhatsApp Business ou WABA? Existe base com opt-in? *(iniciar verificação da empresa na Meta já na Fase 1)*
-4. **Oferta comercial** (programa de parceria, comissionamento, diferenciais) para alimentar a base de conhecimento da IA. *(antes da Fase 6)*
-5. **Cidades prioritárias** e territórios por SDR. *(antes da Fase 4)*
-6. **Etapas de follow-up**: manter FU1/FU2/FU3 como colunas (padrão) ou consolidar em "Em cadência"? *(antes da Fase 4)*
-7. **Login:** e-mail/senha ou SSO com Google Workspace da Docline? *(Fase 1)*
-8. **Encarregado (DPO)** e validação jurídica de LIA, textos de primeira abordagem e política de retenção. *(antes do go-live do MVP)*
-9. **Sistemas Docline** (CRM, Gestão AR, Gestão 360): existem APIs documentadas? *(antes da Fase 12)*
-10. **Equipe:** quantos SDRs e comerciais no piloto? *(dimensionamento e plano de distribuição)*
+| 027 | **Cópia local filtrada da base aberta do CNPJ** (`registry_companies`), carregada todo mês pelos arquivos oficiais da Receita em streaming, separada de `leads`; a porta (`CompanyRegistrySource`) só entrega arquivos e o core lê o layout (Fase 9) | A busca roda no nosso banco (sem chamada externa por busca, sem limite de terceiros, comparação em SQL com a base); a Receita publica arquivos, não uma API de busca; ler o layout no core deixa a base simulada no mesmo caminho | API de terceiros por consulta (BrasilAPI e afins) para buscar; guardar os arquivos completos | Carga longa e retomável no worker; o mês só entra com a publicação completa; queda grande não apaga nada; formato e endereço conferidos na ativação |
+| 028 | **Prospecção sem cópia dos dados nos resultados e com aprovação humana que refaz a comparação** (Fase 9) | Os resultados guardam só o CNPJ, a comparação e a decisão (30 dias); os dados vêm da cópia da base na leitura. Na aprovação, a base pode ter mudado: compara de novo, completa o existente e recusa quem entrou na Lista Não Contatar. A decisão é reservada por atualização condicional, como no envio pela API | Criar leads direto da busca; guardar os dados no resultado | Uma transação por aprovação (até 100 por pedido); o "recusado antes" vale enquanto o resultado existir (30 dias) |

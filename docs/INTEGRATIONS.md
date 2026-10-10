@@ -1,6 +1,6 @@
 # Integrações — Docline SDR
 
-> **Status:** desenho da Fase 0, com as notas **Implementação** das fases já entregues: IA (Fase 6, [§10](#10-ia)), WhatsApp Cloud API (Fase 7, [§6.2](#6-whatsapp)) e Instagram API (Fase 8, [§7.2](#7-instagram)). **Nenhuma integração externa real é implementada antes da fase indicada**, e as reais ficam desligadas por padrão.
+> **Status:** desenho da Fase 0, com as notas **Implementação** das fases já entregues: IA (Fase 6, [§10](#10-ia)), WhatsApp Cloud API (Fase 7, [§6.2](#6-whatsapp)), Instagram API (Fase 8, [§7.2](#7-instagram)) e dados abertos do CNPJ (Fase 9, [§9](#9-fontes-públicas-brasileiras)). **Nenhuma integração externa real é implementada antes da fase indicada**, e as reais ficam desligadas por padrão.
 > Políticas de plataformas (Meta, Google) mudam com frequência: cada seção marcada com ⚠️ deve ser **revalidada na documentação oficial** antes da fase correspondente.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [AI-SDR](./AI-SDR.md)
 
@@ -40,7 +40,7 @@
 
 ## 2. Estrutura
 
-Situação na Fase 8 (o que ainda não existe aparece como planejado):
+Situação na Fase 9 (o que ainda não existe aparece como planejado):
 
 ```
 packages/integrations/src/
@@ -49,6 +49,8 @@ packages/integrations/src/
 │   └── signature.ts     # X-Hub-Signature-256 e verificação do endpoint do webhook
 ├── instagram/
 │   └── meta-graph.ts    # Instagram API com Facebook Login, pela Graph API oficial (Fase 8)
+├── company-registry/
+│   └── receita-open-data.ts  # base aberta do CNPJ: arquivos oficiais da Receita, em streaming (Fase 9)
 ├── ai/anthropic.ts      # SDK oficial da Anthropic (Fase 6)
 ├── email/{console,file,smtp,resend}.ts
 ├── queue/pg-boss.ts
@@ -56,10 +58,10 @@ packages/integrations/src/
 ├── observability/{logger,error-reporter}.ts
 └── registry.ts          # resolve adaptadores conforme o ambiente
 
-planejado: google/places (Fase 9) · enrichment/ (Fase 9) · crm/ (Fase 12)
+planejado: google/places (Fase 9, aguardando parecer jurídico) · cep/ (consulta de CEP) · crm/ (Fase 12)
 ```
 
-Os **provedores falsos** (WhatsApp, Instagram, IA) ficam no core (`packages/core/src/modules/*/infra/fake-*.ts`), porque testes, CI e E2E usam o mesmo código. O **modo assistido** não passa por adaptador: é o link `wa.me` ou o link do perfil do Instagram, montados no módulo de mensagens. A assinatura do webhook (`whatsapp/signature.ts`) serve aos dois canais da Meta.
+Os **provedores falsos** (WhatsApp, Instagram, IA, base aberta do CNPJ) ficam no core (`packages/core/src/modules/*/infra/fake-*.ts`), porque testes, CI e E2E usam o mesmo código. O **modo assistido** não passa por adaptador: é o link `wa.me` ou o link do perfil do Instagram, montados no módulo de mensagens. A assinatura do webhook (`whatsapp/signature.ts`) serve aos dois canais da Meta.
 
 ---
 
@@ -89,9 +91,10 @@ interface PlaceSearchProvider {             // Google Places (Fase 9)
   getDetails(placeId: string): Promise<PlaceDetails>;    // sob demanda
 }
 
-interface CompanyRegistryProvider {         // dados abertos CNPJ / consultas pontuais
-  findByCnpj(cnpj: string): Promise<CompanyRecord | null>;
-  search(q: { uf: string; municipalityCode?: string; cnaes: string[]; limit: number }): Promise<CompanyRecord[]>;
+interface CompanyRegistrySource {           // base aberta do CNPJ (Fase 9): só os arquivos
+  latestReference(): Promise<string>;                       // mês mais recente publicado ("2026-09")
+  listFiles(reference: string): Promise<RegistryFile[]>;    // só com a publicação completa
+  open(reference: string, file: RegistryFile): AsyncIterable<Uint8Array>; // CSV descompactado, em streaming
 }
 
 interface AiProvider { /* ver AI-SDR §3 */ }
@@ -111,6 +114,8 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 
 > **Implementado na Fase 7:** em vez da `MessagingProvider` genérica, a porta `WhatsappProvider` (`packages/core/src/ports/whatsapp.ts`) com `send(outbound)` (texto ou modelo, sempre com a nossa referência), `listTemplates()` e `getPhoneHealth()`. Falhas viram `WhatsappProviderError` com o desfecho (`NOT_SENT` ou `UNKNOWN`), o código e se é passageira. A leitura do webhook (formato da Meta) fica no core, não no adaptador (ADR 023).
 >
+> **Implementado na Fase 9:** a porta `CompanyRegistrySource` (`packages/core/src/ports/company-registry.ts`) entrega **só os arquivos** da base aberta, como a Receita publica. Ler o layout, filtrar e gravar é do core (`modules/prospecting`), que também faz a busca e a comparação na cópia local: nenhuma consulta sai do servidor na hora da busca. Falhas viram `CompanyRegistryError` (`NOT_PUBLISHED`, `UNAVAILABLE`, `INVALID_FILE`, `TOO_LARGE`).
+>
 > **Implementado na Fase 8:** a porta `InstagramProvider` (`packages/core/src/ports/instagram.ts`), separada da do WhatsApp porque as regras são outras (ADR 025): `sendText` (só a quem escreveu, em 24 h), `sendPrivateReply` (uma por comentário, em 7 dias), `getUserProfile` (o @ de quem escreveu), `discover` (Business Discovery) e `getAccount`. Falhas viram `InstagramProviderError`, com o mesmo desfecho `NOT_SENT`/`UNKNOWN` do WhatsApp. O webhook também é lido no core (`parseInstagramWebhook`).
 
 ---
@@ -122,7 +127,9 @@ Os tipos (`OutboundMessage`, `InboundEvent`…) são do domínio. Nenhum tipo de
 | `WHATSAPP_PROVIDER` | `assisted`, `fake`, `meta_cloud` | `assisted` (`fake` para homologar a API sem a Meta) | `assisted` → `meta_cloud` depois do [§16.1](#161-ativar-o-whatsapp-pela-api-cloud-api) |
 | `INSTAGRAM_PROVIDER` | `assisted`, `fake`, `meta_graph` | `assisted` (`fake` para homologar a API sem a Meta) | `assisted` → `meta_graph` depois do [§16.2](#162-ativar-o-instagram-pela-api) |
 | `PLACES_PROVIDER` | `disabled`, `fake`, `google_places` | `fake` | `disabled` até validação jurídica |
-| `COMPANY_REGISTRY_PROVIDER` | `disabled`, `fake`, `receita_open_data`, `brasilapi` | `fake` | `disabled` → Fase 9 |
+| `COMPANY_REGISTRY_PROVIDER` | `disabled`, `fake`, `receita_open_data` | `fake` | `disabled` → `receita_open_data` depois do [§16.3](#163-ativar-a-base-aberta-do-cnpj) |
+| `REGISTRY_BASE_URL` | pasta dos dados abertos do CNPJ | `https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj` | idem (conferir na ativação) |
+| `REGISTRY_REFERENCE` | mês fixo `AAAA-MM` (opcional) | vazio (o mais recente publicado) | vazio |
 | `AI_PROVIDER` | `fake`, `anthropic` | `fake` | `fake` até a decisão da Docline sobre a transferência internacional; depois `anthropic` |
 | `EMAIL_PROVIDER` | `console`, `smtp`, `resend` | `console` | `smtp`/`resend` |
 | `CRM_PROVIDER` | `disabled`, `fake`, `webhook`, `docline` | `disabled` | Fase 12 |
@@ -267,7 +274,7 @@ OAuth por usuário com escopos mínimos (criar eventos de reunião; registrar e-
 
 ## 9. Fontes públicas brasileiras
 
-### 9.1 Dados abertos do CNPJ (Receita Federal) — fonte primária de descoberta proposta (Fase 9)
+### 9.1 Dados abertos do CNPJ (Receita Federal) — fonte primária de descoberta (Fase 9)
 
 - Publicação periódica (mensal) de arquivos com empresas e estabelecimentos.
 - Filtro por **CNAE 6920-6/01** (Atividades de contabilidade) e **6920-6/02** (Atividades de consultoria e auditoria contábil e tributária), situação cadastral **ativa**, UF/município.
@@ -276,10 +283,21 @@ OAuth por usuário com escopos mínimos (criar eventos de reunião; registrar e-
 - **LGPD:** dados de empresário individual/MEI e e-mails/telefones informados podem ser **dados pessoais**. Dado público não dispensa base legal, finalidade compatível e boa-fé (LGPD art. 7º, §§ 3º e 4º). Ver [LGPD §4](./LGPD.md#4-bases-legais-por-origem).
 - ⚠️ Verificar formato, endereço de publicação e periodicidade vigentes antes da Fase 9.
 
+> **Implementação (Fase 9).** Desligada por padrão em produção (`COMPANY_REGISTRY_PROVIDER=disabled`); ligar segue o [§16.3](#163-ativar-a-base-aberta-do-cnpj).
+> - **Fonte:** só os **arquivos abertos oficiais** (pastas mensais `AAAA-MM/` com `Estabelecimentos0..9.zip`, `Empresas0..9.zip` e `Municipios.zip`), baixados como a Receita os publica. Nada de consulta a páginas de pesquisa nem scraping. Sócios e Simples não são lidos.
+> - **Carga mensal** (jobs `registry.check`, diário, e `registry.ingest`): o mês só é usado com a publicação **completa** (10 + 10 + 1 arquivos); o ZIP é lido em streaming (cabeçalho conferido, `inflateRaw`, limites de tamanho comprimido e expandido, download parado vira "indisponível"); a carga interrompida **retoma do arquivo em que parou** (gravação idempotente pelo CNPJ). Passagem 1: estabelecimentos **ativos** com CNAE principal 6920-6/01 ou 6920-6/02 (a secundária só se o ADMIN ligar), com o município da Receita casado com o IBGE pelo nome e UF. Passagem 2: razão social, natureza jurídica e porte, só das raízes guardadas. O CPF que a Receita põe na razão social de empresário individual é retirado.
+> - **Empresário individual/MEI** (natureza 2135 e pessoas físicas): **fora por padrão**; o ADMIN só liga depois do parecer jurídico ([LGPD §20](./LGPD.md#20-itens-para-validação-jurídica), item 6).
+> - **Mês novo:** atualiza o que continua e apaga o que saiu (baixados, mudaram de atividade). Se o mês novo vier com menos de 70% da cópia atual, **nada é apagado** e os ADMINs são avisados (publicação suspeita).
+> - **Prospecção** (tela `/prospeccao`, permissão `prospecting.run`: ADMIN e GESTOR): busca por UF, cidades, CNAE, só matriz, nome e quantidade, **comparada com a base e com a Lista Não Contatar** pelas mesmas regras da importação. **Nada vira lead sem aprovação**; na aprovação, a comparação é refeita: o que já existe só é completado nos campos vazios e quem está na Lista Não Contatar não entra. Origem `CNPJ_OPEN_DATA` ("Dados abertos CNPJ"), base legal padrão da origem (legítimo interesse) e LIA escolhida na aprovação. Telefones entram **sem presumir WhatsApp**: encontrar um telefone público não autoriza mensagens automáticas.
+> - **Retenção:** os resultados das buscas guardam só o CNPJ, a comparação e a decisão, e são apagados em 30 dias (job `prospecting.purge`); a cópia da base é substituída a cada mês.
+> - **Testes:** o adaptador é testado contra um servidor local que imita a pasta da Receita (ZIP comum e em streaming, mês incompleto, corrompido, grande demais, download parado). A **base simulada** (`fake`) tem o mesmo layout, com escritórios fictícios (CNPJ com raiz "FK"). O acesso ao servidor da Receita não foi possível no ambiente de desenvolvimento: o formato e o endereço precisam ser conferidos na ativação (§16.3).
+
 ### 9.2 Consultas pontuais (enriquecimento)
 
 - **CNPJ por consulta** (ex.: BrasilAPI ou serviços comerciais de CNPJ): completar razão social, CNAE e situação de um lead já existente. Avaliar limites, termos e confiabilidade de cada serviço antes de adotar.
 - **CEP** (ViaCEP/BrasilAPI): completar endereço.
+
+> **Implementação (Fase 9, F9-04).** "Completar com dados abertos" na ficha do lead usa a **cópia local** da base aberta (§9.1), pelo CNPJ do lead: preenche só os campos vazios (razão social, cidade, endereço, CEP, segmento) e acrescenta os contatos novos, sem os que estão na Lista Não Contatar, e registra a origem "Dados abertos CNPJ". Não há consulta a serviço de terceiros, então só funciona para escritórios de contabilidade ativos. **Ficam para depois:** consulta de CNPJ fora do recorte (serviço a escolher, com termos e limites avaliados) e consulta de **CEP** (ViaCEP/BrasilAPI) para leads sem CNPJ.
 - **IBGE Localidades** (API pública de serviços de dados do IBGE): seed de UFs e municípios com código IBGE.
 
 ### 9.3 Conselhos profissionais (CFC/CRC)
@@ -434,3 +452,23 @@ Também depende da Docline e do jurídico. Até lá, o contato pelo Instagram co
 6. Depois de uma semana de consulta de perfis, o ADMIN decide se liga o critério "Instagram ativo" em Configurações → Score (nova versão do modelo).
 
 **Para pausar rápido:** voltar `INSTAGRAM_PROVIDER=assisted` no web e no worker (a rota do webhook passa a responder 404 e a consulta de perfis para). Mensagens na fila viram falha conhecida; nada é reenviado sozinho.
+
+### 16.3 Ativar a base aberta do CNPJ
+
+Fonte pública e gratuita, mas com dados pessoais em parte dos registros: depende do parecer jurídico ([LGPD §20](./LGPD.md#20-itens-para-validação-jurídica), item 6).
+
+**Pré-requisitos:**
+
+- [ ] Parecer jurídico sobre o uso dos dados abertos do CNPJ para prospecção B2B (e, à parte, sobre empresários individuais/MEI).
+- [ ] LIA da prospecção B2B cadastrada em Conformidade → Bases legais (escolhida na aprovação).
+- [ ] Conferir na página oficial dos dados abertos do CNPJ: o endereço da pasta (`REGISTRY_BASE_URL`), os nomes dos arquivos (`EstabelecimentosN.zip`, `EmpresasN.zip`, `Municipios.zip`), a quantidade de partes (hoje 10) e o layout (30 colunas em Estabelecimentos, 7 em Empresas). Se algo mudou, ajustar o adaptador antes.
+- [ ] Worker com tempo e rede para baixar alguns GB por mês (Estabelecimentos e Empresas; a leitura é em streaming: não precisa de disco). O banco cresce só com o recorte de contabilidade (dezenas de milhares de linhas).
+
+**Configuração (staging primeiro):**
+
+1. Definir no **web** e no **worker** (Render → *Environment*): `COMPANY_REGISTRY_PROVIDER=receita_open_data` e, se preciso, `REGISTRY_BASE_URL`. `REGISTRY_REFERENCE` só para fixar um mês (testes).
+2. Configurações → Dados abertos do CNPJ: **Rodar a carga agora** e acompanhar (arquivos lidos, escritórios até agora). Conferir o total por UF com a ordem de grandeza esperada.
+3. Prospecção: buscar numa cidade conhecida, conferir a comparação com a base e aprovar poucos escritórios; conferir a ficha (origem, contatos sem WhatsApp presumido).
+4. Deixar a carga automática mensal ligada (conferência diária às 03:31 de Fortaleza).
+
+**Para pausar rápido:** `COMPANY_REGISTRY_PROVIDER=disabled` no web e no worker: a carga para (a interrompida é dada como falha), e a busca continua com a cópia já carregada. Para tirar a cópia, apagar `registry_companies` (os leads já aprovados não dependem dela).

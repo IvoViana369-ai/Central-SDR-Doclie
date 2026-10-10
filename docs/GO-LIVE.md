@@ -20,6 +20,8 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 9. [Plano de volta à planilha](#9-plano-de-volta-à-planilha)
 10. [Critérios de sucesso do piloto](#10-critérios-de-sucesso-do-piloto)
 11. [WhatsApp pela API (marco M5)](#11-whatsapp-pela-api-marco-m5)
+12. [Instagram pela API (marco M5b)](#12-instagram-pela-api-marco-m5b)
+13. [Base aberta do CNPJ e Prospecção (marco M6)](#13-base-aberta-do-cnpj-e-prospecção-marco-m6)
 
 ---
 
@@ -225,3 +227,23 @@ No piloto, o Instagram também é **assistido** (`INSTAGRAM_PROVIDER=assisted`):
 | I7 | ADMIN | Configurações → Instagram: "Verificar agora"; na ficha, "Atualizar métricas" | Conta ativa (simulada); seguidores, publicações e última publicação do @ do lead |
 
 **Primeira semana com a API:** acompanhar em Configurações → Instagram as respostas, as falhas e a consulta de perfis; conferir na ficha se as métricas fazem sentido. Só depois disso o ADMIN decide ligar o critério "Instagram ativo" em Configurações → Score (nova versão do modelo). Para voltar ao assistido: `INSTAGRAM_PROVIDER=assisted` no web e no worker.
+
+## 13. Base aberta do CNPJ e Prospecção (marco M6)
+
+A Prospecção busca escritórios de contabilidade ativos numa **cópia local** da base aberta do CNPJ da Receita Federal, compara com a base e só cria lead com **aprovação** de um GESTOR ou ADMIN. Em produção, nasce desligada (`COMPANY_REGISTRY_PROVIDER=disabled`); o piloto pode começar sem ela.
+
+**Go/no-go (M6):** parecer jurídico sobre os dados abertos do CNPJ (e, à parte, sobre empresário individual/MEI: LGPD §20, item 6), LIA da prospecção cadastrada e o formato e o endereço da publicação conferidos. Passo a passo técnico em [INTEGRATIONS §16.3](./INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj).
+
+**Homologação antes da base real** (staging, `COMPANY_REGISTRY_PROVIDER=fake`, escritórios fictícios com CNPJ de raiz "FK"):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| P1 | ADMIN | Configurações → Dados abertos do CNPJ → "Rodar a carga agora" (worker ligado) | Em poucos segundos, mês 2026-09 carregado, 30 escritórios (CE 28, PI 2); o resultado mostra quantos saíram |
+| P2 | GESTOR | Prospecção → UF CE, cidade Sobral → Buscar | 8 escritórios, com a comparação: "Novo", "Já existe" (com o lead), "Possível duplicado", "Na Lista Não Contatar" |
+| P3 | GESTOR | Selecionar dois "Novo" e aprovar, escolhendo o responsável e a LIA | "2 leads criados"; na ficha, origem "Dados abertos CNPJ", telefones sem WhatsApp marcado |
+| P4 | GESTOR | Recusar um resultado com motivo e buscar de novo | O recusado some (com "Só quem ainda não é lead") ou aparece marcado "Recusado antes" |
+| P5 | GESTOR | Prospecção → Potencial por cidade | Por cidade: escritórios, já são leads, faltam, cobertura e contatados; "Buscar" abre a busca na cidade |
+| P6 | SDR | Ficha de um lead com o CNPJ de um escritório da base → "Completar com dados abertos" | Só os campos vazios são preenchidos; contatos novos entram; o card passa a "Nada a completar" |
+| P7 | SDR | Abrir Prospecção | Menu sem o item; acesso restrito |
+
+**Primeira carga real:** acompanhar o progresso em Configurações → Dados abertos do CNPJ (pode levar horas: são alguns GB em streaming) e conferir o total por UF com a ordem de grandeza esperada. Começar aprovando poucos escritórios de uma cidade conhecida. Para pausar: `COMPANY_REGISTRY_PROVIDER=disabled` no web e no worker; a busca continua com a cópia já carregada.

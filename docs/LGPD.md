@@ -1,6 +1,6 @@
 # LGPD e Governança de Dados — Docline SDR
 
-> **Status:** Fase 0, com as notas de implementação das Fases 2 a 8 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
+> **Status:** Fase 0, com as notas de implementação das Fases 2 a 9 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8), dados abertos do CNPJ na [§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
 > Relacionados: [SECURITY](./SECURITY.md) · [SDR-FLOW §9](./SDR-FLOW.md#9-contactabilidade-estados-independentes) · [INTEGRATIONS](./INTEGRATIONS.md) · [DATABASE §4.9](./DATABASE.md#49-conformidade)
 
 ## Sumário
@@ -144,6 +144,18 @@ Consequências:
 > - **Métricas públicas do perfil** (Business Discovery, da Meta): só de contas profissionais e só três números (seguidores, publicações, data da última), para o critério "Instagram ativo" do score — que continua desligado até o ADMIN ligar. Leads com opt-out ou bloqueados não são consultados; perfis pessoais não aparecem nessa consulta.
 > - **Identificadores:** o IGSID (id do contato na conta da Docline) e o @ ficam na conversa; os payloads de webhook guardam só os HMACs do @ e do IGSID no índice.
 
+
+### 6.2 Dados abertos do CNPJ e Prospecção (Fase 9)
+
+> **Implementação (Fase 9).** Desligada em produção (`COMPANY_REGISTRY_PROVIDER=disabled`); ligar depende do item 6 da [§20](#20-itens-para-validação-jurídica) e do checklist de ativação ([INTEGRATIONS §16.3](./INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj)).
+>
+> - **Fonte e minimização:** só os arquivos abertos oficiais da Receita; ficam guardados só os **estabelecimentos ativos de contabilidade** (CNAE 6920-6/01 e 6920-6/02) e só os campos da prospecção (nomes, CNAE, abertura, porte, endereço, telefones e e-mail declarados). Sócios e Simples **não são lidos**. O CPF que a Receita inclui na razão social de empresário individual é **retirado** na carga.
+> - **Empresário individual/MEI:** os dados são de uma pessoa natural; ficam **fora por padrão** e só o ADMIN liga, depois do parecer (item 6 da §20). Desligar de novo apaga esses registros na carga seguinte.
+> - **Separado dos leads:** a cópia (`registry_companies`) não é a base de leads. Um escritório só vira lead quando uma pessoa **aprova**, com a origem "Dados abertos CNPJ", data da coleta (a da carga) e base legal (legítimo interesse, com a LIA escolhida na aprovação).
+> - **Lista Não Contatar respeitada:** a busca e a aprovação conferem contatos e CNPJ; quem está na lista aparece como tal e **não pode virar lead**. O opt-out em todos os canais e a anonimização já põem o CNPJ na lista (hash), então um pedido de exclusão vale também para a Prospecção. Na ficha, "Completar com dados abertos" não acrescenta contato que esteja na lista.
+> - **Telefone público não é autorização:** os contatos entram sem marcar WhatsApp e seguem o gate de sempre (base legal, opt-out, horário, limites). Nada é enviado automaticamente a quem foi prospectado.
+> - **Retenção:** os resultados das buscas guardam só o CNPJ, a comparação e a decisão, e são apagados em 30 dias; a cópia é substituída a cada mês (o que saiu da base é apagado).
+
 ---
 
 ## 7. Estados de contato
@@ -227,7 +239,8 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 | Lista Não Contatar | Enquanto houver risco de recontato | Manter só hash + máscara |
 | Linhas de importação (`import_rows`) | 30 dias | Excluir |
 | Arquivos de importação | Não armazenados | — |
-| Resultados de prospecção (`prospecting_results`) | 30 dias | Excluir |
+| Resultados de prospecção (`prospecting_results`) | 30 dias | Excluir (job `prospecting.purge`, Fase 9); a busca fica, sem os resultados |
+| Cópia da base aberta do CNPJ (`registry_companies`) | Até a carga do mês seguinte | Atualizar; o que saiu da base (baixado, outra atividade) é apagado |
 | Payloads de webhook | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
 | Mensagens de números sem lead (`inbound_unmatched`) | 90 dias | Excluir (job `webhooks.purge`, Fase 7; Instagram incluído na Fase 8) |
 | Comentários de leads no Instagram da Docline (`social_comments`) | Enquanto o lead existir (proposta, a validar) | Excluir na anonimização |
@@ -256,6 +269,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 - **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
 - **WhatsApp (Fase 7):** a anonimização também apaga as conversas (número do WhatsApp e nome do perfil), as variáveis dos modelos enviados, os payloads brutos de webhook que citam qualquer telefone do lead (achados pelo HMAC do número, sem guardar o número em claro no índice) e as mensagens de "número sem lead" desses telefones ou já vinculadas ao lead. Mesclar dois leads leva as conversas e o opt-in do mesmo número para o sobrevivente; revogado em qualquer dos dois prevalece.
 - **Instagram (Fase 8):** a anonimização apaga também as conversas (IGSID, @ e nome do perfil), os comentários do lead, as métricas públicas dos @ dele, os payloads de webhook que citam o @ ou o IGSID (achados pelos HMACs) e as mensagens de "quem não é lead" com esse @ ou IGSID. Mesclar leva as conversas e os comentários para o sobrevivente.
+- **Prospecção (Fase 9):** a anonimização põe o CNPJ na Lista Não Contatar (como o opt-out em todos os canais), e o escritório passa a aparecer na Prospecção como "Na Lista Não Contatar", sem poder ser aprovado. Os resultados de busca apontam para o lead por id (o vínculo cai se ele for excluído) e somem em 30 dias. A cópia da base aberta é dado público da Receita e segue a carga mensal.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
 ---
@@ -310,6 +324,7 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 |---|---|---|---|---|---|---|
 | Cadastro e importação de leads | Identificação e contato profissional | Contadores, sócios, responsáveis | Legítimo interesse (LIA) / outras por origem | Prospecção B2B | §12 | Hospedagem |
 | Contato e follow-up | Telefone, Instagram, mensagens | Idem | Idem + opt-in de plataforma (API) | Prospecção | §12 | Hospedagem, Meta (Fase 7+) |
+| Base aberta do CNPJ e Prospecção (Fase 9) | Dados cadastrais públicos de escritórios de contabilidade ativos (nomes, CNAE, endereço, telefones e e-mail declarados) | Escritórios; empresário individual só se liberado | Legítimo interesse (dado público, art. 7º, §§ 3º e 4º) | Descobrir e priorizar escritórios para prospecção B2B | Cópia: mês seguinte; resultados: 30 dias | Hospedagem |
 | Geração de mensagens por IA | Contexto mínimo do lead | Idem | Legítimo interesse | Personalização | 12 meses | Provedor de IA |
 | Lista Não Contatar | Hash de identificadores | Quem pediu opt-out | Exercício regular de direitos / legítimo interesse | Respeitar oposição | Indeterminado (hash) | Hospedagem |
 | Atendimento a titulares | Dados do pedido | Titulares | Obrigação legal | Cumprir LGPD | 5 anos (proposta) | Hospedagem |
@@ -365,6 +380,7 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [x] Opt-in WhatsApp com evidência antes de qualquer envio via API (Fase 7): por número, com evidência conferida ou descrita, auditado; opt-out e o erro 131050 revogam.
 - [x] Payloads de webhook e mensagens de números sem lead com purga em 90 dias; anonimização cobre conversas e payloads (Fase 7).
 - [x] Instagram só responde a quem procurou a Docline; comentários só de leads; métricas públicas mínimas; anonimização e purga cobrem conversas, comentários, métricas e payloads (Fase 8).
+- [x] Dados abertos do CNPJ (Fase 9): só o recorte de contabilidade ativo, sem sócios, CPF retirado da razão social, empresário individual fora por padrão, aprovação humana com a Lista Não Contatar conferida, resultados apagados em 30 dias.
 - [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API do WhatsApp ou do Instagram).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.
 
@@ -377,7 +393,7 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 3. Política de primeiro contato por WhatsApp no modo assistido (volume, público, textos).
 4. Textos padrão: primeira mensagem, opt-out, confirmação de descadastro.
 5. Prazos de retenção da [§12](#12-retenção-proposta).
-6. Uso dos dados abertos do CNPJ para prospecção (especialmente MEI/empresário individual).
+6. Uso dos dados abertos do CNPJ para prospecção (especialmente MEI/empresário individual). **Fase 9:** implementado e desligado em produção; empresário individual fora por padrão ([§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9)). O parecer decide se a base liga e se o empresário individual entra.
 7. Uso de dados do Google Places (o que pode ser armazenado e exibido).
 8. Transferência internacional (hospedagem, IA, Meta, Sentry) e contratos com operadores.
 11. **WhatsApp pela API (Fase 7):** quais métodos de opt-in a Docline aceitará e que evidência basta para cada um; se a "relação comercial existente" vale como opt-in; o texto dos modelos de prospecção (categoria Marketing).

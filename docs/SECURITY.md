@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -407,6 +407,13 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - Só responder: o gate do modo API exige a janela aberta naquele @; a resposta privada passa pelo gate do contato assistido. Prazos da Meta e gate são conferidos de novo no worker. Sem reenvio automático (ADR 022).
 - Consulta de perfis (Business Discovery): o @ é validado antes de entrar na URL (só letras, números, ponto e sublinhado; até 30), a seleção é SQL parametrizado e há teto por hora; nada além de três números públicos é gravado.
 - Testes: webhook (verificação, assinatura, E2E), ecos e conciliação de resultado incerto, comentários de quem não é lead não gravados, anonimização apagando comentários, métricas, payloads (pelo @ e pelo IGSID) e mensagens de quem não era lead.
+
+**Revisão de segurança da Fase 9 (dados abertos do CNPJ e Prospecção)**
+- Rotas novas da API v1 (`/prospecting/*`, `/registry*`, `/leads/:id/registry`) passam pelo `apiHandler` e pelos casos de uso: busca, aprovação e potencial exigem `prospecting.run` (ADMIN e GESTOR); a carga e a configuração, `integration.manage` (ADMIN); a ficha usa o escopo do lead (leitura) e a edição (completar). Nenhuma rota pública nova.
+- Download sem SSRF por entrada de usuário: a pasta vem só do ambiente (`REGISTRY_BASE_URL`); o mês é validado (`AAAA-MM`) e os nomes dos arquivos da listagem só passam se casarem com os padrões oficiais (`EstabelecimentosN.zip`, `EmpresasN.zip`, `Municipios.zip`) antes de entrar na URL.
+- Arquivo hostil: ZIP conferido no cabeçalho (só deflate, sem senha), limites de tamanho comprimido (8 GiB) e expandido (32 GiB) contra "zip bomb", tempo limite para começar e para download parado; linha fora do layout é contada e ignorada, nunca interpretada. Gravação em lotes com SQL parametrizado (`Prisma.sql`).
+- Busca com SQL parametrizado (inclusive o `LIKE` do nome, com curingas escapados) e quantidade limitada (até 500); aprovação limitada a 100 por pedido, cada uma na sua transação, com a decisão reservada por atualização condicional (duas pessoas não criam dois leads).
+- Testes: adaptador contra servidor local (mês incompleto, corrompido, armazenado sem compressão, grande demais, download parado); carga (retomada, mês novo, queda suspeita, falhas); Prospecção (filtros, comparação, Lista Não Contatar na busca e na aprovação, aprovação simultânea, recusa, retenção, permissões) e E2E com a base simulada.
 
 **Fases 7+ — Integrações**
 - [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).

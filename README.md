@@ -2,7 +2,7 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 a 8 concluídas — MVP, WhatsApp e Instagram oficiais prontos no código.**
+> **Status: Fases 1 a 9 concluídas — MVP, WhatsApp e Instagram oficiais e Prospecção pela base aberta do CNPJ prontos no código.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
 > - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
@@ -11,10 +11,11 @@ Central operacional de prospecção B2B da **Docline Tecnologia**, começando pe
 > - **Fase 6 (IA e fechamento do MVP):** "Gerar com IA" no contato assistido, com avisos, edição, aprovação humana e envio assistido; guardrails e cotas; sugestão de classificação de respostas; base de conhecimento, abordagens e custos da IA; avaliação offline com rubrica; dashboard e relatórios com exportação; teste de desempenho com 100 mil leads. A IA real fica desligada (`AI_PROVIDER=fake`) até a decisão da Docline.
 > - **Fase 7 (WhatsApp oficial):** envio pela WhatsApp Cloud API (modelos aprovados e texto livre na janela de 24 h), status de entrega e leitura e respostas por webhook assinado, opt-in por número com evidência, tela Conversas com os números sem lead, modelos ligados às abordagens, saúde do número e custo estimado. Sem reenvio automático e sem criar leads sozinho. A API fica desligada (`WHATSAPP_PROVIDER=assisted`) até a conta da Meta e o parecer jurídico; para homologar, `fake` + `pnpm whatsapp:simulate`.
 > - **Fase 8 (Instagram oficial):** mensagens e comentários da conta da Docline por webhook assinado, resposta pela API só a quem escreveu (24 h) e resposta privada a comentários (uma por comentário, até 7 dias), ecos do que a equipe respondeu pelo app, "Quem não é lead" em Conversas e métricas públicas dos perfis (Business Discovery) para o critério "Instagram ativo" do score. O primeiro contato continua assistido. Desligada (`INSTAGRAM_PROVIDER=assisted`) até o App Review da Meta e o parecer jurídico; para homologar, `fake` + `pnpm instagram:simulate`.
+> - **Fase 9 (Prospecção):** cópia mensal dos escritórios de contabilidade ativos da base aberta do CNPJ (só os arquivos oficiais da Receita, lidos em streaming, com retomada); tela Prospecção com busca por UF, cidades, atividade e quantidade, comparação com a base e a Lista Não Contatar e aprovação humana (nada vira lead sozinho); potencial por cidade; "Completar com dados abertos" na ficha. Google Places fica para depois do parecer jurídico.
 >
 > **Pendências para o piloto:** staging na Render (conta e credenciais da Docline), DSN do Sentry, validação jurídica, transferência internacional e decisão sobre ligar a IA. O caminho até o go-live está em [docs/GO-LIVE.md](docs/GO-LIVE.md).
 >
-> **Próximo:** UAT e go-live do piloto no modo assistido; ativação do WhatsApp e do Instagram pela API (marcos M5 e M5b); depois, Fase 9 (dados abertos do CNPJ e prospecção). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próximo:** UAT e go-live do piloto no modo assistido; ativações que dependem da Meta e do jurídico (WhatsApp, Instagram e base aberta do CNPJ: marcos M5, M5b e M6); depois, Fase 10 (Campanhas). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -67,7 +68,7 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | Autenticação | Better Auth (e-mail/senha, sem cadastro público) + RBAC próprio (Administrador, Gestor, SDR, Comercial) | Better Auth 1.7 |
 | IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória | Fase 6 |
 | Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API (Graph API direta, versão fixada) na Fase 7, só com opt-in ou janela aberta; Instagram API (Facebook Login) na Fase 8, só respondendo a quem escreveu ou comentou | Fases 5–8 |
-| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta; Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
+| Captação | Planilhas e cadastro no MVP; **dados abertos CNPJ** como fonte primária de descoberta (cópia local mensal, arquivos oficiais da Receita); Google Places apenas como apoio (após parecer jurídico) | Fases 3 e 9 |
 | Qualidade | ESLint (com regras de fronteira entre módulos), Prettier, Vitest (unitários + integração com Postgres real), Playwright (E2E) | ESLint 10, Vitest 5, Playwright 1.63 |
 | Deploy | Imagem Docker única (web e worker) na **Render, região Virginia** (decisão de 2026-10-08) | `Dockerfile`, `render.yaml` |
 | n8n | Só nas bordas (integrações com sistemas Docline), nunca com regra de negócio | Fase 12 |
@@ -151,6 +152,9 @@ pnpm admin:create --email voce@docline.com.br --name "Seu Nome"
 
 # 5. Web (http://localhost:3000) + worker
 pnpm dev
+
+# 6. Opcional: Prospecção com a base do CNPJ simulada (COMPANY_REGISTRY_PROVIDER=fake no .env):
+#    Configurações → Dados abertos do CNPJ → "Rodar a carga agora" (o worker carrega os escritórios fictícios)
 ```
 
 ### Comandos úteis
@@ -183,5 +187,6 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 
 1. **Piloto (F6-11):** seguir o [roteiro de go-live](docs/GO-LIVE.md): staging na Render, validação jurídica, UAT com 1–2 SDRs e o gestor, treinamento, importação da base real em produção e decisão sobre ligar a IA real (com a avaliação offline e o DPA do provedor). O piloto começa no modo assistido.
 2. **WhatsApp pela API (marco M5):** a Docline inicia já a verificação da empresa na Meta, a WABA, o número dedicado e os modelos de prospecção; para ligar, seguir o [checklist de ativação](docs/INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api) e a [homologação W1–W7](docs/GO-LIVE.md#11-whatsapp-pela-api-marco-m5).
-3. **Aprovar a Fase 8 — Instagram** ([backlog F8](docs/ROADMAP.md#fase-8--instagram)): DMs recebidas e comentários por webhook, resposta dentro da janela permitida e Business Discovery. Depende de conta profissional e App Review da Meta, que podem começar em paralelo.
-4. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).
+3. **Base aberta do CNPJ (marco M6):** parecer jurídico (inclusive sobre empresário individual/MEI) e conferência do formato da publicação; para ligar, seguir o [checklist de ativação](docs/INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj) e a [homologação P1–P7](docs/GO-LIVE.md#13-base-aberta-do-cnpj-e-prospecção-marco-m6).
+4. **Aprovar a Fase 10 — Campanhas** ([backlog F10](docs/ROADMAP.md#fase-10--campanhas)): campanhas com filtro, snapshot e responsável, elegibilidade com motivos (gate, frequência, campanha concorrente), distribuição e limites diários e métricas do funil.
+5. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

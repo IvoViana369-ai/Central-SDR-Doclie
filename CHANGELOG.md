@@ -4,6 +4,33 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.9.0] — Fase 9: Prospecção pela base aberta do CNPJ — 2026-10-10
+
+Descoberta de escritórios de contabilidade na **base aberta do CNPJ da Receita Federal** (só os arquivos oficiais, sem scraping), com comparação com a base e **aprovação humana**: nada vira lead sozinho. **A base real fica desligada em produção** (`COMPANY_REGISTRY_PROVIDER=disabled`); a ativação segue [INTEGRATIONS §16.3](docs/INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj) e o marco M6 do [GO-LIVE](docs/GO-LIVE.md#13-base-aberta-do-cnpj-e-prospecção-marco-m6). F9-01, F9-02 e F9-05 entregues; F9-04 em parte (pelo CNPJ, na cópia local; CEP e CNPJ fora do recorte ficam para depois); **F9-03 (Google Places) adiada** até o parecer jurídico sobre os termos da Google. Aceite coberto pela jornada E2E `fase9.spec.ts` e pelas suítes da Prospecção. Totais: 428 testes unitários, 215 de integração e 51 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `registry_ingestions` (cargas mensais, com progresso e uma em andamento por vez), `registry_companies` (cópia filtrada, separada dos leads), `prospecting_searches` e `prospecting_results` (só o CNPJ, a comparação e a decisão).
+- **Carga mensal (F9-01):** porta `CompanyRegistrySource` e adaptador `receita_open_data` (listagem da pasta oficial, mês só com a publicação completa, ZIP em streaming com limites de tamanho e de download parado); jobs `registry.check` (diário) e `registry.ingest` (retoma do arquivo em que parou). Só estabelecimentos **ativos** de contabilidade (CNAE 6920-6/01 e 6920-6/02), município casado com o IBGE, razão social, natureza e porte só das raízes guardadas; **CPF retirado** da razão social; **empresário individual fora por padrão**. Mês novo atualiza e apaga o que saiu; queda maior que 30% não apaga nada e avisa os ADMINs. Base simulada (`fake`) com o mesmo layout e escritórios fictícios. Variáveis `REGISTRY_BASE_URL` e `REGISTRY_REFERENCE`.
+- **Prospecção (F9-02):** tela `/prospeccao` com busca por UF, cidades, atividade, só matriz, nome e quantidade (até 500); comparação com a base e com a Lista Não Contatar pelas regras da importação; aprovação (até 100 por vez, com responsável e LIA) que **refaz a comparação**, cria o lead com a origem "Dados abertos CNPJ" e os contatos **sem presumir WhatsApp**, ou completa o que já existe; quem está na Lista Não Contatar não entra; aprovação simultânea não duplica; recusa com motivo ("Recusado antes" nas buscas seguintes); histórico das buscas. Resultados apagados em 30 dias (job `prospecting.purge`). Nova permissão `prospecting.run` (ADMIN e GESTOR).
+- **Potencial por cidade (F9-05):** escritórios ativos na base aberta × já são leads × faltam × cobertura × leads e contatados, com as cidades prioritárias marcadas e atalho para buscar na cidade.
+- **Completar com dados abertos (F9-04):** card na ficha do lead com o que a base tem do CNPJ e o que dá para completar; preenche só campos vazios, sem contatos da Lista Não Contatar, e registra a origem.
+- **Configurações → Dados abertos do CNPJ (ADMIN):** fonte, mês carregado, escritórios por UF, cargas com progresso e resultado, "Rodar a carga agora", "Carregar o mês de novo" e a configuração (carga automática, atividade secundária, empresário individual).
+- **API v1:** `/prospecting/searches` (+ `{id}`, `approve`, `reject`), `/prospecting/potential`, `/registry` (+ `settings`, `ingestions`) e `/leads/{id}/registry`.
+
+### Alterado
+
+- **Importação:** a comparação com a base (`matchRows`) e o "completar só o vazio" (`fillEmptyLeadFields`) passaram a ser compartilhados com a Prospecção, sem mudar o comportamento da importação.
+- **Menu:** Prospecção liberada (antes "Em breve"), para quem tem `prospecting.run`.
+- **Horários na tela:** passam a sair sempre no fuso padrão (`America/Fortaleza`, ARCHITECTURE §7.7). Antes, o que era montado no servidor saía em UTC (3 horas à frente) e o que era montado no navegador saía no fuso do aparelho.
+- **Variável `COMPANY_REGISTRY_PROVIDER`:** o valor `brasilapi`, previsto no desenho e nunca implementado, saiu (consulta a terceiros fica para quando o serviço for escolhido).
+- **Documentação:** INTEGRATIONS (§2, §3, §4, §9.1, §9.2 e §16.3), ARCHITECTURE (módulo, endpoints, jobs, estrutura e ADRs 027 e 028), SECURITY (matriz e revisão da Fase 9), LGPD (§6.2, retenção, anonimização, registro de operações e item 6), SDR-FLOW, DATABASE (§4.11), ROADMAP, GO-LIVE (§13, roteiro P1–P7), README e render.yaml.
+
+### Observações
+
+- O servidor da Receita não estava acessível no ambiente de desenvolvimento: o adaptador foi testado contra um servidor local que imita a pasta oficial, e o formato e o endereço vigentes precisam ser conferidos na ativação.
+- O driver `pg` avisa (aviso de descontinuação, já presente nas fases anteriores) quando o Prisma faz consultas paralelas dentro de uma transação, ao carregar relações. Funciona hoje; precisa ser revisto antes de atualizar para o `pg` 9.
+
 ## [0.8.0] — Fase 8: Instagram — 2026-10-09
 
 Mensagens e comentários da conta profissional da Docline pela Instagram API oficial da Meta (com Facebook Login), **só para responder** a quem escreveu ou comentou; o primeiro contato continua assistido. **A API fica desligada por padrão** (`INSTAGRAM_PROVIDER=assisted`); a ativação segue [INTEGRATIONS §16.2](docs/INTEGRATIONS.md#162-ativar-o-instagram-pela-api) e o marco M5b do [GO-LIVE](docs/GO-LIVE.md#12-instagram-pela-api-marco-m5b). F8-01 a F8-04 entregues. Aceite coberto pela jornada E2E `fase8.spec.ts` e pelas suítes do Instagram. Totais: 407 testes unitários, 200 de integração e 46 jornadas E2E.

@@ -73,6 +73,9 @@ envVarGroups:
         value: fake
       - key: PLACES_PROVIDER
         value: disabled
+      # Base aberta do CNPJ (Fase 9): `fake` para homologar a Prospecção com
+      # escritórios fictícios; para a base real (`receita_open_data`), siga
+      # docs/INTEGRATIONS.md §16.3 (parecer jurídico e formato conferido).
       - key: COMPANY_REGISTRY_PROVIDER
         value: disabled
 

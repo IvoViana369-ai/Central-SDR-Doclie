@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 7 concluídas no código (MVP + WhatsApp pela API, desligada por padrão) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), a ativação do WhatsApp pela API quando a conta da Meta estiver pronta ([INTEGRATIONS §16.1](./INTEGRATIONS.md#161-ativar-o-whatsapp-pela-api-cloud-api)) e depois a Fase 8 · **Última revisão:** 2026-10-09
+> **Status:** Fases 1 a 9 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 10 · **Última revisão:** 2026-10-10
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -29,7 +29,7 @@
 | 6 | IA de prospecção | Gerar/editar/aprovar/enviar, guardrails, avaliação; dashboard e relatórios básicos; UAT | ✅ concluída no código (2026-10-09); UAT e go-live com a Docline | MVP |
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ✅ concluída no código (2026-10-09); ativação depende da Meta e do jurídico | Canais |
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ✅ concluída no código (2026-10-09); ativação depende do App Review da Meta e do jurídico | Canais |
-| 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ~2 semanas | Captação |
+| 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ✅ concluída no código (2026-10-10), sem o Google Places (aguarda parecer); ativação depende do jurídico | Captação |
 | 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ~2 semanas | Escala |
 | 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ~2 semanas | Inteligência |
 | 12 | Integrações Docline | API com chaves, webhooks de saída, CRM, Lista Não Contatar compartilhada | ~3 semanas (depende das APIs) | Ecossistema |
@@ -461,6 +461,29 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F8-04 | Business Discovery → critério "Instagram ativo" | SHOULD |
 
 ### Fase 9 — Google / API de prospecção
+
+**Entregáveis:** cópia local, mensal, dos escritórios de contabilidade ativos da base aberta do CNPJ; tela Prospecção com busca, comparação com a base e aprovação humana; potencial por cidade; "Completar com dados abertos" na ficha.
+
+**Situação (2026-10-10):** ✅ concluída no código; F9-01, F9-02 e F9-05 entregues, F9-04 em parte e F9-03 adiada (abaixo). A base aberta fica **desligada em produção** (`COMPANY_REGISTRY_PROVIDER=disabled`); a homologação usa a base simulada (`fake`, escritórios fictícios no layout da Receita). Ligar depende do parecer jurídico (item 6 da [LGPD §20](./LGPD.md#20-itens-para-validação-jurídica)) e de conferir o formato e o endereço vigentes da publicação ([INTEGRATIONS §16.3](./INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj)): o servidor da Receita não estava acessível no ambiente de desenvolvimento, e o adaptador foi testado contra um servidor local que imita a pasta oficial.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase9.spec.ts` e pelas suítes `registry-ingestion.int.test.ts`, `prospecting.int.test.ts`, `prospecting-domain.test.ts`, `registry-schema.int.test.ts` e `receita-open-data.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F9-01 | Só ativos de contabilidade (principal; secundária só se ligada), município casado com o IBGE, CPF fora da razão social, empresário individual fora por padrão; carga interrompida retoma do arquivo; mês novo atualiza e apaga o que saiu; queda grande não apaga nada e avisa; mês incompleto não é usado; ZIP corrompido, sem compressão ou grande demais falha com aviso; download parado vira "indisponível". |
+| F9-02 | Busca por UF, cidades, CNAE, só matriz, nome e quantidade; comparação (CNPJ, nome na cidade, contato, filial, Lista Não Contatar) igual à da importação; nada vira lead sem aprovação; aprovação cria o lead com a origem e os contatos (sem WhatsApp presumido) ou completa o existente; Lista Não Contatar recusada na aprovação; aprovação simultânea não duplica; recusa some das buscas seguintes; resultados apagados em 30 dias; SDR sem acesso. |
+| F9-04 | Ficha: só campos vazios, contatos da Lista Não Contatar de fora, origem registrada, escopo do lead respeitado; sem CNPJ ou fora da base, o card explica. |
+| F9-05 | Por cidade: escritórios da base aberta, já são leads, faltam, cobertura, leads e contatados; cidades prioritárias marcadas; atalho para buscar na cidade. |
+
+Decisões e pendências:
+
+- **Cópia local filtrada** (ADR 027): a Receita publica arquivos, não uma API de busca; a busca roda no nosso banco, sem chamada externa por busca. Só arquivos oficiais, sem scraping.
+- **Resultados sem os dados e aprovação que refaz a comparação** (ADR 028): a base pode mudar entre a busca e a aprovação.
+- **F9-03 (Google Places) adiada:** depende do parecer jurídico sobre os termos da Google Maps Platform (o que pode ser exibido e guardado) e de um projeto Google Cloud com faturamento e alertas. A porta e a variável `PLACES_PROVIDER` continuam previstas ([INTEGRATIONS §8](./INTEGRATIONS.md#8-google)).
+- **F9-04 em parte:** o enriquecimento pelo CNPJ usa a cópia local (só escritórios de contabilidade ativos). Ficam para depois a consulta de CNPJ fora do recorte e a de **CEP** (ViaCEP/BrasilAPI), que dependem de escolher o serviço e avaliar termos e limites.
+- **Pendências:** parecer jurídico (dados abertos e, à parte, empresário individual/MEI); conferir formato e endereço na ativação; a população por município não está no seed do IBGE (a coluna some na tela até lá).
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. |
 |---|---|---|
