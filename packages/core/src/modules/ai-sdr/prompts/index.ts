@@ -2,3 +2,4 @@
 // e rodar o conjunto de avaliação.
 export * from './outreach-message';
 export * from './reply-classification';
+export * from './portfolio-insights';

@@ -33,3 +33,10 @@ export {
   runAnalyticsRollup,
   type RollupStatus,
 } from './application/rollup';
+export {
+  generateInsights,
+  getInsights,
+  rateInsight,
+  runInsightsJob,
+  type InsightsView,
+} from './application/insights';

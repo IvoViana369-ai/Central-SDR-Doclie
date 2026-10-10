@@ -81,3 +81,19 @@ export const exportPerformanceInput = z.discriminatedUnion('report', [
 
 /** Recalcular os rollups de um período (ex.: depois de importar histórico). */
 export const rollupRequestInput = teamPeriodInput;
+
+// --- Insights da carteira (F11-04) -------------------------------------------
+
+/** Gestão: os da equipe (padrão) ou os de uma pessoa; os demais, os próprios. */
+export const insightsInput = z.object({ userId: z.uuid().nullish() });
+
+/** Gerar agora: a equipe ou a carteira de uma pessoa (ADMIN e GESTOR). */
+export const refreshInsightsInput = z.object({
+  scope: z.enum(['TEAM', 'USER']),
+  userId: z.uuid().nullish(),
+});
+
+export const insightFeedbackInput = z.object({
+  insightId: z.uuid(),
+  feedback: z.enum(['USEFUL', 'NOT_USEFUL']),
+});

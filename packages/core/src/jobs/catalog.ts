@@ -262,6 +262,18 @@ export const JOBS = {
     retryDelaySeconds: 300,
     expireInSeconds: 1800,
   },
+  /**
+   * Insights da carteira (diário, 07h05 em Fortaleza): fatos em SQL para a
+   * equipe e cada SDR ativo, redigidos pela IA e conferidos (texto padrão se
+   * a IA falhar); apaga os de mais de 180 dias.
+   */
+  analyticsInsights: {
+    name: 'analytics.insights',
+    cron: '5 10 * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 900,
+    expireInSeconds: 1800,
+  },
   /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
   webhooksPurge: {
     name: 'webhooks.purge',

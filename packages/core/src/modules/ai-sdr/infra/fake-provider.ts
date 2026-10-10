@@ -159,6 +159,17 @@ function replyClassification(input: string) {
   };
 }
 
+/** Insights: devolve o texto-base de cada fato (os números já vêm certos). */
+function portfolioInsights(input: string) {
+  let facts: { type: string; text: string }[];
+  try {
+    facts = JSON.parse((block(input, 'facts') ?? '[]').replace(/‹/g, '<').replace(/›/g, '>'));
+  } catch {
+    facts = [];
+  }
+  return { insights: facts.map((f) => ({ type: f.type, text: f.text })) };
+}
+
 const MARKS: [string, AiErrorCode, string][] = [
   ['[fake:recusa]', 'REFUSAL', 'O modelo recusou o pedido.'],
   ['[fake:indisponivel]', 'UNAVAILABLE', 'Provedor de IA indisponível.'],
@@ -187,7 +198,9 @@ export class FakeAiProvider implements AiProvider {
     const raw =
       request.task === 'outreach_message'
         ? outreachMessage(request.input)
-        : replyClassification(request.input);
+        : request.task === 'portfolio_insights'
+          ? portfolioInsights(request.input)
+          : replyClassification(request.input);
     const output = instructions.includes('[fake:invalido]') ? { message: 42 } : raw;
     const parsed = request.schema.safeParse(output);
     if (!parsed.success) {

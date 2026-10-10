@@ -172,6 +172,15 @@ describe('insights da carteira (F11-04)', () => {
       expect(checkInsightText(templateText(fact), fact)).toEqual({ ok: true });
   });
 
+  it('nome com dígitos (abordagem, cidade) não conta como número citado', () => {
+    const fact: InsightFact = {
+      ...(facts[4] as Extract<InsightFact, { type: 'BEST_APPROACH' }>),
+      approach: 'Abordagem 2',
+    };
+    expect(checkInsightText(templateText(fact), fact)).toEqual({ ok: true });
+    expect(checkInsightText('A "Abordagem 2" teve 2% de resposta.', fact).ok).toBe(false);
+  });
+
   it('lê os números do texto: milhar com ponto e decimal com vírgula', () => {
     expect(numbersIn('Há 1.234 leads, 23,5% e 7 dias')).toEqual([
       { value: 1234, percent: false },

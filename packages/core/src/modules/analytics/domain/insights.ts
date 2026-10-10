@@ -141,6 +141,19 @@ export const INSIGHT_TEXT_MAX = 240;
 
 export type InsightCheck = { ok: true } | { ok: false; reason: string };
 
+/** Nomes citados pelo fato (cidade, abordagem): saem antes de conferir os números. */
+function namesIn(fact: InsightFact): string[] {
+  switch (fact.type) {
+    case 'FORGOTTEN_IN_CITY':
+    case 'TOP_POTENTIAL_CITY':
+      return [fact.city];
+    case 'BEST_APPROACH':
+      return [fact.approach];
+    default:
+      return [];
+  }
+}
+
 /** Confere o texto da IA contra o fato: números, tamanho e nada de contato ou link. */
 export function checkInsightText(text: string, fact: InsightFact): InsightCheck {
   const trimmed = text.trim();
@@ -150,8 +163,12 @@ export function checkInsightText(text: string, fact: InsightFact): InsightCheck 
   if (FORBIDDEN.some((pattern) => pattern.test(trimmed))) {
     return { ok: false, reason: 'contato ou link' };
   }
+  // Um nome com dígitos ("Abordagem 2") não conta como número citado.
+  const withoutNames = namesIn(fact)
+    .filter(Boolean)
+    .reduce((acc, name) => acc.split(name).join(' '), trimmed);
   const allowed = allowedNumbers(fact);
-  for (const { value, percent } of numbersIn(trimmed)) {
+  for (const { value, percent } of numbersIn(withoutNames)) {
     const pool = percent ? allowed.percent : allowed.plain;
     if (!pool.some((a) => Math.abs(a - value) < 0.05)) {
       return { ok: false, reason: `número fora dos fatos: ${value}${percent ? '%' : ''}` };

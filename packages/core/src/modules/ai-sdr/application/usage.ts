@@ -5,6 +5,9 @@ import { monthRange } from '../infra/sources';
 
 const num = (value: unknown) => (value === null || value === undefined ? 0 : Number(value));
 
+/** Tipos que não são rascunho de mensagem (ficam fora da qualidade dos rascunhos). */
+const NOT_DRAFTS: readonly AiGenerationKindKey[] = ['REPLY_CLASSIFICATION', 'INSIGHT'];
+
 /**
  * Painel de custo e qualidade da IA (docs/AI-SDR.md §11 e §15): gasto do mês
  * contra o orçamento, por pessoa, tipo e versão de prompt, e as métricas de
@@ -17,7 +20,8 @@ export const getAiUsage = defineUseCase({
   async run(ctx, input) {
     const { start, end, label } = monthRange(ctx.now, input.month);
     const where = { createdAt: { gte: start, lt: end } };
-    const drafts = { ...where, kind: { not: 'REPLY_CLASSIFICATION' as const } };
+    // Qualidade dos rascunhos: sem as classificações e os insights da carteira.
+    const drafts = { ...where, kind: { notIn: [...NOT_DRAFTS] } };
     const [totals, byKindStatus, byUser, byPrompt, approved, approvedUnedited, discards] =
       await Promise.all([
         ctx.tx.aiGeneration.aggregate({
@@ -80,7 +84,7 @@ export const getAiUsage = defineUseCase({
       kinds.set(row.kind, entry);
     }
     const draftsCreated = byKindStatus
-      .filter((r) => r.kind !== 'REPLY_CLASSIFICATION' && !['BLOCKED', 'FAILED'].includes(r.status))
+      .filter((r) => !NOT_DRAFTS.includes(r.kind) && !['BLOCKED', 'FAILED'].includes(r.status))
       .reduce((sum, r) => sum + r._count._all, 0);
     const discarded = discards.reduce((sum, d) => sum + d._count._all, 0);
 

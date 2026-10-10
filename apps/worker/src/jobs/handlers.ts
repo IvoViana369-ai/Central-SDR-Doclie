@@ -2,6 +2,7 @@ import {
   JOBS,
   runAnalyticsRollup,
   runCadenceTick,
+  runInsightsJob,
   runCampaignBuild,
   runCampaignTick,
   runDuplicateCheck,
@@ -89,5 +90,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.campaignBuild.name]: async (data) => runCampaignBuild(deps, data),
     [JOBS.campaignTick.name]: async (data) => runCampaignTick(deps, data ?? {}),
     [JOBS.analyticsRollup.name]: async (data) => runAnalyticsRollup(deps, data ?? {}),
+    [JOBS.analyticsInsights.name]: async () => runInsightsJob(deps),
   };
 }

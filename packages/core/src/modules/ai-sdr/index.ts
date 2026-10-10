@@ -27,3 +27,6 @@ export {
   upsertKnowledgeItem,
 } from './application/config';
 export { getAiUsage } from './application/usage';
+// Para outros módulos que chamam a IA (insights da carteira, Fase 11).
+export { IN_PROGRESS, usageColumns } from './application/generate';
+export { alertBudget, assertAiAllowance } from './infra/sources';

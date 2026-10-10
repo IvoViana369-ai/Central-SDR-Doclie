@@ -6,7 +6,7 @@ import type { ZodType } from 'zod';
  * validada, com uso de tokens e o modelo que atendeu.
  */
 
-export type AiTask = 'outreach_message' | 'reply_classification';
+export type AiTask = 'outreach_message' | 'reply_classification' | 'portfolio_insights';
 export type AiEffort = 'low' | 'medium' | 'high';
 
 export interface AiStructuredRequest<T> {
