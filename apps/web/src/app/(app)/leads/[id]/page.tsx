@@ -5,6 +5,7 @@ import {
   getLeadContactability,
   getLeadScore,
   getLeadInstagram,
+  getLeadRegistryData,
   getLeadWhatsapp,
   getPipeline,
   listCadences,
@@ -72,6 +73,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const instagram = deps.instagram
     ? await getLeadInstagram(deps, actor, { leadId: id }, meta)
     : null;
+  // Dados abertos do CNPJ (Fase 9): só aparece com a base carregada.
+  const registryData = await getLeadRegistryData(deps, actor, { leadId: id }, meta);
+  const registry = registryData.status === 'not_loaded' ? null : registryData;
 
   return (
     <LeadDetail
@@ -80,6 +84,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       timeline={timeline}
       whatsapp={whatsapp}
       instagram={instagram}
+      registry={registry}
       sales={{
         stages: pipeline.stages,
         lossReasons,

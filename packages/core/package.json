@@ -26,6 +26,7 @@
     "./opportunities-domain": "./src/modules/opportunities/domain/index.ts",
     "./whatsapp-domain": "./src/modules/whatsapp/domain/index.ts",
     "./instagram-domain": "./src/modules/instagram/domain/index.ts",
+    "./prospecting-domain": "./src/modules/prospecting/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

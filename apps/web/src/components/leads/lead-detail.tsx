@@ -16,6 +16,8 @@ import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead
 import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
 import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
 import { InstagramCard, type LeadInstagramView } from '@/components/instagram/instagram-card';
+import { RegistryCard } from '@/components/prospecting/registry-card';
+import type { LeadRegistryView } from '@/components/prospecting/types';
 import { WhatsappCard, type LeadWhatsappView } from '@/components/whatsapp/whatsapp-card';
 import { api } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -127,6 +129,7 @@ export function LeadDetail({
   timeline,
   whatsapp,
   instagram,
+  registry,
   sales,
   operation,
   permissions,
@@ -139,6 +142,8 @@ export function LeadDetail({
   whatsapp: LeadWhatsappView | null;
   /** Instagram pela API (Fase 8); `null` no modo assistido. */
   instagram: LeadInstagramView | null;
+  /** Dados abertos do CNPJ (Fase 9); `null` antes da primeira carga da base. */
+  registry: LeadRegistryView | null;
   sales: LeadSalesView;
   operation: LeadSalesData;
   permissions: LeadDetailPermissions;
@@ -407,6 +412,7 @@ export function LeadDetail({
               ) : null}
             </CardContent>
           </Card>
+          {registry ? <RegistryCard leadId={lead.id} data={registry} canEdit={editable} /> : null}
 
           <Card>
             <CardHeader>

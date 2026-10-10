@@ -2,6 +2,7 @@ import { roleHasPermission } from '@docline/core';
 import {
   AtSign,
   Clock,
+  Database,
   Gauge,
   History,
   ListOrdered,
@@ -74,6 +75,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'Instagram',
     description: 'Conta na Meta, respostas do mês, consulta de perfis e automação.',
     Icon: AtSign,
+  },
+  {
+    href: '/configuracoes/dados-cnpj',
+    title: 'Dados abertos do CNPJ',
+    description: 'Carga mensal da base da Receita, escritórios guardados e configuração.',
+    Icon: Database,
   },
 ];
 

@@ -96,8 +96,8 @@ export const NAVIGATION: NavGroup[] = [
         href: '/prospeccao',
         icon: Radar,
         phase: 9,
-        permission: 'lead.import',
-        description: 'Descoberta de escritórios em fontes autorizadas.',
+        permission: 'prospecting.run',
+        description: 'Escritórios da base aberta do CNPJ, comparação com a base e aprovação.',
       },
       {
         label: 'Importar',
@@ -173,7 +173,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 7;
+export const CURRENT_PHASE = 9;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

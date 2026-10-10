@@ -1,4 +1,5 @@
 import { Prisma, type DbTransaction, type ImportMatchStatus } from '@docline/db';
+import { z } from 'zod';
 import type { Actor } from '../../../shared/actor';
 import {
   BusinessRuleError,
@@ -81,7 +82,7 @@ function reasonsOf(match: RowMatch): ProspectingReason[] {
 }
 
 /** Mês da última carga concluída (a busca só roda com a base carregada). */
-async function latestDataset(tx: DbTransaction) {
+export async function latestDataset(tx: DbTransaction) {
   return tx.registryIngestion.findFirst({
     where: { status: 'SUCCEEDED' },
     orderBy: { finishedAt: 'desc' },
@@ -92,6 +93,17 @@ async function latestDataset(tx: DbTransaction) {
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
+
+/** Mês da base carregada (para a tela; nulo antes da primeira carga). */
+export const getProspectingDataset = defineUseCase({
+  name: 'prospecting.dataset',
+  access: 'prospecting.run',
+  input: z.object({}),
+  async run(ctx) {
+    const dataset = await latestDataset(ctx.tx);
+    return { reference: dataset?.reference ?? null, loadedAt: dataset?.finishedAt ?? null };
+  },
+});
 
 /** Busca na base aberta e comparação com a base (F9-02). */
 export const searchProspects = defineUseCase({

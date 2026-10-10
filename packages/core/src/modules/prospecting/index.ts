@@ -14,6 +14,7 @@ export * from './contracts/schemas';
 export {
   approveProspect,
   approveProspects,
+  getProspectingDataset,
   getProspectingSearch,
   listProspectingSearches,
   rejectProspects,

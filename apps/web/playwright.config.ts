@@ -71,6 +71,8 @@ export default defineConfig({
       WHATSAPP_PROVIDER: 'fake',
       // Instagram simulado (Fase 8): mesmo app da Meta, mesma assinatura.
       INSTAGRAM_PROVIDER: 'fake',
+      // Base aberta do CNPJ simulada (Fase 9): escritórios fictícios, carga pelo worker.
+      COMPANY_REGISTRY_PROVIDER: 'fake',
       META_APP_SECRET,
       META_WEBHOOK_VERIFY_TOKEN,
     },

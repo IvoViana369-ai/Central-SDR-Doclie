@@ -15,6 +15,7 @@ import {
   splitReceitaLine,
   stripCpfFromName,
 } from './receita';
+import { formatCnae, PROSPECTING_MATCH_LABELS } from './labels';
 import {
   DEFAULT_REGISTRY_SETTINGS,
   isRegistryReference,
@@ -207,6 +208,12 @@ describe('base simulada e configuração', () => {
     // 28 escritórios + a filial + o do município sem correspondência + o empresário individual.
     expect(counts).toEqual({ kept: 31, skipped: 8, invalid: 0, secondary: 32 });
     await expect(source.listFiles('2026-10')).rejects.toMatchObject({ code: 'NOT_PUBLISHED' });
+  });
+
+  it('rótulos: CNAE formatado e comparação da busca', () => {
+    expect(formatCnae('6920601')).toBe('6920-6/01');
+    expect(formatCnae('692060')).toBe('692060');
+    expect(PROSPECTING_MATCH_LABELS.DUPLICATE_IN_FILE).toBe('Repetido na busca');
   });
 
   it('padrões restritivos e mês da base', () => {

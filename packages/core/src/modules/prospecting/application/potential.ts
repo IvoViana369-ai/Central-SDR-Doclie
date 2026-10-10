@@ -1,6 +1,7 @@
 import { Prisma } from '@docline/db';
 import { defineUseCase } from '../../../shared/use-case';
 import { prospectingPotentialInput } from '../contracts/schemas';
+import { latestDataset } from './prospecting';
 
 interface PotentialRow {
   code: number;
@@ -29,11 +30,7 @@ export const getProspectingPotential = defineUseCase({
   access: 'prospecting.run',
   input: prospectingPotentialInput,
   async run(ctx, input) {
-    const dataset = await ctx.tx.registryIngestion.findFirst({
-      where: { status: 'SUCCEEDED' },
-      orderBy: { finishedAt: 'desc' },
-      select: { reference: true, finishedAt: true },
-    });
+    const dataset = await latestDataset(ctx.tx);
     const rows = await ctx.tx.$queryRaw<PotentialRow[]>(Prisma.sql`
       WITH universe AS (
         SELECT rc.municipality_code AS code,
