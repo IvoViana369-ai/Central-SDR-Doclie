@@ -331,7 +331,7 @@ Regra de ouro: **números vêm do banco; o modelo só redige.**
 > - **Redação** (tarefa `portfolio_insights`, prompt `portfolio_insights` v1, esforço baixo): uma chamada por público com os fatos e o texto padrão de cada um; a IA reescreve cada fato em uma frase. **Nenhum dado pessoal** vai no pedido: só contagens, cidades e nomes de abordagens.
 > - **Conferência** de cada texto: todo número citado precisa estar no fato — porcentagens comparadas só com as taxas do fato (arredondar para inteiro é aceito) e contagens/dias só com as contagens; nomes de cidade e abordagem saem antes da conferência (um nome com dígitos não conta). Sem telefone, e-mail ou link; de 10 a 240 caracteres. Falhou → vale o texto padrão, e o motivo fica em `guardrail_flags`.
 > - **Sem IA** (orçamento do mês esgotado, cota diária de quem pediu, provedor fora do ar, recusa): os insights saem com o texto padrão, sem nova chamada. O custo vai para `ai_generations` (tipo `INSIGHT`, sem lead) e entra no orçamento; fica fora das métricas de qualidade dos rascunhos.
-> - **Exibição:** card no dashboard, por prioridade (respostas esperando ação primeiro), com a marca "Redigido pela IA" quando for o caso e avaliação útil/não útil. O lote novo substitui o anterior; vale até 36 h; apagados depois de 180 dias.
+> - **Exibição:** card no dashboard, por prioridade (respostas esperando ação primeiro), com a marca "Redigido pela IA" só quando o texto aceito difere do padrão (o provedor simulado devolve o padrão) e avaliação útil/não útil. O lote novo substitui o anterior; vale até 36 h; apagados depois de 180 dias.
 
 ---
 

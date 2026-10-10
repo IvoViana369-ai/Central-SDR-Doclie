@@ -187,19 +187,20 @@ describe('insights da carteira (F11-04)', () => {
   });
   afterAll(() => closeTestDb());
 
-  it('equipe: fatos do SQL, redigidos pela IA (provedor simulado), com custo registrado', async () => {
+  it('equipe: fatos do SQL, passados pela IA (provedor simulado), com custo registrado', async () => {
     const summary = await generateInsights(deps, manager, { scope: 'TEAM' });
-    expect(summary).toMatchObject({ scope: 'TEAM', count: 6, fromAi: 6, rejected: 0 });
+    // O simulado devolve o texto padrão: aceito, mas não conta como redigido pela IA.
+    expect(summary).toMatchObject({ scope: 'TEAM', count: 6, fromAi: 0, rejected: 0 });
 
     const view = await getInsights(deps, manager, {});
     expect(view).toMatchObject({ scope: 'TEAM', canRefresh: true });
     expect(view.items.map((i) => [i.type, i.source])).toEqual([
-      ['AWAITING_ACTION', 'AI'],
-      ['PENDING_ACCEPTANCE', 'AI'],
-      ['PRIORITY_TO_CONTACT', 'AI'],
-      ['FORGOTTEN_IN_CITY', 'AI'],
-      ['BEST_APPROACH', 'AI'],
-      ['TOP_POTENTIAL_CITY', 'AI'],
+      ['AWAITING_ACTION', 'TEMPLATE'],
+      ['PENDING_ACCEPTANCE', 'TEMPLATE'],
+      ['PRIORITY_TO_CONTACT', 'TEMPLATE'],
+      ['FORGOTTEN_IN_CITY', 'TEMPLATE'],
+      ['BEST_APPROACH', 'TEMPLATE'],
+      ['TOP_POTENTIAL_CITY', 'TEMPLATE'],
     ]);
     const texts = view.items.map((i) => i.text);
     expect(texts).toContain('1 lead respondeu e espera uma ação.');
@@ -221,7 +222,7 @@ describe('insights da carteira (F11-04)', () => {
     // Nenhum dado pessoal no pedido: só contagens, cidade e abordagem.
     expect(JSON.stringify(generation.inputSnapshot)).not.toMatch(/Escritório|99815/);
     const audit = await db.auditLog.findFirstOrThrow({ where: { action: 'insight.generate' } });
-    expect(audit.metadata).toMatchObject({ scope: 'TEAM', count: 6, fromAi: 6 });
+    expect(audit.metadata).toMatchObject({ scope: 'TEAM', count: 6, fromAi: 0 });
   });
 
   it('carteira do SDR: só os próprios números e o potencial do seu território', async () => {

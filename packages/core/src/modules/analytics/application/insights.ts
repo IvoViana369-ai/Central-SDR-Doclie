@@ -196,8 +196,10 @@ const finishInsights = defineUseCase({
           ? checkInsightText(candidate.text, fact)
           : ({ ok: false, reason: 'ausente' } as const);
         if (check.ok) {
-          texts[index] = candidate!.text.trim();
-          fromAi[index] = true;
+          // Igual ao texto padrão (ex.: provedor simulado): não é "redigido pela IA".
+          const text = candidate!.text.trim();
+          fromAi[index] = text !== texts[index];
+          texts[index] = text;
         } else {
           rejected.push({ type: fact.type, reason: check.reason });
         }

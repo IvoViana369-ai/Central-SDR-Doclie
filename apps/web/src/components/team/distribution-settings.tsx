@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, Input } from '@/components/ui/input';
 import { Table, TBody, Td, Th, THead, Tr } from '@/components/ui/table';
 import { api } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 type Data = Awaited<ReturnType<typeof getAutoAssignSettings>>;
 type Member = Data['team'][number];
@@ -236,8 +236,14 @@ function MemberRow({ member }: { member: Member }) {
     <Tr>
       <Td className="font-medium">
         {member.name}
-        {notice?.variant === 'error' ? (
-          <span role="alert" className="block text-xs text-destructive">
+        {notice ? (
+          <span
+            role={notice.variant === 'error' ? 'alert' : 'status'}
+            className={cn(
+              'block text-xs',
+              notice.variant === 'error' ? 'text-destructive' : 'text-success',
+            )}
+          >
             {notice.text}
           </span>
         ) : null}

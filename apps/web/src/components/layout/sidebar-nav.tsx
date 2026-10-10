@@ -15,6 +15,11 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const groups = visibleNavigation(permissions);
+  // Só o item mais específico fica ativo (ex.: /equipe/distribuicao não acende Equipe).
+  const activeHref = groups
+    .flatMap((g) => g.items.map((i) => i.href))
+    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
 
   return (
     <nav aria-label="Menu principal" className="space-y-5">
@@ -25,7 +30,7 @@ export function SidebarNav({
           </p>
           <ul className="space-y-0.5">
             {group.items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = item.href === activeHref;
               const soon = item.phase > CURRENT_PHASE;
               const Icon = item.icon;
               return (
