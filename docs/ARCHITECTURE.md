@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API), Fase 9 (dados abertos do CNPJ e Prospecção) e Fase 10 (Campanhas) · **Última revisão:** 2026-10-10
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API), Fase 9 (dados abertos do CNPJ e Prospecção), Fase 10 (Campanhas) e Fase 11 (Analytics: rollups, relatórios com intervalo de confiança, insights e distribuição automática) · **Última revisão:** 2026-10-10
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -236,11 +236,11 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `messaging` | Mensagens assistidas e registradas, respostas e classificação | messages | 5 |
 | `whatsapp` | Envio pela Cloud API (texto na janela, modelo com opt-in), webhooks (status, respostas), conversas, modelos, números sem lead, saúde do número | conversations, whatsapp_templates, message_status_events, webhook_events, inbound_unmatched, integration_connections | 7 |
 | `instagram` | Respostas pela API (texto em 24 h, resposta privada a comentário em 7 dias), webhooks (mensagens, ecos, "visto", comentários), quem não é lead, conta conectada, métricas públicas dos perfis (Business Discovery) para o score | conversations, social_comments, instagram_profiles, webhook_events, inbound_unmatched, integration_connections | 8 |
-| `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
+| `ai-sdr` | Geração de abordagens, classificação de respostas e a redação dos insights (prompt `portfolio_insights`) | ai_generations, ai_knowledge_items | 6 / 11 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
 | `prospecting` | Carga mensal do recorte de contabilidade da base aberta do CNPJ, buscas com comparação com a base, aprovação humana de novos leads, potencial por cidade e enriquecimento pelo CNPJ | registry_ingestions, registry_companies, prospecting_searches, prospecting_results | 9 |
 | `campaigns` | Retrato de um filtro de leads, elegibilidade com motivos, distribuição entre SDRs, liberação diária para a cadência (nunca envia), funil por janela de atribuição e teste A/B de abordagens | campaigns, campaign_sdrs, campaign_variants, campaign_leads | 10 |
-| `analytics` | Indicadores, funis, rollups, insights | daily_metrics, insights | 6 (básico) / 11 |
+| `analytics` | Indicadores ao vivo (dashboard), rollups diários e fatos por lead, conversão por recorte com intervalo de confiança, desempenho por SDR, evolução mensal, canais e insights da carteira (fatos em SQL, texto da IA conferido) | daily_metrics, analytics_lead_facts (view), insights | 6 (básico) / 11 |
 
 Cada módulo segue o mesmo layout:
 
@@ -505,10 +505,15 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 |---|---|---|
 | `GET /analytics/overview?from&to` | KPIs do período | MVP |
 | `GET /analytics/funnel` | Funil por etapa | MVP |
-| `GET /analytics/breakdown?dimension=city\|source\|sdr\|channel\|approach\|campaign` | Quebra por dimensão | MVP (básico) / 11 |
-| `GET /analytics/timeseries?granularity=day\|month` | Evolução diária e mensal | MVP (básico) / 11 |
+| `GET /analytics/breakdown?dimension=city\|source\|sdr` | Quebra por dimensão (ao vivo) | MVP |
+| `GET /analytics/timeseries` | Evolução diária (ao vivo) | MVP |
 | `GET /analytics/export?report=overview\|funnel\|city\|source\|sdr\|daily` | CSV do relatório (ADMIN/GESTOR, auditado) | MVP |
-| `GET /analytics/insights` | Insights da carteira | 11+ |
+| `GET /analytics/conversion?dimension=city\|state\|segment\|source\|owner\|firstContactUser\|campaign\|approach\|channel&from&to&userId` | Conversão pela coorte do 1º contato, com intervalo de confiança (rollups) | 11 |
+| `GET /analytics/sdr-performance`, `GET /analytics/monthly?fromMonth&toMonth&userId`, `GET /analytics/channels` | Desempenho por SDR, evolução mensal, canais (rollups) | 11 |
+| `GET /analytics/performance-export?report=conversion\|sdrPerformance\|monthly\|channels` | CSV dos relatórios da Fase 11 (auditado) | 11 |
+| `POST /analytics/rollup` | Recalcular os indicadores de um período (worker) | 11 |
+| `GET /insights`, `POST /insights/refresh`, `POST /insights/{id}/feedback` | Insights vigentes (equipe ou própria carteira), gerar agora (gestão) e avaliar | 11 |
+| `GET/PUT /settings/auto-assign`, `POST /settings/auto-assign/run`, `PATCH /users/{id}/availability` | Distribuição automática e disponibilidade dos SDRs (`lead.assign`) | 11 |
 | `GET/POST /prospecting/searches`, `GET /prospecting/searches/{id}`, `POST /prospecting/searches/{id}/approve\|reject`, `GET /prospecting/potential` | Busca na base aberta do CNPJ, comparação com a base, aprovação e recusa, potencial por cidade | 9 |
 | `GET /registry`, `PUT /registry/settings`, `POST /registry/ingestions`, `GET/POST /leads/{id}/registry` | Carga da base aberta (ADMIN) e enriquecimento do lead pelo CNPJ | 9 |
 | `GET/POST /campaigns`, `GET/PATCH /campaigns/{id}`, `POST /campaigns/{id}/actions` (`build`, `activate`, `pause`, `resume`, `complete`, `archive`), `GET /campaigns/{id}/leads`, `POST /campaigns/{id}/leads/{leadId}/remove` | Campanhas (`campaign.manage`): o detalhe traz retrato, motivos, distribuição por SDR, funil e A/B | 10 |
@@ -551,7 +556,9 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `prospecting.purge` | Diário (04:27 UTC) | Apaga os resultados das buscas com mais de 30 dias (a busca fica no histórico) | 9 |
 | `campaign.build` | "Montar" na campanha (na mesma transação) | Congela o filtro (até 5.000 leads), avalia a elegibilidade de cada lead (gate do canal em lotes de 250 + regras da campanha), distribui os aptos entre os SDRs e sorteia as variantes; grava tudo de uma vez se a campanha não mudou no meio. Falha volta ao rascunho com o erro | 10 |
 | `campaign.tick` | De hora em hora (minuto 11) e logo após ativar ou retomar | Conclui as campanhas vencidas; libera até o limite diário de cada SDR (dias de expediente das regras de contato, fuso do SDR), um lead por transação, com trava por campanha e elegibilidade conferida de novo; atualiza os marcos do funil. **Nunca envia mensagem** (ADR-029) | 10 |
-| `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
+| `analytics.rollup` | De hora em hora (minuto 53; às 03h de Fortaleza refaz a semana) e "recalcular período" | Atualiza a *materialized view* `analytics_lead_facts` (`REFRESH … CONCURRENTLY`, sem bloquear leitura) e recalcula `daily_metrics` de hoje e ontem por equipe, pessoa e canal (apaga e grava os dias na mesma transação, 31 dias por transação); retoma do último dia calculado e, na 1ª execução, preenche o histórico (até 36 meses) | 11 |
+| `analytics.insights` | Diário (10:05 UTC, 07:05 em Fortaleza) e "Atualizar" no dashboard | Fatos em SQL da equipe e de cada SDR ativo; uma chamada à IA por público para redigir, com o texto conferido (ADR-032); o lote novo substitui o anterior; apaga insights com mais de 180 dias | 11 |
+| `leads.auto-assign` | De hora em hora (minuto 41), logo após ligar e "Distribuir agora" | Se ligada: até 500 leads do pool por rodada para os SDRs disponíveis, por território ou rodízio, sem passar do limite de leads ativos; 50 por transação, cada lead só se ainda estiver sem responsável (ADR-033); avisa cada SDR | 11 |
 
 Política padrão: até 5 tentativas com backoff exponencial e jitter; depois vai para *dead letter* com alerta. Jobs de varredura usam *singleton* (uma execução por vez).
 
@@ -679,7 +686,18 @@ O volume de **leads** é pequeno para o PostgreSQL. O que cresce são **eventos,
 | Dashboard do SDR (30 dias) | 186 ms |
 | Relatório por cidade (366 dias) · exportação diária (366 dias) | 111 ms · 482 ms |
 
-A primeira versão do dashboard levava 4,6 s (30 dias) e 6,9 s (366 dias): uma passada pelos leads por dimensão e subconsultas por lead. Agora respostas, interesse e oportunidades são agregados por lead antes (hash join) e o total, a cidade, a origem e o SDR saem de uma passada só (`GROUPING SETS`). Com isso, os *rollups* diários ficam para quando o volume ou a medição pedirem.
+A primeira versão do dashboard levava 4,6 s (30 dias) e 6,9 s (366 dias): uma passada pelos leads por dimensão e subconsultas por lead. Agora respostas, interesse e oportunidades são agregados por lead antes (hash join) e o total, a cidade, a origem e o SDR saem de uma passada só (`GROUPING SETS`).
+
+**Rollups (Fase 11, mesma base de 100 mil leads, mediana de 3 leituras).** O dashboard continua ao vivo (números do momento, filtro por pessoa); os relatórios novos leem os rollups (ADR-031):
+
+| Leitura ou tarefa | Mediana |
+|---|---:|
+| 1ª execução do rollup (401 dias de histórico) | 4,2 s |
+| Rollup de hora em hora (fatos por lead + 2 dias) | 0,87 s |
+| Conversão por cidade (366 dias) | 32 ms |
+| Desempenho por SDR (90 dias) | 51 ms |
+| Evolução mensal (12 meses) | 65 ms |
+| Canais (90 dias) | 13 ms |
 
 Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em listas; colunas de busca normalizadas e indexadas (o `unaccent` não é `IMMUTABLE`, então a normalização é feita na aplicação e gravada em `name_search`); contagens com filtros indexados; Kanban carrega contagem por coluna e pagina os cards de cada uma.
 
@@ -751,3 +769,6 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 028 | **Prospecção sem cópia dos dados nos resultados e com aprovação humana que refaz a comparação** (Fase 9) | Os resultados guardam só o CNPJ, a comparação e a decisão (30 dias); os dados vêm da cópia da base na leitura. Na aprovação, a base pode ter mudado: compara de novo, completa o existente e recusa quem entrou na Lista Não Contatar. A decisão é reservada por atualização condicional, como no envio pela API | Criar leads direto da busca; guardar os dados no resultado | Uma transação por aprovação (até 100 por pedido); o "recusado antes" vale enquanto o resultado existir (30 dias) |
 | 029 | **Campanha não envia mensagens**: seleciona (retrato congelado do filtro), avalia a elegibilidade com motivos, distribui entre os SDRs e **libera para a cadência** até um limite diário por SDR; cada contato continua sendo do SDR, pelo gate de sempre (assistido; API só com opt-in ou janela aberta). Única mudança nas tabelas existentes: `campaign_id` opcional em inscrições e mensagens (Fase 10) | O requisito proíbe disparos indiscriminados e spam; o gate, a cadência e a Minha Fila já resolvem horário, frequência, opt-out e registro; liberar em lotes diários dá ritmo sem criar outro caminho de envio | Disparo em massa pela API; enviar o passo de cadência `API_MESSAGE` sozinho (F7-09) | O lote do dia vira tarefas na Minha Fila; o limite diário é de leads liberados, não de mensagens; conferir de novo na hora da liberação evita contatar quem entrou na Lista Não Contatar depois da montagem; campanha concluída não para as cadências em andamento |
 | 030 | **Funil por janela de atribuição e A/B por variante sorteada** (Fase 10) | Um marco (contato, entrega, resposta, interesse, oportunidade, conversão, opt-out) conta para a campanha se acontece até 90 dias depois da liberação ou até o lead ser liberado por outra campanha, recalculado por SQL idempotente. O A/B compara a **variante sorteada** (não a abordagem que o SDR acabou usando), alternada dentro da lista de cada SDR, só com 30 contatados por variante e com Bonferroni; nunca declara vencedora | Atribuir pela abordagem gravada na mensagem; ligar a atribuição à data de conclusão; declarar vencedora por p-valor | Mensagens da janela ganham o `campaign_id`; a comparação aponta "diferença provável" e a decisão é do gestor; a Fase 11 (Analytics) pode reaproveitar a atribuição |
+| 031 | **Rollups e fatos por lead para os relatórios** (Fase 11): `analytics_lead_facts` (*materialized view*, um registro por lead com o 1º contato — quando, canal, abordagem, quem, campanha na janela de 90 dias — e os marcos depois dele) e `daily_metrics` (contagens por dia local da equipe, de cada pessoa e de cada canal), atualizados pelo job `analytics.rollup` de hora em hora | Conversão por nove recortes, evolução mensal e canais sobre tabelas pequenas e já agregadas (13–65 ms com 100 mil leads); a coorte do 1º contato tem uma definição só; `REFRESH … CONCURRENTLY` não bloqueia quem lê | Calcular tudo ao vivo (o dashboard de 366 dias já leva ~1 s); triggers a cada evento; tabela de fatos mantida pela aplicação | Números dos relatórios novos com até 1 h de atraso (a tela mostra quando foram calculados); o dashboard continua ao vivo; `leads_contacted` é por dia e não soma entre dias; quem recebe cada número no recorte por pessoa e por canal está em SDR-FLOW §11 |
+| 032 | **Insights: números do banco, texto da IA conferido** (Fase 11): cada insight nasce de um fato calculado em SQL, com texto padrão; a IA só reescreve, e o texto dela só vale se todo número citado existir no fato (porcentagens separadas de contagens), sem telefone, e-mail ou link e no tamanho; senão, vale o texto padrão | A IA não inventa números nem tendências; sem IA (orçamento, cota, falha) o recurso continua funcionando; nenhum dado pessoal sai para o provedor (só contagens, cidades e nomes de abordagens) | A IA ler as tabelas e escrever livremente; insights só com IA | Custo pequeno e previsível (uma chamada por público por dia), registrado em `ai_generations` (tipo `INSIGHT`, sem lead) e fora das métricas de rascunhos; o motivo de cada texto recusado fica gravado |
+| 033 | **Distribuição automática nunca toma lead** (Fase 11): desligada por padrão; quando ligada, só atribui leads do pool (sem responsável, ativos, contatáveis, em etapa de prospecção, fora de campanha em andamento), com a mesma trava do "puxar do pool"; território (cidade, depois UF, rodízio geral opcional) ou rodízio; respeita participação, ausência e limite de leads ativos | Redistribuir carteira é decisão da gestão; a trava evita corrida com o "puxar" e com outra rodada; campanha em andamento já distribuiu os seus leads | Rebalancear carteiras automaticamente; distribuir no cadastro (na transação de criação) | Rodada de hora em hora (até 500 leads); "novos" contam desde que foi ligada, salvo se o pool antigo for incluído; quem ficou no pool aparece com o motivo (sem SDR, sem território, todos no limite) |

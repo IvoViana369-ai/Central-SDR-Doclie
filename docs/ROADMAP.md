@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 10 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção; Campanhas sem envio) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 11 · **Última revisão:** 2026-10-10
+> **Status:** Fases 1 a 11 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção; Campanhas sem envio; distribuição automática desligada por padrão) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 12 · **Última revisão:** 2026-10-10
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -31,7 +31,7 @@
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ✅ concluída no código (2026-10-09); ativação depende do App Review da Meta e do jurídico | Canais |
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ✅ concluída no código (2026-10-10), sem o Google Places (aguarda parecer); ativação depende do jurídico | Captação |
 | 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ✅ concluída no código (2026-10-10); a campanha não envia, libera para a cadência | Escala |
-| 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ~2 semanas | Inteligência |
+| 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ✅ concluída no código (2026-10-10); distribuição automática desligada por padrão | Inteligência |
 | 12 | Integrações Docline | API com chaves, webhooks de saída, CRM, Lista Não Contatar compartilhada | ~3 semanas (depende das APIs) | Ecossistema |
 
 \* Em semanas de trabalho de 1 desenvolvedor full-stack sênior. Ver premissas.
@@ -527,6 +527,29 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F10-05 | Teste A/B de abordagens | SHOULD |
 
 ### Fase 11 — Analytics
+
+**Entregáveis:** rollups diários (`daily_metrics`) e fatos por lead (*materialized view* `analytics_lead_facts`) atualizados de hora em hora; relatórios de conversão por cidade, UF, segmento, origem, responsável, quem fez o 1º contato, campanha, abordagem e canal; desempenho por SDR; evolução mensal; WhatsApp × Instagram; intervalo de confiança e aviso de amostra insuficiente em toda taxa; insights da carteira no dashboard (fatos em SQL, redação pela IA conferida); distribuição automática do pool por território ou rodízio, com disponibilidade de cada SDR.
+
+**Situação (2026-10-10):** ✅ concluída no código; F11-01 a F11-05 entregues. O dashboard continua ao vivo; os relatórios novos leem os rollups (13 a 65 ms com 100 mil leads, contra 0,5 a 1 s do cálculo ao vivo). A distribuição automática nasce **desligada** e nunca tira um lead de alguém (ADR 033). Os insights não mandam dado pessoal à IA e, sem IA, saem com o texto padrão (ADR 032).
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase11.spec.ts` e pelas suítes `performance.int.test.ts`, `insights.int.test.ts`, `auto-assign.int.test.ts`, `analytics-schema.int.test.ts`, `analytics-domain.test.ts` e `auto-assign.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F11-01 | Fatos por lead: 1º contato (canal, abordagem, quem, campanha na janela de 90 dias), resposta só depois do contato, interesse, oportunidade, ganho e opt-out; mesclados fora; atualização sem bloquear leitura. Rollup por equipe, pessoa e canal no dia local; 1ª execução preenche o histórico (até 36 meses), as seguintes refazem hoje e ontem (às 03h, a semana) e retomam do último dia calculado; recalcular não muda o resultado; período pedido explicitamente (até 366 dias). |
+| F11-02 | Conversão pela coorte do 1º contato em nove recortes, com filtro por quem fez o contato; desempenho por SDR (carteira, atividade, coorte); evolução mensal com volumes e coorte de cada mês (mês corrente marcado como parcial); canais com volumes pelo canal do evento e taxas pelo canal do 1º contato; exportação CSV auditada; só ADMIN e GESTOR. |
+| F11-03 | Intervalo de Wilson a 95%; abaixo de 20 primeiros contatos, "amostra insuficiente" sem comparação; "acima" ou "abaixo da média" só com o intervalo inteiro de um lado; WhatsApp × Instagram com o teste de duas proporções do A/B (30 por canal, nunca declara vencedor). |
+| F11-04 | Seis fatos (respostas esperando ação, transferências sem aceite, prioritários sem contato, cidade com mais esquecidos, abordagem acima da média com significância, cidade com mais escritórios da base aberta fora da base); texto da IA aceito só com os números do fato (porcentagem separada de contagem), sem contato nem link e no tamanho; texto padrão quando a IA falha, recusa ou o orçamento acabou; custo em `ai_generations` (tipo INSIGHT, sem lead); lote novo substitui o anterior; avaliação útil/não útil; retenção de 180 dias. |
+| F11-05 | Desligada por padrão; território (cidade, depois UF, rodízio geral opcional) ou rodízio; ausência, participação e limite de leads ativos (próprio ou padrão); só leads do pool, ativos, contatáveis, em etapa de prospecção e fora de campanha em andamento; "novos" desde quando foi ligada (ou o pool antigo, se marcado); trava contra corrida; histórico `TERRITORY`/`ROUND_ROBIN`, aviso ao SDR e motivos de quem ficou no pool. |
+
+Decisões e pendências:
+
+- **Rollups e fatos por lead** (ADR 031): o dashboard continua ao vivo (números do momento); os relatórios da Fase 11 leem os rollups, atualizados de hora em hora, e mostram quando foi.
+- **Insights: números do banco, texto da IA conferido** (ADR 032).
+- **Distribuição automática nunca toma lead** (ADR 033): só atribui quem está sem responsável, com a mesma trava do "puxar do pool".
+- **Pendências:** "por prioridade" (leads de faixa alta para SDRs designados) fica como evolução; o conjunto de avaliação offline dos insights pode ganhar casos reais depois do piloto; quebra por segmento depende de os leads terem segmento preenchido.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. |
 |---|---|---|

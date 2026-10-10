@@ -1,6 +1,6 @@
 # Modelo de Dados — Docline SDR
 
-> **Status:** modelo aprovado; tabelas das Fases 1 a 7 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-7)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
+> **Status:** modelo aprovado; tabelas das Fases 1 a 11 implementadas em `packages/db/prisma/schema.prisma` (diferenças em [§4.11](#411-implementação-até-a-fase-7)) · **Banco:** PostgreSQL · **ORM:** Prisma 7
 > Este documento define entidades, relacionamentos e regras de integridade. O `schema.prisma` será escrito na Fase 1/2 a partir daqui; divergências devem atualizar este documento.
 
 ## Sumário
@@ -398,7 +398,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 **`insights`** (Fase 11+): `generated_at`, `scope`, `audience_user_id`, `type`, `text`, `data` jsonb (números que sustentam o texto), `valid_until`, `feedback`.
 
 > **Implementação (Fase 11).** Com estes ajustes:
-> - **`daily_metrics`:** recortes `GLOBAL`, `SDR` e `CHANNEL` (as conversões por cidade, origem, campanha, abordagem e segmento saem da view abaixo, pela coorte do 1º contato). Colunas: `new_leads`, `first_contacts`, `leads_contacted` (distintos no dia), `messages_out`, `contacts_logged`, `messages_in`, `leads_replied`, `interested`, `opportunities`, `conversions`, `opt_outs` e `computed_at`. Chave `(date, dimension, dimension_id)`, com `dimension_id` vazio no `GLOBAL`. No `SDR`, a atividade é de quem fez; respostas, interesse e opt-outs vão para o responsável do lead.
+> - **`daily_metrics`:** recortes `GLOBAL`, `SDR` e `CHANNEL` (as conversões por cidade, origem, campanha, abordagem e segmento saem da view abaixo, pela coorte do 1º contato). Colunas: `new_leads`, `first_contacts`, `leads_contacted` (distintos no dia), `messages_out`, `contacts_logged`, `messages_in`, `leads_replied`, `interested`, `opportunities`, `conversions`, `opt_outs` e `computed_at`. Chave `(date, dimension, dimension_id)`, com `dimension_id` vazio no `GLOBAL`. No `SDR`, a atividade é de quem fez; respostas, interesse e opt-outs vão para o responsável do lead. `first_contacts`, `leads_replied` e `interested` contam cada lead uma vez (o dia do 1º contato, da 1ª resposta depois dele e do 1º interesse, tirados da view abaixo), então somam entre dias; `leads_contacted` não soma. No `CHANNEL`, mensagens e contatos vão para o canal do evento (ligação = `PHONE`; reunião, visita e outros = `OTHER`); resposta, interesse, oportunidade, conversão e opt-out, para o canal do 1º contato. Recalculado pelo job `analytics.rollup` (apaga e grava os dias numa transação; dia sem movimento ganha a linha `GLOBAL` zerada).
 > - **`analytics_lead_facts`** (*materialized view*, criada em SQL na migração e atualizada com `REFRESH … CONCURRENTLY`): uma linha por lead não mesclado com as dimensões (cidade, UF, segmento, origem, responsável, faixa de score), o canal, a abordagem, quem fez e a campanha do 1º contato, e as datas dos marcos (1ª resposta depois do 1º contato, 1º interesse, 1ª oportunidade, ganho e tipo, opt-out). Só ids, códigos e datas.
 > - **`insights`:** além do desenho, `source` (`AI` ou `TEMPLATE`), `ai_generation_id`, `priority` e quem deu o feedback. O insight da carteira (`USER`) sai junto com a pessoa.
 > - **`ai_generations`:** `lead_id` opcional e o tipo `INSIGHT` (a redação dos insights entra no mesmo orçamento e painel de custo da IA).
@@ -412,7 +412,7 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `integration_connections` | `provider`, `status`, `config` (não secreta), `credentials_encrypted`, `last_check_at`, `last_error` | 7 |
 | `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` | 12 |
 | `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
-| `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | futura |
+| `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | não criada: a distribuição automática da Fase 11 usa uma configuração só em `app_settings` (`leads.auto_assign`, última rodada em `leads.auto_assign.last_run`); o "ponteiro" do rodízio é a última atribuição automática de cada SDR em `lead_assignments` |
 
 ### 4.11 Implementação até a Fase 9
 

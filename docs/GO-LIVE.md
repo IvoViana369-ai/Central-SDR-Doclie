@@ -1,6 +1,6 @@
 # Roteiro de UAT, treinamento e go-live do piloto
 
-> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b); Prospecção (marco M6) na [§13](#13-base-aberta-do-cnpj-e-prospecção-marco-m6) e Campanhas na [§14](#14-campanhas) · **Última revisão:** 2026-10-10
+> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b); Prospecção (marco M6) na [§13](#13-base-aberta-do-cnpj-e-prospecção-marco-m6), Campanhas na [§14](#14-campanhas) e Analytics na [§15](#15-relatórios-insights-e-distribuição-automática) · **Última revisão:** 2026-10-10
 > Relacionados: [MVP §11](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) · [ROADMAP](./ROADMAP.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md) · [AI-SDR](./AI-SDR.md)
 
 O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As Fases 7 e 8 (WhatsApp e Instagram pela API) também estão prontas, mas **o piloto começa no modo assistido**: as APIs são ligadas depois, nos marcos M5 ([§11](#11-whatsapp-pela-api-marco-m5)) e M5b ([§12](#12-instagram-pela-api-marco-m5b)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
@@ -23,6 +23,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 12. [Instagram pela API (marco M5b)](#12-instagram-pela-api-marco-m5b)
 13. [Base aberta do CNPJ e Prospecção (marco M6)](#13-base-aberta-do-cnpj-e-prospecção-marco-m6)
 14. [Campanhas](#14-campanhas)
+15. [Relatórios, insights e distribuição automática](#15-relatórios-insights-e-distribuição-automática)
 
 ---
 
@@ -267,3 +268,24 @@ As campanhas (Fase 10) organizam **quem** a equipe aborda e **em que ritmo**: se
 | C8 | SDR | Abrir Campanhas | Menu sem o item; acesso restrito |
 
 **Teste A/B:** a comparação só aparece com 30 contatados em cada variante e **nunca declara vencedora**; "diferença provável" é um sinal para o gestor decidir, olhando também época, cidade e SDR.
+
+## 15. Relatórios, insights e distribuição automática
+
+A Fase 11 traz os relatórios de conversão (por cidade, UF, segmento, origem, responsável, quem fez o 1º contato, campanha, abordagem e canal), o desempenho por SDR, a evolução mensal, WhatsApp × Instagram, os insights da carteira no dashboard e a distribuição automática do pool. Não depende de terceiros. Os relatórios e os insights podem ser usados **desde o início do piloto** (com poucas semanas, a maioria das taxas aparece como "amostra insuficiente", e é isso mesmo). A distribuição automática nasce **desligada**: ligar só quando os territórios dos SDRs estiverem cadastrados e o limite de leads ativos combinado com a equipe.
+
+**Na implantação:** o worker calcula os indicadores na primeira hora (preenche o histórico, até 36 meses) e depois de hora em hora; depois de importar uma base com histórico, use "recalcular período" (`POST /api/v1/analytics/rollup`) se quiser os números antes da próxima rodada.
+
+**Homologação** (staging, dados fictícios):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| A1 | GESTOR | Relatórios → Conversão → recorte "Canal do 1º contato" | Tabela com 1ºs contatos, taxas com a faixa de 95% embaixo, asterisco em "amostra insuficiente", linha de total e "Atualizado em…" |
+| A2 | GESTOR | Trocar o recorte (cidade, abordagem, campanha) e baixar o CSV | Cada lead conta uma vez; CSV com as faixas; a exportação aparece na Auditoria |
+| A3 | GESTOR | Relatórios → Por SDR, Evolução mensal e Canais | Atividade e taxas por pessoa; meses com o atual "parcial"; WhatsApp × Instagram sem declarar vencedor |
+| A4 | GESTOR | Dashboard → "Atualizar" no card de insights | Frases com os números do dia (ex.: "N leads responderam e esperam uma ação"); "Útil"/"Não útil" funcionam |
+| A5 | SDR | Abrir o dashboard | Só os insights da própria carteira; sem botão "Atualizar"; Relatórios fora do menu |
+| A6 | GESTOR | Equipe → Distribuição: ligar por território, cadastrar um lead novo sem responsável na cidade de um SDR e "Distribuir agora" | Em instantes, o lead é do SDR da cidade; o SDR recebe o aviso; o histórico do lead mostra "Distribuição automática" |
+| A7 | GESTOR | Marcar um SDR como ausente até amanhã | Ele fica "Fora" e não recebe leads até depois da data |
+| A8 | GESTOR | Desligar a distribuição | Nenhuma atribuição nova; leads já distribuídos continuam com quem estão |
+
+**Insights com a IA:** com `AI_PROVIDER=fake` (padrão), o texto é o padrão de cada fato. Com o provedor real, a IA só reescreve: o texto dela só aparece se os números baterem com os do sistema (senão, vale o padrão) e o custo entra no orçamento mensal da IA (uma chamada por público por dia).

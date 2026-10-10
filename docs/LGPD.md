@@ -1,6 +1,6 @@
 # LGPD e Governança de Dados — Docline SDR
 
-> **Status:** Fase 0, com as notas de implementação das Fases 2 a 10 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8), dados abertos do CNPJ na [§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9), campanhas na [§6.3](#63-campanhas-fase-10)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
+> **Status:** Fase 0, com as notas de implementação das Fases 2 a 11 (indicadores, insights e distribuição automática na [§19](#19-checklist-por-fase); WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8), dados abertos do CNPJ na [§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9), campanhas na [§6.3](#63-campanhas-fase-10)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
 > Relacionados: [SECURITY](./SECURITY.md) · [SDR-FLOW §9](./SDR-FLOW.md#9-contactabilidade-estados-independentes) · [INTEGRATIONS](./INTEGRATIONS.md) · [DATABASE §4.9](./DATABASE.md#49-conformidade)
 
 ## Sumário
@@ -256,6 +256,8 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 | Comentários de leads no Instagram da Docline (`social_comments`) | Enquanto o lead existir (proposta, a validar) | Excluir na anonimização |
 | Métricas públicas do Instagram (`instagram_profiles`) | Substituídas a cada consulta (30 dias) | Excluir na anonimização ou com o contato |
 | Contexto enviado à IA (`input_snapshot`) | 12 meses | Anonimizar |
+| Rollups dos indicadores (`daily_metrics`, `analytics_lead_facts`) | Enquanto houver dados de origem (agregados; os fatos por lead são recalculados de hora em hora) | Recalculados: o lead mesclado sai dos fatos na rodada seguinte; o anonimizado fica só com ids, datas, cidade e canal (sem dado pessoal) |
+| Insights da carteira (`insights`) | 180 dias | Excluir (job `analytics.insights`, Fase 11); só contagens, cidades e abordagens |
 | Mensagens | 5 anos (proposta, a validar) | Anonimizar conteúdo |
 | Auditoria | 5 anos (proposta, a validar) | Excluir |
 | Backups | Rotação de 30 dias | Expiram naturalmente |
@@ -338,6 +340,8 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 | Base aberta do CNPJ e Prospecção (Fase 9) | Dados cadastrais públicos de escritórios de contabilidade ativos (nomes, CNAE, endereço, telefones e e-mail declarados) | Escritórios; empresário individual só se liberado | Legítimo interesse (dado público, art. 7º, §§ 3º e 4º) | Descobrir e priorizar escritórios para prospecção B2B | Cópia: mês seguinte; resultados: 30 dias | Hospedagem |
 | Campanhas de prospecção (Fase 10) | Ids dos leads, motivos de inelegibilidade, SDR, variante e datas dos marcos | Leads selecionados | Legítimo interesse (a mesma da prospecção) | Organizar o ritmo de contato e medir abordagens | Enquanto a campanha existir | Hospedagem |
 | Geração de mensagens por IA | Contexto mínimo do lead | Idem | Legítimo interesse | Personalização | 12 meses | Provedor de IA |
+| Indicadores e insights (Fase 11) | Agregados e fatos por lead (datas dos marcos, canal, abordagem, responsável); para a IA, só contagens, cidades e nomes de abordagens | Leads (agregados) | Legítimo interesse | Medir e priorizar a prospecção | Rollups: recalculados; insights: 180 dias | Hospedagem; provedor de IA (só os textos dos fatos) |
+| Distribuição automática (Fase 11) | Participação, limite de leads ativos e ausência de cada SDR | Funcionários Docline | Execução de contrato / legítimo interesse | Distribuir o trabalho | Enquanto o usuário existir; mudanças auditadas | Hospedagem |
 | Lista Não Contatar | Hash de identificadores | Quem pediu opt-out | Exercício regular de direitos / legítimo interesse | Respeitar oposição | Indeterminado (hash) | Hospedagem |
 | Atendimento a titulares | Dados do pedido | Titulares | Obrigação legal | Cumprir LGPD | 5 anos (proposta) | Hospedagem |
 | Usuários internos | Nome, e-mail, logs de acesso | Funcionários Docline | Execução de contrato / legítimo interesse | Operação e segurança | Vínculo + prazo | Hospedagem, Sentry |
@@ -398,6 +402,12 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [x] Campanha não envia: libera para a cadência, com limite diário por SDR; cada contato pelo gate.
 - [x] Lista Não Contatar, base legal, contato no canal e frequência conferidos na montagem e de novo na liberação, com o motivo à vista.
 - [x] Sem dado pessoal em claro nas linhas da campanha.
+**Fase 11 (analytics)**
+- [x] Relatórios só com números agregados; exportação auditada (`report.export`).
+- [x] Insights sem dado pessoal no pedido à IA (só contagens, cidades e nomes de abordagens); texto conferido; retenção de 180 dias.
+- [x] Fatos por lead sem dado pessoal (ids, datas, cidade, canal); lead mesclado sai na rodada seguinte do rollup.
+- [x] Distribuição automática: dados de disponibilidade de funcionários mínimos (participa, limite, ausente até, sem motivo) e auditados; nunca toma lead de alguém.
+
 - [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API do WhatsApp ou do Instagram).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.
 

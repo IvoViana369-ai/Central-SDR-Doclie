@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9 e Campanhas na Fase 10, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9 e Campanhas na Fase 10 e Analytics na Fase 11, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -122,13 +122,15 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 | Completar um lead com os dados abertos do CNPJ (no escopo) | ✅ | ✅ | ✅ | ✅ |
 | Carga da base aberta do CNPJ: rodar, acompanhar e configurar | ✅ | ❌ | ❌ | ❌ |
 | Atribuir/redistribuir leads | ✅ | ✅ | ❌ (só "puxar do pool") | ❌ |
+| Distribuição automática: ligar, configurar, distribuir agora e a disponibilidade de cada SDR (`lead.assign`) | ✅ | ✅ | ❌ | ❌ |
 | Ações em massa | ✅ | ✅ | ⚙️ (nos próprios leads) | ❌ |
 | Campanhas: criar, montar, ativar, pausar, concluir e ver o funil e o A/B (`campaign.manage`); a campanha nunca envia mensagem | ✅ | ✅ | ❌ (vê na ficha a campanha e a abordagem do lead) | ❌ |
 | Criar e editar tags (aplicar tags existentes: todos) | ✅ | ✅ | ❌ | ❌ |
 | Decidir duplicados (mesclar) | ✅ | ✅ | ⚙️ | ❌ |
 | Gerar e aprovar mensagens com IA; pedir sugestão de classificação | ✅ | ✅ | ✅ | ✅ |
 | Ver o dashboard (SDR e Comercial: só os próprios números) | ✅ | ✅ | ✅ | ✅ |
-| Relatórios da equipe, exportação CSV dos relatórios e custos da IA (`report.read`) | ✅ | ✅ | ❌ | ❌ |
+| Relatórios da equipe (conversão por recorte, por SDR, mensal, canais), exportação CSV, recálculo dos indicadores e custos da IA (`report.read`) | ✅ | ✅ | ❌ | ❌ |
+| Insights: ver os da equipe e gerar agora (`report.read`); ver e avaliar os da própria carteira (todos) | ✅ | ✅ | ⚙️ (só os próprios) | ⚙️ (só os próprios) |
 | Configurar a IA (base de conhecimento, abordagens, regras dos rascunhos) | ✅ | ❌ | ❌ | ❌ |
 | Registrar opt-out | ✅ | ✅ | ✅ | ✅ |
 | Consultar a Lista Não Contatar (valores mascarados) | ✅ | ✅ | ❌ | ❌ |
@@ -422,6 +424,14 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - O filtro da campanha é o mesmo da lista de leads, validado ao salvar (`compileLeadSelection`) e compilado de novo na montagem, com o ator de quem criou; a seleção é limitada a 5.000 leads. As consultas de marcos e contagens usam SQL parametrizado (`Prisma.sql`).
 - Edição com lock otimista; mudar a estrutura depois de ativar é recusado; toda ação (criar, alterar, montar, ativar, pausar, retomar, concluir, arquivar, retirar lead) e cada liberação são auditadas.
 - Testes: permissões (SDR recebe 403 na API e "Acesso restrito" na tela), validação de SDRs, abordagens, datas e filtro, montagem com motivos, liberação com cota, dia útil e nova conferência (Lista Não Contatar depois da montagem), conclusão pela data, funil e E2E.
+
+**Revisão de segurança da Fase 11 (Analytics)**
+- Rotas novas da API v1 passam pelo `apiHandler`: `/analytics/conversion`, `/analytics/sdr-performance`, `/analytics/monthly`, `/analytics/channels`, `/analytics/performance-export` e `/analytics/rollup` exigem `report.read`; `/settings/auto-assign*` e `/users/:id/availability` exigem `lead.assign`; `/insights` e a avaliação são de qualquer usuário ativo, mas cada um só vê e avalia o que é seu (a gestão, também os da equipe); gerar insights agora exige `report.read`. Nenhuma rota pública nova.
+- Recortes e colunas do SQL dos relatórios vêm de listas fechadas no código; datas, ids e fuso entram parametrizados (`Prisma.sql`). Períodos limitados (até 366 dias; até 36 meses no mensal; até 1.000 linhas no CSV).
+- Insights (ADR 032): nenhum dado pessoal no pedido à IA; o texto da IA só é mostrado se todos os números existirem no fato e se não tiver telefone, e-mail ou link; senão, vale o texto padrão. O texto aparece como texto (React escapa), nunca como HTML. Cota e orçamento da IA valem como nas demais tarefas.
+- Distribuição automática (ADR 033): desligada por padrão; só atribui lead sem responsável, com atualização condicional (a mesma trava do "puxar do pool"), em lotes de 50 por transação; toda atribuição grava o histórico e a auditoria; ligar, configurar, distribuir agora e mudar a disponibilidade de alguém são auditados com o antes e depois.
+- O job de rollup usa `REFRESH MATERIALIZED VIEW CONCURRENTLY` (não bloqueia leitura) e recalcula os dias numa transação (apaga e grava), então uma falha no meio não deixa o dia pela metade.
+- Testes: permissões (SDR recebe 403 nos relatórios, na geração de insights, na distribuição e na disponibilidade), conferência dos textos da IA (número errado, telefone, ausente), IA indisponível e sem orçamento, corrida e limites da distribuição, e E2E.
 
 **Fases 7+ — Integrações**
 - [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).

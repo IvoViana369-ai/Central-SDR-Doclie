@@ -1,6 +1,6 @@
 # SDR AI — IA de Prospecção
 
-> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). **Fase 8:** o mesmo para as mensagens recebidas pelo Instagram. Insights na Fase 11.
+> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). **Fase 8:** o mesmo para as mensagens recebidas pelo Instagram. **Fase 11:** insights da carteira (§13), com números do banco e texto da IA conferido.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SDR-FLOW](./SDR-FLOW.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md)
 
 ## Sumário
@@ -17,7 +17,7 @@
 10. [Fluxo humano: gerar, editar, aprovar, enviar](#10-fluxo-humano-gerar-editar-aprovar-enviar)
 11. [Registro e aprendizado](#11-registro-e-aprendizado)
 12. [Classificação de respostas](#12-classificação-de-respostas)
-13. [Insights da carteira (futuro)](#13-insights-da-carteira-futuro)
+13. [Insights da carteira](#13-insights-da-carteira)
 14. [Avaliação de qualidade](#14-avaliação-de-qualidade)
 15. [Custos e controles](#15-custos-e-controles)
 16. [Privacidade](#16-privacidade)
@@ -48,7 +48,7 @@ A SDR AI é um **copiloto do SDR**: prepara mensagens personalizadas, sugere cla
 | Sugerir classificação de resposta colada manualmente | 6 (MVP, SHOULD) | Humano confirma |
 | Classificar automaticamente respostas recebidas por webhook | 7 ✅ (como **sugestão**) | Opt-out por regra determinística vem antes da IA; a pessoa confirma |
 | Sugerir próxima ação ("next best action") por lead | 11 | Baseado em regras + IA |
-| Insights da carteira ("Hoje existem 37…") | 11+ | Números calculados em SQL; IA só redige |
+| Insights da carteira ("Hoje existem 37…") | ✅ 11 | Números calculados em SQL; IA só redige, e o texto é conferido (§13) |
 | Comparação de abordagens (A/B) | 10–11 | Atribuição já existe desde o MVP |
 
 ---
@@ -314,7 +314,7 @@ const ReplyClassification = z.object({
 
 ---
 
-## 13. Insights da carteira (futuro)
+## 13. Insights da carteira
 
 Meta do §39: o sistema dizer "Hoje existem 37 escritórios prioritários para contato", "12 leads de Sobral estão sem follow-up" etc.
 
@@ -324,6 +324,14 @@ Regra de ouro: **números vêm do banco; o modelo só redige.**
 2. Os fatos (JSON com números e ids) vão para a IA, que escreve frases curtas e prioriza o que importa para cada usuário.
 3. Validação: todo número no texto precisa existir no JSON de fatos; senão o insight é descartado.
 4. Resultado em `insights`, com os dados que o sustentam e feedback do usuário.
+
+> **Implementação (Fase 11, ADR-032).**
+> - **Fatos** (SQL, as mesmas definições da Minha Fila, dos esquecidos e do potencial): respostas esperando ação; transferências ao Comercial sem aceite no prazo; prioritários (faixa mais alta do score) sem 1º contato; a cidade com mais leads sem follow-up há N dias (regras de contato); a abordagem com resposta **acima da média com significância** (intervalo de confiança inteiro acima da taxa geral, 90 dias, base mínima de 20); a cidade com mais escritórios ativos da base aberta do CNPJ que ainda não são lead. Só entram os fatos com algo a dizer.
+> - **Públicos:** a equipe (gestão) e cada SDR ativo (a própria carteira; o potencial só no seu território). Job `analytics.insights` às 07h05 e "Atualizar" no dashboard (ADMIN e GESTOR).
+> - **Redação** (tarefa `portfolio_insights`, prompt `portfolio_insights` v1, esforço baixo): uma chamada por público com os fatos e o texto padrão de cada um; a IA reescreve cada fato em uma frase. **Nenhum dado pessoal** vai no pedido: só contagens, cidades e nomes de abordagens.
+> - **Conferência** de cada texto: todo número citado precisa estar no fato — porcentagens comparadas só com as taxas do fato (arredondar para inteiro é aceito) e contagens/dias só com as contagens; nomes de cidade e abordagem saem antes da conferência (um nome com dígitos não conta). Sem telefone, e-mail ou link; de 10 a 240 caracteres. Falhou → vale o texto padrão, e o motivo fica em `guardrail_flags`.
+> - **Sem IA** (orçamento do mês esgotado, cota diária de quem pediu, provedor fora do ar, recusa): os insights saem com o texto padrão, sem nova chamada. O custo vai para `ai_generations` (tipo `INSIGHT`, sem lead) e entra no orçamento; fica fora das métricas de qualidade dos rascunhos.
+> - **Exibição:** card no dashboard, por prioridade (respostas esperando ação primeiro), com a marca "Redigido pela IA" quando for o caso e avaliação útil/não útil. O lote novo substitui o anterior; vale até 36 h; apagados depois de 180 dias.
 
 ---
 

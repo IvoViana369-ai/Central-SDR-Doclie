@@ -1,6 +1,6 @@
 # Fluxo SDR — Docline SDR
 
-> **Status:** Fase 0, atualizado até a Fase 10 (§10.1, campanhas) · Descreve o processo operacional que o sistema implementa: etapas, regras, automações, eventos e métricas.
+> **Status:** Fase 0, atualizado até a Fase 11 (§10.1, campanhas; §10.2, distribuição automática; §11, relatórios com intervalo de confiança) · Descreve o processo operacional que o sistema implementa: etapas, regras, automações, eventos e métricas.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [DATABASE](./DATABASE.md) · [AI-SDR](./AI-SDR.md) · [LGPD](./LGPD.md)
 
 ## Sumário
@@ -386,10 +386,10 @@ O resultado traz **motivos legíveis** ("Sem base legal registrada", "Número na
 | **Na importação** | Responsável padrão do lote | MVP |
 | **Puxar do pool** | SDR pega leads não atribuídos do seu território (com trava para dois SDRs não pegarem o mesmo) | ✅ Fase 5 (5 por vez, maior score primeiro, na Minha Fila) |
 | **Por campanha** | Os aptos de uma campanha: quem já é de um SDR da campanha fica com ele; os sem responsável vão para o SDR com menos leads, do maior score para o menor. Na liberação, o lead passa a ser do SDR (atribuição `CAMPAIGN`) | ✅ Fase 10 (§10.1) |
-| **Round-robin** | Rodízio entre SDRs ativos de uma equipe | Futura |
-| **Por cidade / UF** | `user_territories` | Futura |
+| **Round-robin** | Rodízio entre os SDRs disponíveis: vai para quem recebeu lead há mais tempo | ✅ Fase 11 (§10.2) |
+| **Por cidade / UF** | `user_territories`: primeiro quem cobre a cidade, depois quem cobre a UF inteira | ✅ Fase 11 (§10.2) |
 | **Por prioridade** | Leads de faixa alta para SDRs designados | Futura |
-| **Por disponibilidade** | Respeita `max_active_leads` e ausências | Futura |
+| **Por disponibilidade** | Respeita participação, `max_active_leads` (ou o limite padrão) e ausências | ✅ Fase 11 (§10.2), nas duas estratégias acima |
 
 Toda atribuição grava `lead_assignments` (histórico de responsáveis) e atualiza `owner_id`/`previous_owner_id`. A arquitetura usa uma interface `AssignmentStrategy` para que novas estratégias entrem sem mudar o restante.
 
@@ -404,6 +404,19 @@ A campanha organiza **quem** será abordado e **em que ritmo**; ela **não envia
 5. **Pausar, retomar e concluir**: pausar só interrompe novas liberações; concluir (ou a data de fim) tira da campanha quem ainda aguardava. Quem já foi liberado segue a cadência normalmente.
 
 **Funil da campanha** (cada taxa sobre a sua base): selecionados → aptos → liberados para a fila → contatados (mensagem enviada ou ligação atendida) → entregues (só envios pela API têm confirmação) → responderam → interessados → oportunidades → convertidos, e os que pediram para sair. Contam os marcos de até **90 dias depois da liberação** (ou até o lead entrar em outra campanha). A comparação A/B (taxa de resposta e de interesse) só aparece com **30 contatados por variante** e nunca declara vencedora: aponta "diferença provável" e a decisão é do gestor.
+
+### 10.2 Distribuição automática (Fase 11)
+
+Desligada por padrão. ADMIN e GESTOR (`lead.assign`) ligam em **Equipe → Distribuição** (ADR-033):
+
+1. **O que entra:** leads **sem responsável**, ativos, contatáveis (fora da Lista Não Contatar e sem bloqueio), numa etapa de prospecção (aberta ou estacionada) e **fora de campanha em andamento** (a campanha distribui os seus). Por padrão, só os criados depois de ligar; marcando "incluir o pool que já existia", o pool inteiro.
+2. **Para quem:** SDRs ativos que participam (`auto_assign`), não estão ausentes hoje (`away_until`, inclusive o último dia) e estão abaixo do limite de leads ativos (o próprio `max_active_leads` ou o padrão da distribuição, 300 se ninguém mudar).
+3. **Como:**
+   - **Território:** primeiro quem cobre a cidade do lead; se ninguém (ou todos no limite), quem cobre a UF inteira; sem cobertura, o lead fica no pool — ou entra no rodízio geral, se a opção estiver ligada.
+   - **Rodízio:** entre todos os disponíveis.
+   - Entre os candidatos, vai para quem recebeu lead (por distribuição automática) há mais tempo; empate: menos leads ativos.
+4. **Quando:** de hora em hora (job `leads.auto-assign`), logo depois de ligar e em "Distribuir agora"; até 500 leads por rodada, do maior score para o menor.
+5. **Garantias:** o lead só é atribuído se ainda estiver sem responsável no momento (mesma trava do "puxar do pool"); **nunca tira um lead de alguém**; cada atribuição grava o histórico (`TERRITORY` ou `ROUND_ROBIN`, motivo "Distribuição automática") e o SDR recebe um aviso com quantos leads novos ganhou. A tela mostra a última rodada e quantos ficaram no pool, por motivo (sem SDR disponível, sem território, todos no limite).
 
 ---
 
@@ -435,10 +448,19 @@ Comparações entre abordagens, canais ou cidades com amostras pequenas mostram 
 > - Período em datas locais de Fortaleza, fim inclusivo; padrão de 30 dias, máximo de 366. Leads mesclados ficam fora de tudo (o histórico foi para o lead que ficou).
 > - "Responderam" conta mensagem recebida **ou** contato de entrada registrado (ex.: ligação recebida) depois do primeiro contato. "Interessados" no KPI é de período (resposta classificada como interesse recebida no intervalo); no funil da coorte, é "já demonstrou interesse até hoje".
 > - Contato registrado com data anterior ao cadastro conta como zero no tempo até o 1º contato.
-> - Taxas com menos de **20** primeiros contatos na base levam o aviso "amostra pequena" (asterisco nas tabelas). O intervalo de confiança fica para a Fase 11.
+> - Taxas com menos de **20** primeiros contatos na base levam o aviso "amostra pequena" (asterisco nas tabelas). O intervalo de confiança entrou na Fase 11 (abaixo).
 > - **Filtro por pessoa:** indicadores do lead (novos, coorte, cidade, origem, funil por etapa) usam o responsável atual; contatos feitos usam quem enviou ou registrou; oportunidades e conversões usam quem transferiu (`sdr_id`).
 > - ADMIN e GESTOR (`report.read`) veem a equipe, filtram por pessoa e exportam CSV (auditado como `report.export`); SDR e Comercial veem só os próprios números no dashboard.
-> - Consultas agregadas ao vivo; os *rollups* diários (`daily_metrics`) entram quando o teste de desempenho pedir (ARCHITECTURE §13).
+> - Consultas agregadas ao vivo no dashboard; os relatórios da Fase 11 leem os *rollups* (abaixo).
+
+> **Implementação (Fase 11, relatórios sobre os rollups).**
+> - **Rollups** (ADR-031): `analytics_lead_facts` (um registro por lead: 1º contato e os marcos depois dele) e `daily_metrics` (contagens por dia local), recalculados de hora em hora pelo job `analytics.rollup`. A tela mostra quando foram calculados.
+> - **Conversão por recorte:** pela coorte do 1º contato no período, cada lead uma vez — no recorte do 1º contato (canal, abordagem, campanha, quem fez) ou do cadastro (cidade, UF, segmento, origem, responsável). O canal, a abordagem e quem fez vêm do primeiro contato de saída (mensagem enviada, entregue ou lida, ou ligação atendida); a campanha é a que liberou o lead até 90 dias antes do 1º contato. Ligação atendida conta como "telefone"; reunião e visita, "outro".
+> - **Intervalo de confiança:** toda taxa vem com o intervalo de Wilson a 95%. Com menos de 20 primeiros contatos na base, "amostra insuficiente": a taxa aparece com asterisco e não é comparada. "Acima" ou "abaixo da média" só quando o intervalo inteiro fica de um lado da taxa geral do mesmo filtro.
+> - **Por SDR:** a atividade é de quem fez (mensagens, contatos registrados, transferências e as conversões delas); respostas recebidas, interesse e opt-outs são do responsável atual; as taxas são da coorte dos 1ºs contatos que a pessoa fez. Nos relatórios da Fase 11, o filtro por pessoa usa quem fez o 1º contato (o dashboard continua pelo responsável).
+> - **Evolução mensal:** volumes de cada mês (somas do rollup diário) e a coorte do 1º contato de cada mês, acompanhada até hoje — meses recentes ainda podem subir; o mês corrente aparece como parcial. "Leads contatados" é por dia e não soma entre dias, por isso o mensal mostra 1ºs contatos e mensagens.
+> - **Canais:** volumes pelo canal de cada mensagem; resposta, interesse, oportunidade, conversão e opt-out pelo canal do 1º contato. WhatsApp × Instagram usa o teste de duas proporções do A/B das campanhas (30 primeiros contatos em cada canal) e nunca declara vencedor.
+> - **Exportação:** CSV de cada relatório, com o intervalo de cada taxa, auditado como `report.export`.
 
 ---
 
@@ -452,12 +474,12 @@ Comparações entre abordagens, canais ou cidades com amostras pequenas mostram 
 | Quantos demonstraram interesse? | KPI "Interessados" | `messages.classification`, `lead_events` |
 | Quantos viraram oportunidade? | KPI "Oportunidades" | `opportunities` |
 | Quantos viraram parceiros? | Conversões por tipo | `opportunities`, `leads.conversion_type` |
-| Qual SDR performa melhor? | Relatório por SDR (volume, resposta, conversão, tempos) | `lead_assignments`, `messages`, `opportunities` |
-| Qual cidade converte melhor? | Conversão por cidade | `leads.municipality_code` |
-| Qual abordagem converte melhor? | Resposta/conversão por `approach_id` | `messages.approach_id` |
-| Qual canal converte melhor? | WhatsApp × Instagram × outros | `messages.channel` |
-| Qual segmento converte melhor? | Conversão por segmento/tipo | `leads.segment_id`, `lead_type` |
+| Qual SDR performa melhor? | Relatórios → Por SDR: carteira, atividade e a coorte dos 1ºs contatos de cada um, com intervalo de confiança | `daily_metrics` (SDR), `analytics_lead_facts` |
+| Qual cidade converte melhor? | Relatórios → Conversão por cidade (ou UF) | `analytics_lead_facts` |
+| Qual abordagem converte melhor? | Relatórios → Conversão por abordagem (a do 1º contato); insight "abordagem acima da média" | `analytics_lead_facts` (`messages.approach_id`) |
+| Qual canal converte melhor? | Relatórios → Canais: WhatsApp × Instagram (teste de duas proporções) e os demais | `daily_metrics` (CHANNEL), `analytics_lead_facts` |
+| Qual segmento converte melhor? | Relatórios → Conversão por segmento | `analytics_lead_facts` (`leads.segment_id`) |
 | Quantos aguardam follow-up? | Seção da fila + KPI | `cadence_enrollments`, `tasks` |
 | Quais leads estão esquecidos? | Seção "Esquecidos" + relatório | `leads.last_activity_at`, `tasks` |
 | Quais leads estão mais quentes? | Faixas `HOT`/`PRIORITY`, ordenadas | `leads.score` |
-| Quais cidades ainda têm potencial? | Mapa/tabela de potencial | `municipalities`, `registry_companies`, `leads` |
+| Quais cidades ainda têm potencial? | Prospecção → potencial por cidade; insight da cidade com mais escritórios fora da base | `municipalities`, `registry_companies`, `leads` |
