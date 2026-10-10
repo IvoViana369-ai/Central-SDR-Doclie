@@ -1,6 +1,6 @@
 # Roteiro de UAT, treinamento e go-live do piloto
 
-> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b) · **Última revisão:** 2026-10-09
+> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b); Prospecção (marco M6) na [§13](#13-base-aberta-do-cnpj-e-prospecção-marco-m6) e Campanhas na [§14](#14-campanhas) · **Última revisão:** 2026-10-10
 > Relacionados: [MVP §11](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) · [ROADMAP](./ROADMAP.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md) · [AI-SDR](./AI-SDR.md)
 
 O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As Fases 7 e 8 (WhatsApp e Instagram pela API) também estão prontas, mas **o piloto começa no modo assistido**: as APIs são ligadas depois, nos marcos M5 ([§11](#11-whatsapp-pela-api-marco-m5)) e M5b ([§12](#12-instagram-pela-api-marco-m5b)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
@@ -22,6 +22,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 11. [WhatsApp pela API (marco M5)](#11-whatsapp-pela-api-marco-m5)
 12. [Instagram pela API (marco M5b)](#12-instagram-pela-api-marco-m5b)
 13. [Base aberta do CNPJ e Prospecção (marco M6)](#13-base-aberta-do-cnpj-e-prospecção-marco-m6)
+14. [Campanhas](#14-campanhas)
 
 ---
 
@@ -247,3 +248,22 @@ A Prospecção busca escritórios de contabilidade ativos numa **cópia local** 
 | P7 | SDR | Abrir Prospecção | Menu sem o item; acesso restrito |
 
 **Primeira carga real:** acompanhar o progresso em Configurações → Dados abertos do CNPJ (pode levar horas: são alguns GB em streaming) e conferir o total por UF com a ordem de grandeza esperada. Começar aprovando poucos escritórios de uma cidade conhecida. Para pausar: `COMPANY_REGISTRY_PROVIDER=disabled` no web e no worker; a busca continua com a cópia já carregada.
+
+## 14. Campanhas
+
+As campanhas (Fase 10) organizam **quem** a equipe aborda e **em que ritmo**: selecionam leads por filtro, mostram quem fica de fora e por quê, distribuem entre os SDRs e liberam um lote diário para a cadência. **Não enviam mensagens**: o contato continua do SDR, pela Minha Fila e pelo gate. Não dependem de terceiros nem de ativação; a recomendação é usar **depois das primeiras semanas do piloto**, quando a cadência e a fila já estiverem no ritmo (o limite diário por SDR deve caber no dia de trabalho real).
+
+**Homologação** (staging, dados fictícios):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| C1 | GESTOR | Leads → filtrar por uma tag ou cidade → "Campanha com este filtro" | Nova campanha com a contagem prévia ("N leads · M contactáveis") |
+| C2 | GESTOR | Preencher nome, SDRs, limite diário (ex.: 5) e duas abordagens → "Criar rascunho" → "Montar" | Em segundos, "Pronta para ativar": selecionados, aptos, não liberados e os motivos (ex.: "Na Lista Não Contatar") |
+| C3 | GESTOR | "Ativar" | O lote do dia de cada SDR entra na cadência ("Hoje 5/5"); nenhuma mensagem é enviada |
+| C4 | SDR | Abrir a Minha Fila | Os leads da campanha com "Campanha: …" e a abordagem sugerida; ao gerar com IA, a abordagem já vem escolhida |
+| C5 | SDR | Contatar, registrar a resposta "tenho interesse" | Ao abrir a campanha (ou na rodada da hora seguinte), o funil mostra contatado, respondeu e interessado |
+| C6 | GESTOR | Registrar opt-out de um lead que ainda aguarda liberação | Na próxima liberação, ele fica "Não liberado", com o motivo |
+| C7 | GESTOR | Pausar, retomar e concluir | Pausada não libera; concluída tira quem aguardava (sem apagar) e os resultados continuam contando por 90 dias |
+| C8 | SDR | Abrir Campanhas | Menu sem o item; acesso restrito |
+
+**Teste A/B:** a comparação só aparece com 30 contatados em cada variante e **nunca declara vencedora**; "diferença provável" é um sinal para o gestor decidir, olhando também época, cidade e SDR.

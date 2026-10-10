@@ -1,6 +1,6 @@
 # Fluxo SDR — Docline SDR
 
-> **Status:** Fase 0 · Descreve o processo operacional que o sistema implementa: etapas, regras, automações, eventos e métricas.
+> **Status:** Fase 0, atualizado até a Fase 10 (§10.1, campanhas) · Descreve o processo operacional que o sistema implementa: etapas, regras, automações, eventos e métricas.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [DATABASE](./DATABASE.md) · [AI-SDR](./AI-SDR.md) · [LGPD](./LGPD.md)
 
 ## Sumário
@@ -385,12 +385,25 @@ O resultado traz **motivos legíveis** ("Sem base legal registrada", "Número na
 | **Manual** | Gestor atribui um lead ou um lote (ação em massa com contagem prévia) | MVP |
 | **Na importação** | Responsável padrão do lote | MVP |
 | **Puxar do pool** | SDR pega leads não atribuídos do seu território (com trava para dois SDRs não pegarem o mesmo) | ✅ Fase 5 (5 por vez, maior score primeiro, na Minha Fila) |
+| **Por campanha** | Os aptos de uma campanha: quem já é de um SDR da campanha fica com ele; os sem responsável vão para o SDR com menos leads, do maior score para o menor. Na liberação, o lead passa a ser do SDR (atribuição `CAMPAIGN`) | ✅ Fase 10 (§10.1) |
 | **Round-robin** | Rodízio entre SDRs ativos de uma equipe | Futura |
 | **Por cidade / UF** | `user_territories` | Futura |
 | **Por prioridade** | Leads de faixa alta para SDRs designados | Futura |
 | **Por disponibilidade** | Respeita `max_active_leads` e ausências | Futura |
 
 Toda atribuição grava `lead_assignments` (histórico de responsáveis) e atualiza `owner_id`/`previous_owner_id`. A arquitetura usa uma interface `AssignmentStrategy` para que novas estratégias entrem sem mudar o restante.
+
+### 10.1 Campanhas (Fase 10)
+
+A campanha organiza **quem** será abordado e **em que ritmo**; ela **não envia nada** (ADR-029). O contato continua sendo do SDR, pela cadência, e cada mensagem passa pelo gate (§9).
+
+1. **Rascunho** (gestão, `campaign.manage`): nome, objetivo, responsável, seleção (visão salva, filtro trazido da lista de leads ou todos os ativos), canal, cadência, SDRs, leads por SDR por dia (até 200), frequência mínima (padrão: sem contato há 30 dias) e, se quiser, de 2 a 4 abordagens em teste A/B.
+2. **Montar**: a seleção é congelada (até 5.000 leads) e cada lead é avaliado. Fica **fora**, com o motivo à vista, quem: está arquivado, mesclado ou anonimizado; está na Lista Não Contatar (o lead ou o contato do canal); não tem base legal; não tem contato no canal; foi ganho ou perdido; tem oportunidade aberta; já está numa cadência; está em outra campanha em andamento; foi contatado há menos dias que a frequência; ou é de alguém fora da campanha (nunca tomamos o lead de outra pessoa). Os aptos são distribuídos (§10) e, com A/B, recebem a variante alternada dentro da lista de cada SDR.
+3. **Ativar**: a cada hora, nos dias de expediente das regras de contato (fuso do SDR), até o limite diário de cada SDR **entra na cadência**: o lead do pool passa a ser do SDR, a inscrição guarda a campanha e o primeiro passo vira tarefa na **Minha Fila**. Antes de liberar, tudo é conferido de novo; quem deixou de ser apto fica "não liberado", com o motivo.
+4. **No dia a dia do SDR**: o item da fila e a ficha mostram a campanha e a **abordagem sugerida** (a variante sorteada), que já vem escolhida ao gerar a mensagem com IA. O resto é o fluxo de sempre (§4 a §8).
+5. **Pausar, retomar e concluir**: pausar só interrompe novas liberações; concluir (ou a data de fim) tira da campanha quem ainda aguardava. Quem já foi liberado segue a cadência normalmente.
+
+**Funil da campanha** (cada taxa sobre a sua base): selecionados → aptos → liberados para a fila → contatados (mensagem enviada ou ligação atendida) → entregues (só envios pela API têm confirmação) → responderam → interessados → oportunidades → convertidos, e os que pediram para sair. Contam os marcos de até **90 dias depois da liberação** (ou até o lead entrar em outra campanha). A comparação A/B (taxa de resposta e de interesse) só aparece com **30 contatados por variante** e nunca declara vencedora: aponta "diferença provável" e a decisão é do gestor.
 
 ---
 

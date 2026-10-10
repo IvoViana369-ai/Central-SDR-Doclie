@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 9 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 10 · **Última revisão:** 2026-10-10
+> **Status:** Fases 1 a 10 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção; Campanhas sem envio) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 11 · **Última revisão:** 2026-10-10
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -30,7 +30,7 @@
 | 7 | Integração WhatsApp | Cloud API para leads com opt-in, webhooks, status, janela de atendimento | ✅ concluída no código (2026-10-09); ativação depende da Meta e do jurídico | Canais |
 | 8 | Instagram | DMs recebidas, comentários, enriquecimento (Business Discovery) | ✅ concluída no código (2026-10-09); ativação depende do App Review da Meta e do jurídico | Canais |
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ✅ concluída no código (2026-10-10), sem o Google Places (aguarda parecer); ativação depende do jurídico | Captação |
-| 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ~2 semanas | Escala |
+| 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ✅ concluída no código (2026-10-10); a campanha não envia, libera para a cadência | Escala |
 | 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ~2 semanas | Inteligência |
 | 12 | Integrações Docline | API com chaves, webhooks de saída, CRM, Lista Não Contatar compartilhada | ~3 semanas (depende das APIs) | Ecossistema |
 
@@ -409,7 +409,7 @@ Decisões e pendências:
 - **Números sem lead não viram leads**: ficam para ADMIN/GESTOR decidirem e são apagados em 90 dias.
 - **Envio real desligado fora de produção** sem `ALLOW_REAL_SENDS=true`; o simulador de webhooks recusa rodar com `meta_cloud`.
 - **Custo estimado** com tabela editável (valores iniciais de fontes secundárias, em USD); conferir na tabela oficial da Meta, que fatura em BRL no Brasil desde 01/07/2026 para clientes elegíveis.
-- **F7-09 adiada** (passos de cadência `API_MESSAGE` com envio automático, COULD): enviar sem uma pessoa exige decidir volume por dia, comportamento com falha e revisão do texto, e só faz sentido depois de medir qualidade e custo com envios humanos. Até lá, o passo vira tarefa e a pessoa cumpre enviando o modelo pela ficha. Candidata à Fase 10 (Campanhas), que já trata elegibilidade e limites.
+- **F7-09 adiada** (passos de cadência `API_MESSAGE` com envio automático, COULD): enviar sem uma pessoa exige decidir volume por dia, comportamento com falha e revisão do texto, e só faz sentido depois de medir qualidade e custo com envios humanos. Até lá, o passo vira tarefa e a pessoa cumpre enviando o modelo pela ficha. Candidata à Fase 10 (Campanhas), que já trata elegibilidade e limites. **Na Fase 10, continua adiada:** a campanha libera leads para a cadência e não envia (ADR 029).
 - **2FA obrigatória para ADMIN/GESTOR** (prometida para antes desta fase): entregue na 0.7.1, logo depois; sem 2FA, só "Minha conta" ([SECURITY §3](./SECURITY.md#3-autenticação)).
 - **Pendências:** confirmação de descadastro ao titular (depende do jurídico e de um modelo próprio); revalidar a tabela de códigos de erro da Meta antes de ligar.
 
@@ -494,6 +494,29 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F9-05 | Potencial por cidade (universo × trabalhados) | SHOULD |
 
 ### Fase 10 — Campanhas
+
+**Entregáveis:** campanhas com seleção congelada a partir do filtro da lista de leads, elegibilidade com motivos, distribuição entre SDRs, liberação diária para a cadência com limite por SDR, funil por janela de atribuição, teste A/B de abordagens; telas Campanhas (lista, nova, detalhe, edição), campanha e abordagem sugerida na Minha Fila e na ficha.
+
+**Situação (2026-10-10):** ✅ concluída no código; F10-01 a F10-05 entregues. **A campanha não envia mensagens** (ADR 029): libera leads para a cadência, e cada contato continua do SDR, pelo gate. Não depende de terceiros; a recomendação é usar depois das primeiras semanas do piloto ([GO-LIVE §14](./GO-LIVE.md#14-campanhas)).
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase10.spec.ts` e pelas suítes `campaigns.int.test.ts`, `campaigns-domain.test.ts`, `campaigns-schema.int.test.ts` e `contactability.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F10-01 | Só gestão (`campaign.manage`); SDRs ativos que prospectam, abordagens ativas, datas e filtro validados; rascunho → montando → pronta → ativa ⇄ pausada → concluída → arquivada, sem pular etapas; estrutura travada depois de ativar e retrato descartado se mudar numa campanha pronta; lock otimista; filtro vazio ou grande demais (mais de 5.000) volta ao rascunho com o erro. |
+| F10-02 | Motivos por lead: arquivado/mesclado/anonimizado, Lista Não Contatar (lead e contato do canal), sem base legal, sem contato no canal, ganho/perdido, oportunidade aberta, em cadência, em outra campanha em andamento, contato recente (frequência) e responsável fora da campanha; tudo conferido de novo na liberação (opt-out depois da montagem → "não liberado"). |
+| F10-03 | Lead do SDR da campanha fica com ele; pool por carga e score; nenhum lead tomado de outra pessoa; até o limite diário por SDR, só em dias de expediente, com trava contra duas rodadas; inscrição na cadência com a campanha, tarefa na Minha Fila e atribuição `CAMPAIGN`; nenhuma mensagem enviada; conclusão pela data de fim. |
+| F10-04 | Funil com base declarada por passo e marcos numa janela de 90 dias da liberação (contato por mensagem ou ligação atendida, entrega, resposta, interesse, oportunidade, conversão, opt-out); recálculo idempotente; mensagens marcadas com a campanha. |
+| F10-05 | Variantes alternadas dentro da lista de cada SDR; taxas por variante; comparação só com 30 contatados por variante, teste de duas proporções com Bonferroni e sem vencedora automática; abordagem sorteada sugerida ao SDR. |
+
+Decisões e pendências:
+
+- **Campanha não envia** (ADR 029): o limite diário é de leads liberados para a cadência, não de mensagens; o passo `API_MESSAGE` automático (F7-09) continua adiado.
+- **Atribuição por janela e A/B por variante sorteada** (ADR 030): conta o que acontece até 90 dias depois da liberação; a comparação usa a variante sorteada, não a abordagem que o SDR acabou usando.
+- **Feriados** não seguram a liberação (só os dias da semana das regras de contato); as tarefas da cadência vencem no próximo dia útil do lead.
+- **Pendências:** a Fase 11 (Analytics) pode trazer a quebra por campanha nos relatórios; campanha por cidade prioritária ou faixa de score com pesos é evolução possível.
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. |
 |---|---|---|

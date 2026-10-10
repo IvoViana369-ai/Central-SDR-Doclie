@@ -1,6 +1,6 @@
 # LGPD e Governança de Dados — Docline SDR
 
-> **Status:** Fase 0, com as notas de implementação das Fases 2 a 9 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8), dados abertos do CNPJ na [§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
+> **Status:** Fase 0, com as notas de implementação das Fases 2 a 10 (WhatsApp pela API na [§6](#6-whatsapp-base-legal-lgpd--opt-in-da-meta), Instagram pela API na [§6.1](#61-instagram-pela-api-fase-8), dados abertos do CNPJ na [§6.2](#62-dados-abertos-do-cnpj-e-prospecção-fase-9), campanhas na [§6.3](#63-campanhas-fase-10)) · **Aviso:** este documento é um guia **técnico e operacional** de privacidade desde a concepção. Ele **não substitui** a análise do jurídico e do encarregado (DPO) da Docline. Os itens da [§20](#20-itens-para-validação-jurídica) precisam de validação antes do go-live.
 > Relacionados: [SECURITY](./SECURITY.md) · [SDR-FLOW §9](./SDR-FLOW.md#9-contactabilidade-estados-independentes) · [INTEGRATIONS](./INTEGRATIONS.md) · [DATABASE §4.9](./DATABASE.md#49-conformidade)
 
 ## Sumário
@@ -156,6 +156,15 @@ Consequências:
 > - **Telefone público não é autorização:** os contatos entram sem marcar WhatsApp e seguem o gate de sempre (base legal, opt-out, horário, limites). Nada é enviado automaticamente a quem foi prospectado.
 > - **Retenção:** os resultados das buscas guardam só o CNPJ, a comparação e a decisão, e são apagados em 30 dias; a cópia é substituída a cada mês (o que saiu da base é apagado).
 
+### 6.3 Campanhas (Fase 10)
+
+> **Implementação (Fase 10).** A campanha **não é disparo em massa e não envia mensagens** ([ARCHITECTURE, ADR-029](./ARCHITECTURE.md#15-registro-de-decisões-adrs)): ela seleciona leads, explica quem fica de fora e libera um número limitado por SDR por dia para a cadência. Cada contato continua sendo feito por uma pessoa (ou, pela API, só com opt-in ou janela aberta) e passa pelo gate.
+>
+> - **Lista Não Contatar e base legal na seleção:** quem está na lista (o lead ou o contato do canal), sem base legal ou sem contato no canal fica **fora**, com o motivo registrado. Na hora da liberação tudo é conferido de novo: quem pediu para sair depois da montagem não entra na cadência.
+> - **Frequência:** por padrão, quem foi contatado nos últimos 30 dias não entra (configurável por campanha); um lead não fica em duas campanhas em andamento ao mesmo tempo; o limite diário por SDR vai até 200 leads.
+> - **Minimização:** `campaign_leads` guarda só ids, a situação, os códigos dos motivos e as datas dos marcos; nenhum dado pessoal em claro. Anonimizar o lead não exige limpeza na campanha (as linhas apontam para o lead anonimizado).
+> - **Teste A/B:** compara abordagens já cadastradas; não usa dado novo do titular.
+
 ---
 
 ## 7. Estados de contato
@@ -240,6 +249,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 | Linhas de importação (`import_rows`) | 30 dias | Excluir |
 | Arquivos de importação | Não armazenados | — |
 | Resultados de prospecção (`prospecting_results`) | 30 dias | Excluir (job `prospecting.purge`, Fase 9); a busca fica, sem os resultados |
+| Leads das campanhas (`campaign_leads`) | Enquanto a campanha existir (sem dado pessoal em claro) | Seguem o lead (apagados junto se o lead for excluído) |
 | Cópia da base aberta do CNPJ (`registry_companies`) | Até a carga do mês seguinte | Atualizar; o que saiu da base (baixado, outra atividade) é apagado |
 | Payloads de webhook | 90 dias | Excluir (job `webhooks.purge`, Fase 7) |
 | Mensagens de números sem lead (`inbound_unmatched`) | 90 dias | Excluir (job `webhooks.purge`, Fase 7; Instagram incluído na Fase 8) |
@@ -269,6 +279,7 @@ Prazos **a validar com o jurídico**; configuráveis em `retention_policies`.
 - **Mesclagem e importação (Fase 3):** anonimizar um lead também apaga os dados dos leads mesclados nele (que continuam `MERGED`), a cópia guardada em `lead_merges`, os campos extras da importação (`custom_fields`) e as linhas de importação ainda não purgadas ligadas a eles. O "Não Contatar este lead" do mesclado passa para o sobrevivente na mesclagem, e um opt-in revogado em qualquer dos dois prevalece.
 - **WhatsApp (Fase 7):** a anonimização também apaga as conversas (número do WhatsApp e nome do perfil), as variáveis dos modelos enviados, os payloads brutos de webhook que citam qualquer telefone do lead (achados pelo HMAC do número, sem guardar o número em claro no índice) e as mensagens de "número sem lead" desses telefones ou já vinculadas ao lead. Mesclar dois leads leva as conversas e o opt-in do mesmo número para o sobrevivente; revogado em qualquer dos dois prevalece.
 - **Instagram (Fase 8):** a anonimização apaga também as conversas (IGSID, @ e nome do perfil), os comentários do lead, as métricas públicas dos @ dele, os payloads de webhook que citam o @ ou o IGSID (achados pelos HMACs) e as mensagens de "quem não é lead" com esse @ ou IGSID. Mesclar leva as conversas e os comentários para o sobrevivente.
+- **Campanhas (Fase 10):** nada a apagar: as linhas da campanha guardam só ids, motivos e datas. O lead anonimizado deixa de ser apto (motivo "arquivado, mesclado ou anonimizado") e não é liberado.
 - **Prospecção (Fase 9):** a anonimização põe o CNPJ na Lista Não Contatar (como o opt-out em todos os canais), e o escritório passa a aparecer na Prospecção como "Na Lista Não Contatar", sem poder ser aprovado. Os resultados de busca apontam para o lead por id (o vínculo cai se ele for excluído) e somem em 30 dias. A cópia da base aberta é dado público da Receita e segue a carga mensal.
 - Backups expiram pelo ciclo de rotação; o procedimento documenta que dados excluídos podem existir em backup até a expiração, sem uso.
 
@@ -325,6 +336,7 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 | Cadastro e importação de leads | Identificação e contato profissional | Contadores, sócios, responsáveis | Legítimo interesse (LIA) / outras por origem | Prospecção B2B | §12 | Hospedagem |
 | Contato e follow-up | Telefone, Instagram, mensagens | Idem | Idem + opt-in de plataforma (API) | Prospecção | §12 | Hospedagem, Meta (Fase 7+) |
 | Base aberta do CNPJ e Prospecção (Fase 9) | Dados cadastrais públicos de escritórios de contabilidade ativos (nomes, CNAE, endereço, telefones e e-mail declarados) | Escritórios; empresário individual só se liberado | Legítimo interesse (dado público, art. 7º, §§ 3º e 4º) | Descobrir e priorizar escritórios para prospecção B2B | Cópia: mês seguinte; resultados: 30 dias | Hospedagem |
+| Campanhas de prospecção (Fase 10) | Ids dos leads, motivos de inelegibilidade, SDR, variante e datas dos marcos | Leads selecionados | Legítimo interesse (a mesma da prospecção) | Organizar o ritmo de contato e medir abordagens | Enquanto a campanha existir | Hospedagem |
 | Geração de mensagens por IA | Contexto mínimo do lead | Idem | Legítimo interesse | Personalização | 12 meses | Provedor de IA |
 | Lista Não Contatar | Hash de identificadores | Quem pediu opt-out | Exercício regular de direitos / legítimo interesse | Respeitar oposição | Indeterminado (hash) | Hospedagem |
 | Atendimento a titulares | Dados do pedido | Titulares | Obrigação legal | Cumprir LGPD | 5 anos (proposta) | Hospedagem |
@@ -381,6 +393,11 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [x] Payloads de webhook e mensagens de números sem lead com purga em 90 dias; anonimização cobre conversas e payloads (Fase 7).
 - [x] Instagram só responde a quem procurou a Docline; comentários só de leads; métricas públicas mínimas; anonimização e purga cobrem conversas, comentários, métricas e payloads (Fase 8).
 - [x] Dados abertos do CNPJ (Fase 9): só o recorte de contabilidade ativo, sem sócios, CPF retirado da razão social, empresário individual fora por padrão, aprovação humana com a Lista Não Contatar conferida, resultados apagados em 30 dias.
+
+**Fase 10 (campanhas)**
+- [x] Campanha não envia: libera para a cadência, com limite diário por SDR; cada contato pelo gate.
+- [x] Lista Não Contatar, base legal, contato no canal e frequência conferidos na montagem e de novo na liberação, com o motivo à vista.
+- [x] Sem dado pessoal em claro nas linhas da campanha.
 - [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API do WhatsApp ou do Instagram).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.
 

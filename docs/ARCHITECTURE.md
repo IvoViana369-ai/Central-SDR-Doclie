@@ -1,6 +1,6 @@
 # Arquitetura — Docline SDR
 
-> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API) e Fase 9 (dados abertos do CNPJ e Prospecção) · **Última revisão:** 2026-10-10
+> **Status:** aprovada; Fases 1 a 6 implementadas (MVP), Fase 7 (WhatsApp Cloud API), Fase 8 (Instagram API), Fase 9 (dados abertos do CNPJ e Prospecção) e Fase 10 (Campanhas) · **Última revisão:** 2026-10-10
 > Documentos relacionados: [DATABASE](./DATABASE.md) · [MVP](./MVP.md) · [ROADMAP](./ROADMAP.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [SECURITY](./SECURITY.md) · [LGPD](./LGPD.md) · [SDR-FLOW](./SDR-FLOW.md) · [AI-SDR](./AI-SDR.md)
 
 ## Sumário
@@ -239,7 +239,7 @@ Regras (validadas por lint com `eslint-plugin-boundaries` ou `dependency-cruiser
 | `ai-sdr` | Geração de abordagens, classificação de respostas, insights | ai_generations, ai_knowledge_items | 6 |
 | `opportunities` | Qualificação, transferência ao Comercial, conversão | opportunities | 5–6 |
 | `prospecting` | Carga mensal do recorte de contabilidade da base aberta do CNPJ, buscas com comparação com a base, aprovação humana de novos leads, potencial por cidade e enriquecimento pelo CNPJ | registry_ingestions, registry_companies, prospecting_searches, prospecting_results | 9 |
-| `campaigns` | Seleção por filtros, elegibilidade, acompanhamento | campaigns, campaign_leads | 10 |
+| `campaigns` | Retrato de um filtro de leads, elegibilidade com motivos, distribuição entre SDRs, liberação diária para a cadência (nunca envia), funil por janela de atribuição e teste A/B de abordagens | campaigns, campaign_sdrs, campaign_variants, campaign_leads | 10 |
 | `analytics` | Indicadores, funis, rollups, insights | daily_metrics, insights | 6 (básico) / 11 |
 
 Cada módulo segue o mesmo layout:
@@ -276,7 +276,7 @@ Um único serviço, `ContactabilityService.check(lead, channel, mode)`, responde
 2. pelo `ai-sdr`, antes de gerar mensagem;
 3. pelo `messaging`, antes de registrar ou enviar;
 4. pelos **adaptadores de envio** de novo, como defesa em profundidade;
-5. pelo `campaigns`, para calcular elegibilidade.
+5. pelo `campaigns`, para calcular elegibilidade (Fase 10): o gate devolve, junto com os textos, **códigos de motivo** (`GateReasonCode`), que a campanha traduz nos seus motivos de inelegibilidade. A campanha usa o modo assistido e ignora o horário (vale na hora de cada contato); a liberação para a cadência confere tudo de novo.
 
 ### 7.4 Configuração de negócio versionada
 
@@ -511,7 +511,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `GET /analytics/insights` | Insights da carteira | 11+ |
 | `GET/POST /prospecting/searches`, `GET /prospecting/searches/{id}`, `POST /prospecting/searches/{id}/approve\|reject`, `GET /prospecting/potential` | Busca na base aberta do CNPJ, comparação com a base, aprovação e recusa, potencial por cidade | 9 |
 | `GET /registry`, `PUT /registry/settings`, `POST /registry/ingestions`, `GET/POST /leads/{id}/registry` | Carga da base aberta (ADMIN) e enriquecimento do lead pelo CNPJ | 9 |
-| `GET/POST/PATCH /campaigns`, `POST /campaigns/{id}/build`, `POST /campaigns/{id}/activate\|pause`, `GET /campaigns/{id}/metrics` | Campanhas | 10 |
+| `GET/POST /campaigns`, `GET/PATCH /campaigns/{id}`, `POST /campaigns/{id}/actions` (`build`, `activate`, `pause`, `resume`, `complete`, `archive`), `GET /campaigns/{id}/leads`, `POST /campaigns/{id}/leads/{leadId}/remove` | Campanhas (`campaign.manage`): o detalhe traz retrato, motivos, distribuição por SDR, funil e A/B | 10 |
+| `GET /leads/{id}/campaigns` | Campanhas do lead e a abordagem sorteada (escopo do lead) | 10 |
 | `POST /exports` | Exportação auditada (ADMIN/GESTOR); síncrona no MVP, ver nota acima | 2 |
 | `GET /integrations`, `POST /integrations/{provider}/test` | Status e teste de conexões | 7+ |
 
@@ -548,6 +549,8 @@ Grupos `all` e `any` podem ser aninhados. O servidor compila a DSL para `where` 
 | `registry.check` | Diário (06:31 UTC, 03:31 em Fortaleza) e "Rodar a carga agora" | Confere se a Receita publicou um mês novo **e completo**; abre a carga (uma por vez) ou retoma a interrompida; carga parada há mais de 72 h é dada como falha | 9 |
 | `registry.ingest` | Aberto pelo `registry.check` | Carga do mês em streaming: estabelecimentos ativos de contabilidade, depois razão social, natureza e porte só das raízes guardadas; apaga o que saiu da base (menos se a queda passar de 30%: avisa os ADMINs). Retoma do arquivo em que parou; até 3 novas tentativas se o servidor da Receita cair | 9 |
 | `prospecting.purge` | Diário (04:27 UTC) | Apaga os resultados das buscas com mais de 30 dias (a busca fica no histórico) | 9 |
+| `campaign.build` | "Montar" na campanha (na mesma transação) | Congela o filtro (até 5.000 leads), avalia a elegibilidade de cada lead (gate do canal em lotes de 250 + regras da campanha), distribui os aptos entre os SDRs e sorteia as variantes; grava tudo de uma vez se a campanha não mudou no meio. Falha volta ao rascunho com o erro | 10 |
+| `campaign.tick` | De hora em hora (minuto 11) e logo após ativar ou retomar | Conclui as campanhas vencidas; libera até o limite diário de cada SDR (dias de expediente das regras de contato, fuso do SDR), um lead por transação, com trava por campanha e elegibilidade conferida de novo; atualiza os marcos do funil. **Nunca envia mensagem** (ADR-029) | 10 |
 | `analytics.rollup-daily` | Diário | Consolida `daily_metrics` | 11 |
 
 Política padrão: até 5 tentativas com backoff exponencial e jitter; depois vai para *dead letter* com alerta. Jobs de varredura usam *singleton* (uma execução por vez).
@@ -746,3 +749,5 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 | 026 | **Business Discovery mínimo**: job de hora em hora com teto configurável, seleção em SQL (nunca consultados ou com o @ trocado primeiro, depois os vencidos), cada @ consultado uma vez, só seguidores, número de publicações e data da última; o score usa a última publicação conhecida do @ atual; leads com opt-out ou bloqueados não são consultados (Fase 8) | Os limites de chamadas da Meta são por conta e compartilhados com as mensagens; o critério "Instagram ativo" só precisa da data; minimização (LGPD) | Consultar na criação do lead; guardar mídias e legendas; consulta sem teto | Métricas de um @ antigo não valem; falha não apaga o que se sabia; o critério continua inativo no seed até o ADMIN ligar |
 | 027 | **Cópia local filtrada da base aberta do CNPJ** (`registry_companies`), carregada todo mês pelos arquivos oficiais da Receita em streaming, separada de `leads`; a porta (`CompanyRegistrySource`) só entrega arquivos e o core lê o layout (Fase 9) | A busca roda no nosso banco (sem chamada externa por busca, sem limite de terceiros, comparação em SQL com a base); a Receita publica arquivos, não uma API de busca; ler o layout no core deixa a base simulada no mesmo caminho | API de terceiros por consulta (BrasilAPI e afins) para buscar; guardar os arquivos completos | Carga longa e retomável no worker; o mês só entra com a publicação completa; queda grande não apaga nada; formato e endereço conferidos na ativação |
 | 028 | **Prospecção sem cópia dos dados nos resultados e com aprovação humana que refaz a comparação** (Fase 9) | Os resultados guardam só o CNPJ, a comparação e a decisão (30 dias); os dados vêm da cópia da base na leitura. Na aprovação, a base pode ter mudado: compara de novo, completa o existente e recusa quem entrou na Lista Não Contatar. A decisão é reservada por atualização condicional, como no envio pela API | Criar leads direto da busca; guardar os dados no resultado | Uma transação por aprovação (até 100 por pedido); o "recusado antes" vale enquanto o resultado existir (30 dias) |
+| 029 | **Campanha não envia mensagens**: seleciona (retrato congelado do filtro), avalia a elegibilidade com motivos, distribui entre os SDRs e **libera para a cadência** até um limite diário por SDR; cada contato continua sendo do SDR, pelo gate de sempre (assistido; API só com opt-in ou janela aberta). Única mudança nas tabelas existentes: `campaign_id` opcional em inscrições e mensagens (Fase 10) | O requisito proíbe disparos indiscriminados e spam; o gate, a cadência e a Minha Fila já resolvem horário, frequência, opt-out e registro; liberar em lotes diários dá ritmo sem criar outro caminho de envio | Disparo em massa pela API; enviar o passo de cadência `API_MESSAGE` sozinho (F7-09) | O lote do dia vira tarefas na Minha Fila; o limite diário é de leads liberados, não de mensagens; conferir de novo na hora da liberação evita contatar quem entrou na Lista Não Contatar depois da montagem; campanha concluída não para as cadências em andamento |
+| 030 | **Funil por janela de atribuição e A/B por variante sorteada** (Fase 10) | Um marco (contato, entrega, resposta, interesse, oportunidade, conversão, opt-out) conta para a campanha se acontece até 90 dias depois da liberação ou até o lead ser liberado por outra campanha, recalculado por SQL idempotente. O A/B compara a **variante sorteada** (não a abordagem que o SDR acabou usando), alternada dentro da lista de cada SDR, só com 30 contatados por variante e com Bonferroni; nunca declara vencedora | Atribuir pela abordagem gravada na mensagem; ligar a atribuição à data de conclusão; declarar vencedora por p-valor | Mensagens da janela ganham o `campaign_id`; a comparação aponta "diferença provável" e a decisão é do gestor; a Fase 11 (Analytics) pode reaproveitar a atribuição |

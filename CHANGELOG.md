@@ -4,6 +4,34 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.10.0] — Fase 10: Campanhas — 2026-10-10
+
+Campanhas de prospecção que **organizam quem a equipe aborda e em que ritmo**, sem criar um caminho de envio: a campanha congela uma seleção de leads, mostra quem fica de fora e por quê, distribui os aptos entre os SDRs e **libera um lote diário para a cadência**. **A campanha não envia mensagens** (ADR 029): o SDR recebe as tarefas na Minha Fila, com a abordagem sugerida, e cada contato passa pelo gate de sempre. F10-01 a F10-05 entregues. Aceite coberto pela jornada E2E `fase10.spec.ts` e pelas suítes das campanhas. Totais: 453 testes unitários, 225 de integração e 53 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `campaigns` (seleção, canal, cadência, responsável, limite diário por SDR, frequência, datas, retrato e erro da montagem, lock otimista), `campaign_sdrs`, `campaign_variants` (abordagens em teste, letra e abordagem únicas) e `campaign_leads` (aptidão com os códigos dos motivos, situação, SDR, variante, prioridade, liberação e marcos do funil). `campaign_id` opcional em `cadence_enrollments` e `messages`; estratégia de atribuição `CAMPAIGN`.
+- **Campanhas (F10-01):** rascunho a partir do **filtro da lista de leads** ("Campanha com este filtro"), de uma visão salva ou de todos os ativos, com contagem prévia; responsável, SDRs, canal, cadência, limite diário (até 200 por SDR), frequência mínima (padrão 30 dias), datas e até 4 abordagens. Situações rascunho → montando → pronta → ativa ⇄ pausada → concluída → arquivada; a estrutura só muda antes de ativar (numa campanha pronta, mudar descarta o retrato). Nova permissão `campaign.manage` (ADMIN e GESTOR).
+- **Montagem e elegibilidade (F10-02):** job `campaign.build` congela a seleção (até 5.000 leads) e avalia cada lead pelo gate do canal (modo assistido, sem o horário) e pelas regras da campanha: arquivado/mesclado/anonimizado, Lista Não Contatar (lead ou contato do canal), sem base legal, sem contato no canal, ganho ou perdido, oportunidade aberta, em cadência, em outra campanha em andamento, contato recente e responsável fora da campanha. Os motivos aparecem na tela, com contagem e filtro. Falha volta ao rascunho com o erro à vista e na auditoria.
+- **Distribuição e liberação diária (F10-03):** lead de um SDR da campanha fica com ele; os do pool vão para quem tem menos, do maior score para o menor; nenhum lead é tomado de outra pessoa. O job `campaign.tick` (de hora em hora e logo após ativar ou retomar) libera até o limite de cada SDR nos dias de expediente, no fuso do SDR, **conferindo tudo de novo** (quem entrou na Lista Não Contatar depois da montagem fica "não liberado"); liberar = o lead passa a ser do SDR, entra na cadência com a campanha e o primeiro passo vira tarefa. Trava por campanha contra duas rodadas simultâneas. A data de fim conclui a campanha sozinha.
+- **Funil (F10-04):** selecionados → aptos → liberados → contatados (mensagem enviada ou ligação atendida) → entregues → responderam → interessados → oportunidades → convertidos, e os que pediram para sair; cada taxa com a sua base. Marcos recalculados por SQL idempotente numa **janela de 90 dias da liberação** (ou até o lead entrar em outra campanha) (ADR 030); as mensagens da janela ganham o `campaign_id`. Distribuição por SDR com "liberados hoje".
+- **Teste A/B (F10-05):** variantes alternadas dentro da lista de cada SDR; taxas de resposta, interesse, oportunidade e saída por variante; comparação só com **30 contatados por variante**, teste de duas proporções com Bonferroni, e **sem vencedora automática** ("diferença provável" para o gestor decidir).
+- **Telas:** `/campanhas` (lista e arquivadas), `/campanhas/nova`, `/campanhas/{id}` (configuração, retrato com motivos, distribuição, funil, A/B e a lista de leads com filtros e "Retirar") e `/campanhas/{id}/editar`. Na **Minha Fila** e na **ficha**, a campanha e a abordagem sugerida; no "Contatar", a abordagem sorteada já vem escolhida para a IA. Evento "Liberado por uma campanha" na timeline.
+- **API v1:** `/campaigns` (+ `{id}`, `actions`, `leads`, `leads/{leadId}/remove`) e `/leads/{id}/campaigns`.
+
+### Alterado
+
+- **Gate de contactabilidade:** além dos textos, devolve os códigos dos motivos (`GateReasonCode`), usados pela elegibilidade das campanhas; o comportamento não mudou.
+- **Cadência:** a inscrição (`enrollInCadence`) foi separada do caso de uso `enrollLead`, com as mesmas regras, para a liberação das campanhas informar a campanha.
+- **Menu:** Campanhas liberada (antes "Em breve"), para quem tem `campaign.manage`.
+- **E2E:** as jornadas da Fase 10 em diante rodam num projeto do Playwright que depende das fases 1 a 9 (na ordem alfabética, "fase10" viria antes de "fase2", que conta os leads da base).
+- **Documentação:** ARCHITECTURE (módulo, gate, endpoints, jobs e ADRs 029 e 030), SDR-FLOW (§10.1), LGPD (§6.3, retenção, anonimização, registro de operações e checklist), SECURITY (matriz e revisão da Fase 10), DATABASE (§4.10), ROADMAP, GO-LIVE (§14, roteiro C1–C8) e README.
+
+### Observações
+
+- Feriados não seguram a liberação (só os dias da semana das regras de contato); as tarefas da cadência vencem no próximo dia útil do lead.
+- O aviso de descontinuação do driver `pg` sobre consultas paralelas numa transação (já registrado na 0.9.0) continua; não é desta fase.
+
 ## [0.9.0] — Fase 9: Prospecção pela base aberta do CNPJ — 2026-10-10
 
 Descoberta de escritórios de contabilidade na **base aberta do CNPJ da Receita Federal** (só os arquivos oficiais, sem scraping), com comparação com a base e **aprovação humana**: nada vira lead sozinho. **A base real fica desligada em produção** (`COMPANY_REGISTRY_PROVIDER=disabled`); a ativação segue [INTEGRATIONS §16.3](docs/INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj) e o marco M6 do [GO-LIVE](docs/GO-LIVE.md#13-base-aberta-do-cnpj-e-prospecção-marco-m6). F9-01, F9-02 e F9-05 entregues; F9-04 em parte (pelo CNPJ, na cópia local; CEP e CNPJ fora do recorte ficam para depois); **F9-03 (Google Places) adiada** até o parecer jurídico sobre os termos da Google. Aceite coberto pela jornada E2E `fase9.spec.ts` e pelas suítes da Prospecção. Totais: 428 testes unitários, 215 de integração e 51 jornadas E2E.

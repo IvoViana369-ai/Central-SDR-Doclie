@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9 e Campanhas na Fase 10, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -415,6 +415,13 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - Arquivo hostil: ZIP conferido no cabeçalho (só deflate, sem senha), limites de tamanho comprimido (8 GiB) e expandido (32 GiB) contra "zip bomb", tempo limite para começar e para download parado; linha fora do layout é contada e ignorada, nunca interpretada. Gravação em lotes com SQL parametrizado (`Prisma.sql`).
 - Busca com SQL parametrizado (inclusive o `LIKE` do nome, com curingas escapados) e quantidade limitada (até 500); aprovação limitada a 100 por pedido, cada uma na sua transação, com a decisão reservada por atualização condicional (duas pessoas não criam dois leads).
 - Testes: adaptador contra servidor local (mês incompleto, corrompido, armazenado sem compressão, grande demais, download parado); carga (retomada, mês novo, queda suspeita, falhas); Prospecção (filtros, comparação, Lista Não Contatar na busca e na aprovação, aprovação simultânea, recusa, retenção, permissões) e E2E com a base simulada.
+
+**Revisão de segurança da Fase 10 (Campanhas)**
+- Rotas novas da API v1 (`/campaigns*`) passam pelo `apiHandler` e exigem `campaign.manage` (ADMIN e GESTOR); `/leads/:id/campaigns` usa o escopo do lead (o SDR só vê os seus). Nenhuma rota pública nova.
+- A campanha **não tem caminho de envio** (ADR 029): libera para a cadência, e cada contato passa pelo gate e pelo modo de sempre. O limite diário por SDR é validado (até 200) e conferido de novo dentro da transação de cada liberação, com trava por campanha (`pg_advisory_xact_lock`), então duas rodadas simultâneas não passam da cota.
+- O filtro da campanha é o mesmo da lista de leads, validado ao salvar (`compileLeadSelection`) e compilado de novo na montagem, com o ator de quem criou; a seleção é limitada a 5.000 leads. As consultas de marcos e contagens usam SQL parametrizado (`Prisma.sql`).
+- Edição com lock otimista; mudar a estrutura depois de ativar é recusado; toda ação (criar, alterar, montar, ativar, pausar, retomar, concluir, arquivar, retirar lead) e cada liberação são auditadas.
+- Testes: permissões (SDR recebe 403 na API e "Acesso restrito" na tela), validação de SDRs, abordagens, datas e filtro, montagem com motivos, liberação com cota, dia útil e nova conferência (Lista Não Contatar depois da montagem), conclusão pela data, funil e E2E.
 
 **Fases 7+ — Integrações**
 - [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).
