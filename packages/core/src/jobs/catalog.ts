@@ -274,6 +274,18 @@ export const JOBS = {
     retryDelaySeconds: 900,
     expireInSeconds: 1800,
   },
+  /**
+   * Distribuição automática do pool (de hora em hora, quando ligada, e logo
+   * depois de ligar): território ou rodízio, respeitando ausência e limite de
+   * leads ativos. Só atribui lead sem responsável.
+   */
+  leadsAutoAssign: {
+    name: 'leads.auto-assign',
+    cron: '41 * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 900,
+  },
   /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
   webhooksPurge: {
     name: 'webhooks.purge',

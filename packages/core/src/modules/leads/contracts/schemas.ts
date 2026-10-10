@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AUTO_ASSIGN_STRATEGIES } from '../domain/auto-assign';
 
 /**
  * Schemas de entrada do módulo de leads (compartilhados com a API e a UI).
@@ -260,4 +261,28 @@ export const anonymizeLeadInput = z.object({
   dataSubjectRequestId: id.nullish(),
   /** Mantém os identificadores na Lista Não Contatar (padrão: sim). */
   suppress: z.boolean().default(true),
+});
+
+// --- Distribuição automática (F11-05) ----------------------------------------
+
+export const autoAssignSettingsInput = z.object({
+  enabled: z.boolean(),
+  strategy: z.enum(AUTO_ASSIGN_STRATEGIES),
+  fallbackToAll: z.boolean(),
+  defaultCapacity: z.number().int().min(1).max(5000),
+  includeExistingPool: z.boolean(),
+});
+
+/** Disponibilidade de uma pessoa para a distribuição (só os campos enviados mudam). */
+export const userAvailabilityInput = z.object({
+  userId: id,
+  autoAssign: z.boolean().optional(),
+  /** Limite próprio de leads ativos; nulo usa o padrão da distribuição. */
+  maxActiveLeads: z.number().int().min(1).max(5000).nullable().optional(),
+  /** Último dia de ausência (AAAA-MM-DD), inclusive; nulo encerra a ausência. */
+  awayUntil: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use o formato AAAA-MM-DD.')
+    .nullable()
+    .optional(),
 });

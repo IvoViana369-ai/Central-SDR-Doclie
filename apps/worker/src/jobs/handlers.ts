@@ -1,6 +1,7 @@
 import {
   JOBS,
   runAnalyticsRollup,
+  runAutoAssign,
   runCadenceTick,
   runInsightsJob,
   runCampaignBuild,
@@ -91,5 +92,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.campaignTick.name]: async (data) => runCampaignTick(deps, data ?? {}),
     [JOBS.analyticsRollup.name]: async (data) => runAnalyticsRollup(deps, data ?? {}),
     [JOBS.analyticsInsights.name]: async () => runInsightsJob(deps),
+    [JOBS.leadsAutoAssign.name]: async () => runAutoAssign(deps),
   };
 }

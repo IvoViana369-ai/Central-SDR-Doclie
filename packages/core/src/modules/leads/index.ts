@@ -2,6 +2,7 @@
 // observações, responsável, timeline e histórico. Escopo por perfil em toda consulta.
 export * from './contracts/schemas';
 export * from './domain/lead';
+export * from './domain/auto-assign';
 export { LEAD_EVENTS, LEAD_EVENT_LABELS, type LeadEventType } from './domain/events';
 export { leadScopeWhere, requireEditableLead, requireLeadInScope } from './infra/scope';
 export { auditLead, recordLeadEvent, touchLead } from './infra/events';
@@ -56,3 +57,12 @@ export { countLeads, countSelection, searchLeads, selectionWhere } from './appli
 export { BULK_LIMIT, bulkLeads } from './application/bulk';
 export { EXPORT_LIMIT, EXPORTS_PER_DAY, exportLeads } from './application/export';
 export { deleteView, listSavedViews, saveView, updateView } from './application/saved-views';
+export {
+  AUTO_ASSIGN_LAST_RUN_KEY,
+  getAutoAssignSettings,
+  requestAutoAssign,
+  runAutoAssign,
+  updateAutoAssignSettings,
+  updateUserAvailability,
+  type AutoAssignRun,
+} from './application/auto-assign';
