@@ -16,6 +16,7 @@ export function PeriodFilter({
   now,
   people,
   personId,
+  extra = {},
 }: {
   basePath: string;
   from: string;
@@ -25,9 +26,11 @@ export function PeriodFilter({
   /** Só para quem vê a equipe. */
   people?: { id: string; name: string }[];
   personId?: string | null;
+  /** Outros filtros da tela (ex.: o recorte), mantidos ao trocar o período. */
+  extra?: Record<string, string>;
 }) {
   const href = (range: { from: string; to: string }) => {
-    const params = new URLSearchParams({ de: range.from, ate: range.to });
+    const params = new URLSearchParams({ ...extra, de: range.from, ate: range.to });
     if (personId) params.set('pessoa', personId);
     return `${basePath}?${params}`;
   };
@@ -51,6 +54,9 @@ export function PeriodFilter({
         ))}
       </nav>
       <form method="get" action={basePath} className="flex flex-wrap items-end gap-2">
+        {Object.entries(extra).map(([name, value]) => (
+          <input key={name} type="hidden" name={name} value={value} />
+        ))}
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           De
           <input

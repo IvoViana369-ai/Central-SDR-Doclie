@@ -2,6 +2,7 @@ import { AI_STATUS_LABELS, getAiUsage, roleHasPermission, ValidationError } from
 import type { Metadata } from 'next';
 import { AccessDenied } from '@/components/access-denied';
 import { fmtInt, fmtPct } from '@/components/analytics/format';
+import { ReportTabs } from '@/components/analytics/report-tabs';
 import { PageHeader } from '@/components/page-header';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -63,6 +64,7 @@ export default async function AiUsagePage({
         title="Uso e custos da IA"
         description={`${usage.month} · provedor ${usage.provider} (${usage.models.generation}). Custos estimados pela tabela de preços; a fatura do fornecedor é a fonte oficial.`}
       />
+      <ReportTabs active="/relatorios/ia" />
       {notice ? (
         <Alert variant="error" className="mb-4">
           {notice}

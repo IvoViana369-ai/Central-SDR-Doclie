@@ -12,6 +12,7 @@ import {
   Radar,
   Settings,
   ShieldCheck,
+  Shuffle,
   SquareKanban,
   Upload,
   Users,
@@ -134,7 +135,8 @@ export const NAVIGATION: NavGroup[] = [
         icon: ChartColumn,
         phase: 6,
         permission: 'report.read',
-        description: 'Funil, conversão e desempenho, com exportação.',
+        description:
+          'Funil, conversão por recorte, desempenho por SDR, evolução mensal e canais, com exportação.',
       },
       {
         label: 'Equipe',
@@ -143,6 +145,14 @@ export const NAVIGATION: NavGroup[] = [
         phase: 1,
         permission: 'user.read',
         description: 'Usuários, perfis e convites.',
+      },
+      {
+        label: 'Distribuição',
+        href: '/equipe/distribuicao',
+        icon: Shuffle,
+        phase: 11,
+        permission: 'lead.assign',
+        description: 'Distribuição automática do pool e disponibilidade dos SDRs.',
       },
       {
         label: 'Conformidade',
@@ -173,7 +183,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 10;
+export const CURRENT_PHASE = 11;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

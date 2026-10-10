@@ -241,6 +241,14 @@ export const getAutoAssignSettings = defineUseCase({
       select: { id: true, name: true },
     });
     const nameBy = new Map(names.map((n) => [n.id, n.name]));
+    const cityCodes = [
+      ...new Set(sdrs.flatMap((s) => s.territories.flatMap((t) => t.municipalityCode ?? []))),
+    ];
+    const cities = await ctx.tx.municipality.findMany({
+      where: { ibgeCode: { in: cityCodes } },
+      select: { ibgeCode: true, name: true, uf: true },
+    });
+    const cityBy = new Map(cities.map((c) => [c.ibgeCode, `${c.name}/${c.uf}`]));
     const today = todayIso(ctx.now);
     return {
       settings,
@@ -249,6 +257,11 @@ export const getAutoAssignSettings = defineUseCase({
         .map((s) => ({
           ...s,
           name: nameBy.get(s.userId) ?? '',
+          territoryLabels: s.territories.map((t) =>
+            t.municipalityCode
+              ? (cityBy.get(t.municipalityCode) ?? String(t.municipalityCode))
+              : `${t.stateUf} (UF inteira)`,
+          ),
           capacity: capacityOf(s, settings.defaultCapacity),
           availableToday: isAvailable(s, today),
         }))

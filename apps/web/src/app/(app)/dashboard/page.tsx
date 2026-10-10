@@ -1,4 +1,4 @@
-import { getDashboard } from '@docline/core';
+import { getDashboard, getInsights } from '@docline/core';
 import { matchPreset } from '@docline/core/analytics-domain';
 import { ArrowRight } from 'lucide-react';
 import type { Metadata } from 'next';
@@ -7,6 +7,7 @@ import { BarList } from '@/components/analytics/bar-list';
 import { BreakdownTable } from '@/components/analytics/breakdown-table';
 import { DailyChart } from '@/components/analytics/daily-chart';
 import { fmtDate } from '@/components/analytics/format';
+import { InsightsCard } from '@/components/analytics/insights-card';
 import { KpiGrid } from '@/components/analytics/kpi-grid';
 import { PeriodFilter } from '@/components/analytics/period-filter';
 import { PageHeader } from '@/components/page-header';
@@ -18,7 +19,10 @@ import { getPageContext } from '@/server/page-context';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
-/** Dashboard (M16): indicadores do período, evolução diária, funis e quebras. */
+/**
+ * Dashboard (M16): insights da carteira (Fase 11), indicadores do período,
+ * evolução diária, funis e quebras.
+ */
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -31,6 +35,14 @@ export default async function DashboardPage({
     analyticsPeople(user, deps, meta),
   ]);
   const { scope, kpis, cohort } = data;
+  // Insights: da equipe (ou da pessoa filtrada) para a gestão; da própria carteira para o SDR.
+  const personId = scope.canSeeTeam ? (scope.person?.id ?? null) : null;
+  const insights = await getInsights(deps, user.actor, { userId: personId }, meta);
+  const refreshScope = insights.canRefresh
+    ? personId
+      ? { scope: 'USER' as const, userId: personId }
+      : { scope: 'TEAM' as const }
+    : null;
   const now = deps.clock.now();
   const who = scope.canSeeTeam
     ? scope.person
@@ -58,6 +70,9 @@ export default async function DashboardPage({
         <Alert variant="error" className="mb-4">
           {notice}
         </Alert>
+      ) : null}
+      {insights.items.length > 0 || refreshScope ? (
+        <InsightsCard view={insights} refreshScope={refreshScope} />
       ) : null}
       <PeriodFilter
         basePath="/dashboard"

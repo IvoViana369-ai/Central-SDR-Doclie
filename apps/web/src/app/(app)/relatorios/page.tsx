@@ -12,14 +12,14 @@ import {
   METRICS,
   type MetricKey,
 } from '@docline/core/analytics-domain';
-import { Download, Sparkles } from 'lucide-react';
+import { Download } from 'lucide-react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AccessDenied } from '@/components/access-denied';
 import { BreakdownTable } from '@/components/analytics/breakdown-table';
 import { fmtDate, fmtHours, fmtInt, fmtPct, plural } from '@/components/analytics/format';
 import { PeriodFilter } from '@/components/analytics/period-filter';
+import { ReportTabs } from '@/components/analytics/report-tabs';
 import { PageHeader } from '@/components/page-header';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -68,7 +68,8 @@ function Section({
 
 /**
  * Relatórios básicos (M16, F6-09): os mesmos números do dashboard, completos,
- * com exportação CSV auditada. ADMIN e GESTOR.
+ * com exportação CSV auditada. ADMIN e GESTOR. As abas levam aos relatórios
+ * da Fase 11 (conversão por recorte, por SDR, evolução mensal e canais).
  */
 export default async function ReportsPage({
   searchParams,
@@ -124,14 +125,8 @@ export default async function ReportsPage({
       <PageHeader
         title="Relatórios"
         description={`${scope.person ? `Números de ${scope.person.name}` : 'Toda a equipe'} · ${fmtDate(scope.from)} a ${fmtDate(scope.to)}. As exportações ficam registradas na auditoria.`}
-        actions={
-          <Button asChild variant="outline">
-            <Link href="/relatorios/ia">
-              <Sparkles aria-hidden /> Uso e custos da IA
-            </Link>
-          </Button>
-        }
       />
+      <ReportTabs active="/relatorios" period={scope} />
       {notice ? (
         <Alert variant="error" className="mb-4">
           {notice}

@@ -257,7 +257,7 @@ export const JOBS = {
    */
   analyticsRollup: {
     name: 'analytics.rollup',
-    cron: '23 * * * *',
+    cron: '53 * * * *',
     retryLimit: 1,
     retryDelaySeconds: 300,
     expireInSeconds: 1800,

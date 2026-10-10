@@ -149,6 +149,12 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'campaign.archive': 'Campanha arquivada',
   'campaign.release': 'Lead liberado pela campanha para a cadência',
   'campaign.lead_removed': 'Lead retirado da campanha',
+  'analytics.rollup_requested': 'Recálculo dos indicadores pedido',
+  'insight.generate': 'Insights da carteira gerados',
+  'insight.feedback': 'Insight avaliado',
+  'leads.auto_assign_update': 'Distribuição automática alterada',
+  'leads.auto_assign_requested': 'Distribuição automática pedida',
+  'user.availability_update': 'Disponibilidade para a distribuição alterada',
 };
 
 export function auditActionLabel(action: string): string {
@@ -156,6 +162,14 @@ export function auditActionLabel(action: string): string {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  enabled: 'Ligada',
+  fallbackToAll: 'Rodízio geral sem território',
+  defaultCapacity: 'Limite padrão de leads ativos',
+  includeExistingPool: 'Inclui o pool antigo',
+  enabledAt: 'Ligada desde',
+  autoAssign: 'Participa da distribuição',
+  maxActiveLeads: 'Limite próprio de leads ativos',
+  awayUntil: 'Ausente até',
   role: 'Perfil',
   status: 'Status',
   required: 'Permissão exigida',

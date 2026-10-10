@@ -9,6 +9,7 @@ import {
   MapPin,
   MessageCircle,
   Sparkles,
+  Shuffle,
   SquareKanban,
   type LucideIcon,
 } from 'lucide-react';
@@ -63,6 +64,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'IA de prospecção',
     description: 'Base de conhecimento, abordagens e regras dos rascunhos.',
     Icon: Sparkles,
+  },
+  {
+    href: '/equipe/distribuicao',
+    title: 'Distribuição automática',
+    description: 'Leads do pool por território ou rodízio, limite e ausência de cada SDR.',
+    Icon: Shuffle,
   },
   {
     href: '/configuracoes/whatsapp',
