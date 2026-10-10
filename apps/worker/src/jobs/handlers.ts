@@ -1,5 +1,6 @@
 import {
   JOBS,
+  runAnalyticsRollup,
   runCadenceTick,
   runCampaignBuild,
   runCampaignTick,
@@ -87,5 +88,6 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
     [JOBS.prospectingPurge.name]: async () => runProspectingPurge(deps),
     [JOBS.campaignBuild.name]: async (data) => runCampaignBuild(deps, data),
     [JOBS.campaignTick.name]: async (data) => runCampaignTick(deps, data ?? {}),
+    [JOBS.analyticsRollup.name]: async (data) => runAnalyticsRollup(deps, data ?? {}),
   };
 }

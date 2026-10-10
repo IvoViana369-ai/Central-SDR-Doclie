@@ -249,6 +249,19 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 1800,
   },
+  /**
+   * Indicadores (de hora em hora; às 03h de Fortaleza, os últimos 7 dias):
+   * atualiza os fatos por lead e recalcula `daily_metrics` de hoje e ontem,
+   * cobrindo os dias sem execução. Dados opcionais `{ from, to }` recalculam
+   * um período (até 366 dias).
+   */
+  analyticsRollup: {
+    name: 'analytics.rollup',
+    cron: '23 * * * *',
+    retryLimit: 1,
+    retryDelaySeconds: 300,
+    expireInSeconds: 1800,
+  },
   /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
   webhooksPurge: {
     name: 'webhooks.purge',

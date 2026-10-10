@@ -19,10 +19,15 @@ import {
   FakeAiProvider,
   getAiUsage,
   getAnalyticsBreakdown,
+  getChannelReport,
+  getConversionReport,
   getDashboard,
   getLead,
+  getMonthlyEvolution,
   getMyQueue,
   getPipelineBoard,
+  getSdrPerformance,
+  runAnalyticsRollup,
   searchLeads,
   systemClock,
   exportAnalyticsReport,
@@ -315,9 +320,40 @@ try {
   );
   results.push(await measure('Uso e custos da IA (mês)', () => getAiUsage(deps, manager, {})));
 
+  // Fase 11: a 1ª execução do rollup preenche todo o histórico; depois, de hora em hora.
+  const backfillStart = process.hrtime.bigint();
+  const backfill = await runAnalyticsRollup(deps);
+  const backfillMs = elapsed(backfillStart);
+  results.push(
+    await measure('Rollup de hora em hora (fatos + dias recentes)', () => runAnalyticsRollup(deps)),
+  );
+  results.push(
+    await measure('Conversão por cidade, 366 dias (rollup)', () =>
+      getConversionReport(deps, manager, { from: daysAgo(365), to: today, dimension: 'city' }),
+    ),
+  );
+  results.push(
+    await measure('Desempenho por SDR, 90 dias (rollup)', () =>
+      getSdrPerformance(deps, manager, { from: daysAgo(89), to: today }),
+    ),
+  );
+  results.push(
+    await measure('Evolução mensal, 12 meses (rollup)', () =>
+      getMonthlyEvolution(deps, manager, {}),
+    ),
+  );
+  results.push(
+    await measure('Canais, 90 dias (rollup)', () =>
+      getChannelReport(deps, manager, { from: daysAgo(89), to: today }),
+    ),
+  );
+
   const c = counts[0]!;
   console.log(
     `\n${c.leads} leads · ${c.messages} mensagens · ${c.opportunities} oportunidades · ${RUNS} medições por item\n`,
+  );
+  console.log(
+    `1ª execução do rollup: ${backfill.days} dias (${backfill.from} a ${backfill.to}) em ${(backfillMs / 1000).toFixed(1)} s.\n`,
   );
   console.log('| Leitura | mín. (ms) | mediana (ms) | máx. (ms) |');
   console.log('|---|---:|---:|---:|');
