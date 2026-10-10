@@ -59,6 +59,12 @@ model User {
   lastLoginAt      DateTime?  @map("last_login_at") @db.Timestamptz(3)
   /// Verificação em duas etapas (TOTP) ativa (Better Auth, plugin two-factor).
   twoFactorEnabled Boolean    @default(false) @map("two_factor_enabled")
+  /// Fase 11: entra na distribuição automática (só SDRs ativos).
+  autoAssign       Boolean    @default(true) @map("auto_assign")
+  /// Teto de leads ativos na carteira (nulo = o padrão da configuração).
+  maxActiveLeads   Int?       @map("max_active_leads")
+  /// Ausente até este dia (inclusive): não recebe leads da distribuição automática.
+  awayUntil        DateTime?  @map("away_until") @db.Date
   createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -78,6 +84,8 @@ model User {
   assignmentsMade LeadAssignment[] @relation("AssignmentBy")
   territories     UserTerritory[]
   savedViews      SavedView[]
+  insights        Insight[]        @relation("InsightAudience")
+  insightFeedback Insight[]        @relation("InsightFeedbackBy")
 
   importBatches      ImportBatch[]           @relation("ImportCreator")
   importsAsOwner     ImportBatch[]           @relation("ImportDefaultOwner")
@@ -2097,6 +2105,8 @@ enum AiGenerationKind {
   SCHEDULING
   REACTIVATION
   REPLY_CLASSIFICATION
+  /// Redação dos insights da carteira (Fase 11): números vêm do banco.
+  INSIGHT
 
   @@map("ai_generation_kind")
 }
@@ -2160,7 +2170,8 @@ model AiKnowledgeItem {
 /// Cada chamada à IA, com contexto enviado, saída, edição humana, custo e desfecho (docs/AI-SDR.md §11).
 model AiGeneration {
   id                String             @id @default(uuid(7)) @db.Uuid
-  leadId            String             @map("lead_id") @db.Uuid
+  /// Nulo só nos insights da carteira (Fase 11), que não são de um lead.
+  leadId            String?            @map("lead_id") @db.Uuid
   requestedById     String?            @map("requested_by_id") @db.Uuid
   kind              AiGenerationKind
   channel           Channel?
@@ -2199,12 +2210,13 @@ model AiGeneration {
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead          Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   requestedBy   User?     @relation("AiGenerationRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
   approvedBy    User?     @relation("AiGenerationApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   approach      Approach? @relation(fields: [approachId], references: [id], onDelete: SetNull)
   sourceMessage Message?  @relation("ReplyClassificationSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
   messages      Message[] @relation("MessageFromGeneration")
+  insights      Insight[]
 
   @@index([leadId, createdAt(sort: Desc)])
   /// Cota diária por pessoa.
@@ -2795,4 +2807,106 @@ model CampaignLead {
   @@index([campaignId, status, assignedToId])
   @@index([leadId])
   @@map("campaign_leads")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (Fase 11)
+// ---------------------------------------------------------------------------
+
+/// Recortes do rollup diário. As conversões por cidade, campanha, abordagem,
+/// canal, segmento e origem saem da view `analytics_lead_facts` (coorte do
+/// 1º contato), criada em SQL na migração.
+enum MetricDimension {
+  GLOBAL
+  /// Atividade de quem fez (mensagens, contatos, 1º contatos, oportunidades e
+  /// conversões); respostas, interesse e opt-outs pelo responsável do lead.
+  SDR
+  CHANNEL
+
+  @@map("metric_dimension")
+}
+
+/// Rollup diário (dia local de Fortaleza): contagens de eventos do dia, que
+/// somam por mês. Recalculado pelo job `analytics.rollup` (hoje e ontem de
+/// hora em hora; os últimos 7 dias de madrugada).
+model DailyMetric {
+  date           DateTime        @db.Date
+  dimension      MetricDimension
+  /// Vazio no GLOBAL; id da pessoa no SDR; canal no CHANNEL.
+  dimensionId    String          @default("") @map("dimension_id")
+  newLeads       Int             @default(0) @map("new_leads")
+  firstContacts  Int             @default(0) @map("first_contacts")
+  /// Leads distintos contatados no dia (não somam entre dias).
+  leadsContacted Int             @default(0) @map("leads_contacted")
+  messagesOut    Int             @default(0) @map("messages_out")
+  contactsLogged Int             @default(0) @map("contacts_logged")
+  messagesIn     Int             @default(0) @map("messages_in")
+  /// Leads distintos que responderam no dia.
+  leadsReplied   Int             @default(0) @map("leads_replied")
+  interested     Int             @default(0)
+  opportunities  Int             @default(0)
+  conversions    Int             @default(0)
+  optOuts        Int             @default(0) @map("opt_outs")
+  computedAt     DateTime        @map("computed_at") @db.Timestamptz(3)
+
+  @@id([date, dimension, dimensionId])
+  @@index([dimension, dimensionId, date])
+  @@map("daily_metrics")
+}
+
+enum InsightScope {
+  /// Da equipe (gestão).
+  TEAM
+  /// Da carteira de uma pessoa.
+  USER
+
+  @@map("insight_scope")
+}
+
+enum InsightSource {
+  /// Redigido pela IA, com os números conferidos contra os fatos.
+  AI
+  /// Texto padrão (IA desligada, sem orçamento ou texto recusado na conferência).
+  TEMPLATE
+
+  @@map("insight_source")
+}
+
+enum InsightFeedback {
+  USEFUL
+  NOT_USEFUL
+
+  @@map("insight_feedback")
+}
+
+/// Insight da carteira (docs/AI-SDR.md §13): fatos calculados em SQL e um
+/// texto curto. Sem dados pessoais: só contagens, taxas e ids.
+model Insight {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  generatedAt    DateTime         @map("generated_at") @db.Timestamptz(3)
+  scope          InsightScope
+  /// Dono da carteira (USER); nulo no TEAM.
+  audienceUserId String?          @map("audience_user_id") @db.Uuid
+  /// Código do fato (ex.: PRIORITY_TO_CONTACT).
+  type           String
+  text           String
+  /// Números e ids que sustentam o texto.
+  data           Json
+  source         InsightSource
+  aiGenerationId String?          @map("ai_generation_id") @db.Uuid
+  /// Ordem de exibição (maior primeiro).
+  priority       Int              @default(0)
+  validUntil     DateTime         @map("valid_until") @db.Timestamptz(3)
+  feedback       InsightFeedback?
+  feedbackById   String?          @map("feedback_by_id") @db.Uuid
+  feedbackAt     DateTime?        @map("feedback_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  audienceUser User?         @relation("InsightAudience", fields: [audienceUserId], references: [id], onDelete: Cascade)
+  aiGeneration AiGeneration? @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  feedbackBy   User?         @relation("InsightFeedbackBy", fields: [feedbackById], references: [id], onDelete: SetNull)
+
+  @@index([scope, audienceUserId, generatedAt(sort: Desc)])
+  @@index([validUntil])
+  @@map("insights")
 }

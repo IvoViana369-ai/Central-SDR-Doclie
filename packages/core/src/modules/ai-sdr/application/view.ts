@@ -1,7 +1,19 @@
 import type { Prisma } from '@docline/db';
+import { NotFoundError } from '../../../shared/errors';
 import type { OutreachContext } from '../domain/context';
 import type { GuardrailFlag } from '../domain/guardrails';
 import { AI_KIND_LABELS, type AiGenerationKindKey } from '../domain/kinds';
+
+/**
+ * Rascunhos e sugestões de classificação são sempre de um lead; só os
+ * insights da carteira (Fase 11) não têm lead, e não passam por estes fluxos.
+ */
+export function withLead<T extends { leadId: string | null }>(
+  generation: T,
+): T & { leadId: string } {
+  if (!generation.leadId) throw new NotFoundError('Rascunho não encontrado.');
+  return generation as T & { leadId: string };
+}
 
 export const AI_STATUS_LABELS = {
   GENERATED: 'Rascunho',

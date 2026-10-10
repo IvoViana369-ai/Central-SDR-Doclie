@@ -1,6 +1,7 @@
 /**
- * O que a IA gera (docs/AI-SDR.md §7): os 8 tipos de mensagem do requisito e a
- * sugestão de classificação de uma resposta recebida.
+ * O que a IA gera (docs/AI-SDR.md §7): os 8 tipos de mensagem do requisito, a
+ * sugestão de classificação de uma resposta recebida e a redação dos insights
+ * da carteira (Fase 11, sem lead).
  */
 
 export const OUTREACH_KINDS = [
@@ -15,7 +16,7 @@ export const OUTREACH_KINDS = [
 ] as const;
 
 export type OutreachKind = (typeof OUTREACH_KINDS)[number];
-export type AiGenerationKindKey = OutreachKind | 'REPLY_CLASSIFICATION';
+export type AiGenerationKindKey = OutreachKind | 'REPLY_CLASSIFICATION' | 'INSIGHT';
 
 export const AI_KIND_LABELS: Record<AiGenerationKindKey, string> = {
   FIRST_CONTACT: 'Primeiro contato',
@@ -27,6 +28,7 @@ export const AI_KIND_LABELS: Record<AiGenerationKindKey, string> = {
   SCHEDULING: 'Agendamento',
   REACTIVATION: 'Reativação',
   REPLY_CLASSIFICATION: 'Classificação de resposta',
+  INSIGHT: 'Insights da carteira',
 };
 
 /** Objetivo de cada tipo, enviado à IA junto com o pedido (§7). */

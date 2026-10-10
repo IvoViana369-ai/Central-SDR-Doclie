@@ -17,6 +17,7 @@ import {
 } from '../prompts';
 import { alertBudget, assertAiAllowance } from '../infra/sources';
 import { callProvider, IN_PROGRESS, usageColumns } from './generate';
+import { withLead } from './view';
 
 const REPLY_MAX = 2000;
 const CONTEXT_MAX = 280;
@@ -91,10 +92,12 @@ const finishClassification = defineUseCase({
     result: z.custom<AiStructuredResult<ReplyClassificationOutput>>(),
   }),
   async run(ctx, input) {
-    const generation = await ctx.tx.aiGeneration.findUniqueOrThrow({
-      where: { id: input.generationId },
-      select: { id: true, leadId: true, status: true, errorCode: true, sourceMessageId: true },
-    });
+    const generation = withLead(
+      await ctx.tx.aiGeneration.findUniqueOrThrow({
+        where: { id: input.generationId },
+        select: { id: true, leadId: true, status: true, errorCode: true, sourceMessageId: true },
+      }),
+    );
     if (generation.status !== 'FAILED' || generation.errorCode !== IN_PROGRESS) {
       throw new ConflictError('Esta classificação já foi concluída.');
     }

@@ -41,7 +41,7 @@ import {
   loadLeadContextSource,
   recentOtherMessages,
 } from '../infra/sources';
-import { describeGeneration, generationSelect, type StoredContext } from './view';
+import { describeGeneration, generationSelect, withLead, type StoredContext } from './view';
 
 const CHANNEL_LABELS = { WHATSAPP: 'WhatsApp', INSTAGRAM: 'Instagram', EMAIL: 'E-mail' } as const;
 /** Marca de geração em andamento (a chamada à IA corre fora da transação). */
@@ -219,18 +219,20 @@ const finishOutreach = defineUseCase({
   access: 'ai.generate',
   input: finishInput,
   async run(ctx, input) {
-    const generation = await ctx.tx.aiGeneration.findUniqueOrThrow({
-      where: { id: input.generationId },
-      select: {
-        id: true,
-        leadId: true,
-        kind: true,
-        status: true,
-        errorCode: true,
-        inputSnapshot: true,
-        params: true,
-      },
-    });
+    const generation = withLead(
+      await ctx.tx.aiGeneration.findUniqueOrThrow({
+        where: { id: input.generationId },
+        select: {
+          id: true,
+          leadId: true,
+          kind: true,
+          status: true,
+          errorCode: true,
+          inputSnapshot: true,
+          params: true,
+        },
+      }),
+    );
     if (generation.status !== 'FAILED' || generation.errorCode !== IN_PROGRESS) {
       throw new ConflictError('Esta geração já foi concluída.');
     }
@@ -295,10 +297,12 @@ export const failGeneration = defineUseCase({
   access: 'ai.generate',
   input: failInput,
   async run(ctx, input) {
-    const generation = await ctx.tx.aiGeneration.findUniqueOrThrow({
-      where: { id: input.generationId },
-      select: { id: true, leadId: true, kind: true, model: true },
-    });
+    const generation = withLead(
+      await ctx.tx.aiGeneration.findUniqueOrThrow({
+        where: { id: input.generationId },
+        select: { id: true, leadId: true, kind: true, model: true },
+      }),
+    );
     const model = input.model ?? generation.model;
     const cost = input.usage ? estimateCostUsd(model, input.usage) : null;
     await ctx.tx.aiGeneration.update({

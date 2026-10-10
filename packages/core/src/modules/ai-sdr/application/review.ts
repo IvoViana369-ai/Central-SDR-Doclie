@@ -22,7 +22,7 @@ import { hasBlocking } from '../domain/guardrails';
 import type { OutreachKind } from '../domain/kinds';
 import { editDistanceRatio } from '../domain/text-metrics';
 import { outreachFlags } from './generate';
-import { describeGeneration, generationSelect } from './view';
+import { describeGeneration, generationSelect, withLead } from './view';
 
 /** Rascunho de um lead no escopo; para alterar, o lead precisa estar editável. */
 async function requireGeneration(ctx: UseCaseContext, generationId: string, write: boolean) {
@@ -31,9 +31,10 @@ async function requireGeneration(ctx: UseCaseContext, generationId: string, writ
     select: generationSelect,
   });
   if (!generation) throw new NotFoundError('Rascunho não encontrado.');
-  if (write) await requireEditableLead(ctx, generation.leadId, { id: true });
-  else await requireLeadInScope(ctx, generation.leadId, { id: true });
-  return generation;
+  const draft = withLead(generation);
+  if (write) await requireEditableLead(ctx, draft.leadId, { id: true });
+  else await requireLeadInScope(ctx, draft.leadId, { id: true });
+  return draft;
 }
 
 const REVIEWABLE = ['GENERATED', 'EDITED', 'APPROVED'];
@@ -131,7 +132,7 @@ export async function approveGeneration(
   input: z.input<typeof approveGenerationInput>,
   meta: RequestMeta = {},
 ) {
-  const generation = await approveGenerationTx(deps, actor, input, meta);
+  const generation = withLead(await approveGenerationTx(deps, actor, input, meta));
   const prepared = await prepareAssistedMessage(
     deps,
     actor,

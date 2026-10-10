@@ -397,6 +397,13 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 
 **`insights`** (Fase 11+): `generated_at`, `scope`, `audience_user_id`, `type`, `text`, `data` jsonb (números que sustentam o texto), `valid_until`, `feedback`.
 
+> **Implementação (Fase 11).** Com estes ajustes:
+> - **`daily_metrics`:** recortes `GLOBAL`, `SDR` e `CHANNEL` (as conversões por cidade, origem, campanha, abordagem e segmento saem da view abaixo, pela coorte do 1º contato). Colunas: `new_leads`, `first_contacts`, `leads_contacted` (distintos no dia), `messages_out`, `contacts_logged`, `messages_in`, `leads_replied`, `interested`, `opportunities`, `conversions`, `opt_outs` e `computed_at`. Chave `(date, dimension, dimension_id)`, com `dimension_id` vazio no `GLOBAL`. No `SDR`, a atividade é de quem fez; respostas, interesse e opt-outs vão para o responsável do lead.
+> - **`analytics_lead_facts`** (*materialized view*, criada em SQL na migração e atualizada com `REFRESH … CONCURRENTLY`): uma linha por lead não mesclado com as dimensões (cidade, UF, segmento, origem, responsável, faixa de score), o canal, a abordagem, quem fez e a campanha do 1º contato, e as datas dos marcos (1ª resposta depois do 1º contato, 1º interesse, 1ª oportunidade, ganho e tipo, opt-out). Só ids, códigos e datas.
+> - **`insights`:** além do desenho, `source` (`AI` ou `TEMPLATE`), `ai_generation_id`, `priority` e quem deu o feedback. O insight da carteira (`USER`) sai junto com a pessoa.
+> - **`ai_generations`:** `lead_id` opcional e o tipo `INSIGHT` (a redação dos insights entra no mesmo orçamento e painel de custo da IA).
+> - **`users`:** `auto_assign` (entra na distribuição automática), `max_active_leads` (teto próprio) e `away_until` (ausente até o dia).
+
 | Tabela | Uso | Fase |
 |---|---|---|
 | `app_settings` | `key`, `value` jsonb, `updated_by_id`: horários, limites, palavras de opt-out, dias para "esquecido" | 1 |
@@ -470,7 +477,7 @@ Diferenças em relação às seções acima:
 
 **Fase 6 (IA e indicadores):** `ai_generations`, `ai_knowledge_items` e `approaches`, como nas seções acima, mais:
 
-- **`ai_generations`:** sem `message_id`. O vínculo é `messages.ai_generation_id`, com único parcial "um envio ativo por rascunho" (`status <> 'CANCELED'`): cancelar o envio permite preparar de novo. Ganha `cached_input_tokens`, `stop_reason`, `error_code` (código da falha do provedor; `IN_PROGRESS` enquanto a chamada corre fora da transação) e `source_message_id` (a resposta que foi classificada). `kind` ainda sem `INSIGHT` (Fase 11).
+- **`ai_generations`:** sem `message_id`. O vínculo é `messages.ai_generation_id`, com único parcial "um envio ativo por rascunho" (`status <> 'CANCELED'`): cancelar o envio permite preparar de novo. Ganha `cached_input_tokens`, `stop_reason`, `error_code` (código da falha do provedor; `IN_PROGRESS` enquanto a chamada corre fora da transação) e `source_message_id` (a resposta que foi classificada). O tipo `INSIGHT` entrou na Fase 11.
 - **`ai_knowledge_items`:** `approved_at`; a versão sobe quando o conteúdo muda, e cada geração grava as versões usadas no contexto. **Sem seed:** os fatos sobre a Docline são cadastrados e aprovados pela própria Docline.
 - **`approaches`:** `guidance` (orientação enviada à IA) e `created_by_id`. `message_templates` não foi criada: a IA com abordagens cobre o MVP, e os modelos aprovados da Meta entram com a Fase 7.
 - **`messages`:** ganha `ai_generation_id`, `approach_id`, `approved_by_id`, `approved_at` e o índice `(approach_id, sent_at)`.

@@ -277,7 +277,9 @@ export const prepareAssistedMessage = defineUseCase({
         mode: 'ASSISTED',
         messageType:
           task?.messageType ??
-          (generation && generation.kind !== 'REPLY_CLASSIFICATION' ? generation.kind : null) ??
+          (generation && generation.kind !== 'REPLY_CLASSIFICATION' && generation.kind !== 'INSIGHT'
+            ? generation.kind
+            : null) ??
           input.messageType,
         body,
         status: 'PENDING_CONFIRMATION',
