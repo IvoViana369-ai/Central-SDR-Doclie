@@ -4,6 +4,38 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.11.0] — Fase 11: Analytics — 2026-10-10
+
+Indicadores para **decidir com dados** sem pesar no banco: rollups diários e fatos por lead recalculados de hora em hora; relatórios de conversão por recorte, desempenho por SDR, evolução mensal e WhatsApp × Instagram, **com intervalo de confiança e aviso de amostra insuficiente em toda taxa**; insights da carteira no dashboard (números do banco, texto da IA conferido) e distribuição automática do pool. F11-01 a F11-05 entregues. A distribuição automática nasce **desligada** e nunca tira um lead de alguém. Aceite coberto pela jornada E2E `fase11.spec.ts` e pelas suítes de analytics e distribuição. Totais: 477 testes unitários, 249 de integração e 56 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `daily_metrics` (contagens por dia local da equipe, de cada pessoa e de cada canal), a *materialized view* `analytics_lead_facts` (um registro por lead com o 1º contato — quando, canal, abordagem, quem, campanha na janela de 90 dias — e os marcos depois dele; só ids, códigos e datas), `insights` (fato, texto, origem IA ou padrão, prioridade, validade e avaliação) e, em `users`, `auto_assign`, `max_active_leads` e `away_until`. `ai_generations.lead_id` passa a ser opcional, com o tipo `INSIGHT`.
+- **Rollups (F11-01):** job `analytics.rollup` de hora em hora (às 03h de Fortaleza, a semana): atualiza os fatos por lead sem bloquear quem lê (`REFRESH … CONCURRENTLY`) e recalcula `daily_metrics` de hoje e ontem, retomando do último dia calculado; na 1ª execução preenche o histórico (até 36 meses). "Recalcular período" para a gestão (até 366 dias). Com 100 mil leads: rodada de hora em hora em ~0,9 s; histórico de 401 dias em 4,2 s.
+- **Relatórios (F11-02):** abas em Relatórios — **Conversão** por cidade, UF, segmento, origem, responsável, quem fez o 1º contato, campanha, abordagem e canal (coorte do 1º contato, cada lead uma vez); **Por SDR** (carteira ativa, atividade do período e a coorte dos 1ºs contatos de cada um); **Evolução mensal** (volumes e coorte de cada mês, mês corrente marcado como parcial); **Canais** (WhatsApp × Instagram lado a lado e os demais). CSV de cada um, com as faixas, auditado. Relatórios em 13 a 65 ms com 100 mil leads.
+- **Intervalo de confiança (F11-03):** Wilson a 95% embaixo de cada taxa; com menos de 20 primeiros contatos, "amostra insuficiente" (asterisco, sem comparação); "acima/abaixo da média" só quando o intervalo inteiro fica de um lado; WhatsApp × Instagram com o teste de duas proporções do A/B das campanhas (30 por canal), sem declarar vencedor.
+- **Insights da carteira (F11-04):** seis fatos em SQL — respostas esperando ação, transferências sem aceite, prioritários sem contato, cidade com mais leads sem follow-up, abordagem com resposta acima da média (com significância) e cidade com mais escritórios da base aberta fora da base — para a equipe e cada SDR; a IA (tarefa `portfolio_insights`, prompt versionado) só reescreve, e cada texto é conferido (números do fato, porcentagens separadas de contagens, sem contato nem link, tamanho); senão vale o texto padrão. Sem orçamento ou cota, nem chama a IA. Card no dashboard com "Redigido pela IA" (só quando o texto difere do padrão), "Útil/Não útil" e "Atualizar" (gestão); job `analytics.insights` às 07h05; retenção de 180 dias.
+- **Distribuição automática (F11-05):** Equipe → Distribuição: território (cidade, depois UF, rodízio geral opcional) ou rodízio; limite padrão de leads ativos; incluir ou não o pool antigo; "Distribuir agora". Job `leads.auto-assign` de hora em hora: só leads do pool, ativos, contatáveis, em etapa de prospecção e fora de campanha em andamento; respeita participação, ausência e limite de cada SDR; trava contra corrida; histórico `TERRITORY`/`ROUND_ROBIN`, aviso ao SDR e os motivos de quem ficou no pool. Disponibilidade por pessoa (participa, limite próprio, ausente até), auditada.
+- **API v1:** `/analytics/conversion`, `/analytics/sdr-performance`, `/analytics/monthly`, `/analytics/channels`, `/analytics/performance-export`, `/analytics/rollup`, `/insights` (+ `refresh` e `{id}/feedback`), `/settings/auto-assign` (+ `run`) e `/users/{id}/availability`.
+
+### Alterado
+
+- **Relatórios:** a página ganhou abas (Visão geral, Conversão, Por SDR, Evolução mensal, Canais, Uso e custos da IA); o filtro de período mantém os outros filtros da tela.
+- **Dashboard:** card de insights no topo (a gestão vê os da equipe ou da pessoa filtrada; o SDR, os da própria carteira).
+- **IA:** o painel de uso conta os insights no custo, mas fora das métricas de qualidade dos rascunhos; o provedor simulado também redige insights.
+- **Menu:** item Distribuição (ADMIN e GESTOR) e atalho em Configurações; Auditoria com os rótulos das ações novas.
+- **Documentação:** ARCHITECTURE (jobs, medição e ADRs 031 a 033), SDR-FLOW (§10.2 e §11), AI-SDR (§13), LGPD (retenção, registro de operações e checklist), SECURITY (matriz e revisão da Fase 11), DATABASE (§4.10), ROADMAP, GO-LIVE (§15, roteiro A1–A8) e README.
+
+### Corrigido
+
+- O texto da IA nos insights poderia passar com uma porcentagem trocada por um número que só existia como "dias" no fato (ex.: "30%" num período de 30 dias): porcentagens e contagens agora são conferidas em separado (encontrado pelos testes antes de chegar à tela).
+- Achados pelo E2E da própria fase: a linha de disponibilidade do SDR não confirmava o salvamento; o menu acendia Equipe e Distribuição ao mesmo tempo; com o provedor simulado, os insights apareciam como "Redigido pela IA" mesmo sendo o texto padrão (agora a marca só aparece quando o texto da IA difere do padrão).
+
+### Observações
+
+- O dashboard continua ao vivo (números do momento); os relatórios novos leem os rollups e mostram quando foram calculados (até 1 h de atraso).
+- O aviso de descontinuação do driver `pg` sobre consultas paralelas numa transação (já registrado na 0.9.0) continua; não é desta fase.
+
 ## [0.10.0] — Fase 10: Campanhas — 2026-10-10
 
 Campanhas de prospecção que **organizam quem a equipe aborda e em que ritmo**, sem criar um caminho de envio: a campanha congela uma seleção de leads, mostra quem fica de fora e por quê, distribui os aptos entre os SDRs e **libera um lote diário para a cadência**. **A campanha não envia mensagens** (ADR 029): o SDR recebe as tarefas na Minha Fila, com a abordagem sugerida, e cada contato passa pelo gate de sempre. F10-01 a F10-05 entregues. Aceite coberto pela jornada E2E `fase10.spec.ts` e pelas suítes das campanhas. Totais: 453 testes unitários, 225 de integração e 53 jornadas E2E.
