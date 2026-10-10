@@ -137,6 +137,18 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'prospecting.purge': 'Resultados da Prospecção apagados (retenção)',
   'lead.prospecting_update': 'Lead completado pela Prospecção',
   'lead.registry_enrich': 'Lead completado com os dados abertos do CNPJ',
+  'campaign.create': 'Campanha criada',
+  'campaign.update': 'Campanha alterada',
+  'campaign.build': 'Montagem da campanha pedida',
+  'campaign.build_completed': 'Campanha montada (retrato e elegibilidade)',
+  'campaign.build_failed': 'Montagem da campanha falhou',
+  'campaign.activate': 'Campanha ativada',
+  'campaign.pause': 'Campanha pausada',
+  'campaign.resume': 'Campanha retomada',
+  'campaign.complete': 'Campanha concluída',
+  'campaign.archive': 'Campanha arquivada',
+  'campaign.release': 'Lead liberado pela campanha para a cadência',
+  'campaign.lead_removed': 'Lead retirado da campanha',
 };
 
 export function auditActionLabel(action: string): string {

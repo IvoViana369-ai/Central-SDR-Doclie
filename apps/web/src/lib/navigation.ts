@@ -88,8 +88,8 @@ export const NAVIGATION: NavGroup[] = [
         href: '/campanhas',
         icon: Megaphone,
         phase: 10,
-        permission: 'lead.bulk',
-        description: 'Campanhas com elegibilidade e limites de contato.',
+        permission: 'campaign.manage',
+        description: 'Campanhas com elegibilidade, distribuição, limite diário, funil e teste A/B.',
       },
       {
         label: 'Prospecção',
@@ -173,7 +173,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 /** Fase em desenvolvimento nesta versão. Itens de fases posteriores aparecem como "Em breve". */
-export const CURRENT_PHASE = 9;
+export const CURRENT_PHASE = 10;
 
 export function visibleNavigation(permissions: readonly Permission[]): NavGroup[] {
   const granted = new Set(permissions);

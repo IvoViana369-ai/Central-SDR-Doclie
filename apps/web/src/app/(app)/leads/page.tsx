@@ -53,6 +53,7 @@ export default async function LeadsPage() {
         canAssign,
         canManageTags: roleHasPermission(actor.role, 'tag.manage'),
         canExport: roleHasPermission(actor.role, 'lead.export'),
+        canCampaign: roleHasPermission(actor.role, 'campaign.manage'),
       }}
     />
   );

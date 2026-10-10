@@ -62,6 +62,53 @@ export function canEditSettings(status: CampaignStatus): boolean {
   return status === 'DRAFT' || status === 'READY' || status === 'ACTIVE' || status === 'PAUSED';
 }
 
+export const CAMPAIGN_ACTIONS = [
+  'build',
+  'activate',
+  'pause',
+  'resume',
+  'complete',
+  'archive',
+] as const;
+export type CampaignAction = (typeof CAMPAIGN_ACTIONS)[number];
+
+export const CAMPAIGN_ACTION_LABELS: Record<CampaignAction, string> = {
+  build: 'Montar',
+  activate: 'Ativar',
+  pause: 'Pausar',
+  resume: 'Retomar',
+  complete: 'Concluir',
+  archive: 'Arquivar',
+};
+
+export const CAMPAIGN_ACTION_TARGET: Record<CampaignAction, CampaignStatus> = {
+  build: 'BUILDING',
+  activate: 'ACTIVE',
+  pause: 'PAUSED',
+  resume: 'ACTIVE',
+  complete: 'COMPLETED',
+  archive: 'ARCHIVED',
+};
+
+/** Ações possíveis na situação (ativar só da "pronta"; retomar só da "pausada"). */
+export function availableActions(status: CampaignStatus): CampaignAction[] {
+  return CAMPAIGN_ACTIONS.filter(
+    (action) =>
+      canTransition(status, CAMPAIGN_ACTION_TARGET[action]) &&
+      (action !== 'activate' || status === 'READY') &&
+      (action !== 'resume' || status === 'PAUSED'),
+  );
+}
+
+// --- Limites -----------------------------------------------------------------
+
+/** Até quatro abordagens em teste (variantes A a D). */
+export const MAX_CAMPAIGN_VARIANTS = 4;
+export const VARIANT_LABELS = ['A', 'B', 'C', 'D'] as const;
+export const MAX_CAMPAIGN_SDRS = 20;
+/** Teto do limite diário por SDR: campanha não é disparo em massa. */
+export const MAX_DAILY_CONTACT_LIMIT = 200;
+
 /** Campanha que ainda segura os seus leads (outra campanha não os pega). */
 export function holdsLeads(status: CampaignStatus): boolean {
   return status === 'READY' || status === 'ACTIVE' || status === 'PAUSED';

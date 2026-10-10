@@ -11,7 +11,6 @@ import {
 import { defineUseCase, toJson, type UseCaseContext } from '../../../shared/use-case';
 import { compileLeadSelection, requireLeadInScope, type FilterNode } from '../../leads';
 import {
-  CAMPAIGN_ACTION_LABELS,
   campaignActionInput,
   campaignIdInput,
   createCampaignInput,
@@ -21,16 +20,17 @@ import {
   removeCampaignLeadInput,
   STRUCTURE_FIELDS,
   updateCampaignInput,
-  VARIANT_LABELS,
-  type CampaignAction,
 } from '../contracts/schemas';
 import { countReasons } from '../domain/eligibility';
 import { buildFunnel, compareVariants, rate } from '../domain/funnel';
 import {
+  availableActions,
+  CAMPAIGN_ACTION_LABELS,
+  CAMPAIGN_ACTION_TARGET,
   CAMPAIGN_STATUS_LABELS,
   canEditSettings,
   canEditStructure,
-  canTransition,
+  VARIANT_LABELS,
 } from '../domain/status';
 import { EMPTY_FUNNEL, funnelCounts, refreshMilestones } from '../infra/milestones';
 
@@ -294,15 +294,6 @@ export const updateCampaign = defineUseCase({
   },
 });
 
-const ACTION_TARGET: Record<CampaignAction, CampaignStatus> = {
-  build: 'BUILDING',
-  activate: 'ACTIVE',
-  pause: 'PAUSED',
-  resume: 'ACTIVE',
-  complete: 'COMPLETED',
-  archive: 'ARCHIVED',
-};
-
 /**
  * Muda a situação da campanha: montar (retrato do filtro, em segundo plano),
  * ativar, pausar, retomar, concluir e arquivar. Ativar e retomar já liberam
@@ -315,12 +306,8 @@ export const campaignAction = defineUseCase({
   async run(ctx, input) {
     const current = await requireCampaign(ctx, input.campaignId);
     checkVersion(current, input.version);
-    const target = ACTION_TARGET[input.action];
-    const allowed =
-      canTransition(current.status, target) &&
-      (input.action !== 'activate' || current.status === 'READY') &&
-      (input.action !== 'resume' || current.status === 'PAUSED');
-    if (!allowed) {
+    const target = CAMPAIGN_ACTION_TARGET[input.action];
+    if (!availableActions(current.status).includes(input.action)) {
       throw new BusinessRuleError(
         `Não dá para ${CAMPAIGN_ACTION_LABELS[input.action].toLowerCase()} uma campanha na situação "${CAMPAIGN_STATUS_LABELS[current.status]}".`,
       );

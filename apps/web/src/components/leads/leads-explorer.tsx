@@ -1,7 +1,7 @@
 'use client';
 
 import { CONTACT_STATUS_LABELS } from '@docline/core/compliance-domain';
-import { Plus, Search } from 'lucide-react';
+import { Megaphone, Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
@@ -171,6 +171,8 @@ export function LeadsExplorer({
     canAssign: boolean;
     canManageTags: boolean;
     canExport: boolean;
+    /** Criar campanha com o filtro atual (Fase 10). */
+    canCampaign?: boolean;
   };
 }) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
@@ -280,6 +282,15 @@ export function LeadsExplorer({
                 total={count.total}
                 onDone={(message) => setNotice({ variant: 'success', text: message })}
               />
+            ) : null}
+            {permissions.canCampaign ? (
+              <Button asChild variant="outline">
+                <Link
+                  href={`/campanhas/nova?selecao=${encodeURIComponent(JSON.stringify(selection))}`}
+                >
+                  <Megaphone /> Campanha com este filtro
+                </Link>
+              </Button>
             ) : null}
             {permissions.canCreate ? (
               <Button asChild>

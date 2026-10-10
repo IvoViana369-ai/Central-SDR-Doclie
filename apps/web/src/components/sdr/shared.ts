@@ -16,6 +16,8 @@ export interface TaskRef {
   messageType: string | null;
   channel: string | null;
   enrollmentId: string | null;
+  /** Campanha que liberou o lead e a abordagem sorteada (Fase 10). */
+  campaign?: { id: string; name: string; approach: { id: string; name: string } | null } | null;
 }
 
 /** Tarefa que se cumpre com uma mensagem (as de ligação vão por "Registrar contato"). */

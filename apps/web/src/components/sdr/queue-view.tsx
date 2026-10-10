@@ -320,6 +320,12 @@ function QueueRow({
           <>
             <span>{task.title}</span>
             <Badge variant="muted">{task.typeLabel}</Badge>
+            {task.campaign ? (
+              <Badge title="Lead liberado por uma campanha">
+                Campanha: {task.campaign.name}
+                {task.campaign.approach ? ` · abordagem ${task.campaign.approach.name}` : ''}
+              </Badge>
+            ) : null}
           </>
         ) : null}
         {message ? (

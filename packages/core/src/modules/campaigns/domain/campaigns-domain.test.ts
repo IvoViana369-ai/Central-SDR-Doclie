@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AB_MIN_SAMPLE,
   assignVariants,
+  availableActions,
   CAMPAIGN_STATUSES,
   buildFunnel,
   canEditSettings,
@@ -287,6 +288,16 @@ describe('estados da campanha', () => {
     expect(canTransition('ACTIVE', 'DRAFT')).toBe(false);
     expect(canTransition('COMPLETED', 'ACTIVE')).toBe(false);
     expect(canTransition('ARCHIVED', 'DRAFT')).toBe(false);
+  });
+
+  it('ações de cada situação: ativar só da pronta, retomar só da pausada', () => {
+    expect(availableActions('DRAFT')).toEqual(['build', 'archive']);
+    expect(availableActions('BUILDING')).toEqual([]);
+    expect(availableActions('READY')).toEqual(['build', 'activate', 'archive']);
+    expect(availableActions('ACTIVE')).toEqual(['pause', 'complete']);
+    expect(availableActions('PAUSED')).toEqual(['resume', 'complete']);
+    expect(availableActions('COMPLETED')).toEqual(['archive']);
+    expect(availableActions('ARCHIVED')).toEqual([]);
   });
 
   it('estrutura só muda antes de ativar; ajustes, até concluir; leads presos enquanto pronta ou ativa', () => {

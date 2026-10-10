@@ -1,15 +1,14 @@
 import { z } from 'zod';
 import { GATE_CHANNELS } from '../../compliance';
 import { leadSelectionInput } from '../../leads';
-import { CAMPAIGN_STATUSES } from '../domain/status';
 import { INELIGIBILITY_REASONS } from '../domain/eligibility';
-
-/** Até quatro abordagens em teste (variantes A a D). */
-export const MAX_CAMPAIGN_VARIANTS = 4;
-export const VARIANT_LABELS = ['A', 'B', 'C', 'D'] as const;
-export const MAX_CAMPAIGN_SDRS = 20;
-/** Teto do limite diário por SDR: campanha não é disparo em massa. */
-export const MAX_DAILY_CONTACT_LIMIT = 200;
+import {
+  CAMPAIGN_ACTIONS,
+  CAMPAIGN_STATUSES,
+  MAX_CAMPAIGN_SDRS,
+  MAX_CAMPAIGN_VARIANTS,
+  MAX_DAILY_CONTACT_LIMIT,
+} from '../domain/status';
 
 const id = z.uuid('Identificador inválido.');
 const uniqueIds = (max: number, label: string) =>
@@ -93,25 +92,6 @@ export const STRUCTURE_FIELDS = [
 ] as const satisfies readonly (keyof UpdateCampaignInput)[];
 
 export const campaignIdInput = z.object({ campaignId: id });
-
-export const CAMPAIGN_ACTIONS = [
-  'build',
-  'activate',
-  'pause',
-  'resume',
-  'complete',
-  'archive',
-] as const;
-export type CampaignAction = (typeof CAMPAIGN_ACTIONS)[number];
-
-export const CAMPAIGN_ACTION_LABELS: Record<CampaignAction, string> = {
-  build: 'Montar',
-  activate: 'Ativar',
-  pause: 'Pausar',
-  resume: 'Retomar',
-  complete: 'Concluir',
-  archive: 'Arquivar',
-};
 
 export const campaignActionInput = z.object({
   campaignId: id,

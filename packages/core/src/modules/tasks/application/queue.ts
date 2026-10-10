@@ -48,6 +48,16 @@ const taskCardSelect = {
   messageType: true,
   channel: true,
   lead: { select: leadCardSelect },
+  // Campanha da inscrição e a abordagem sorteada para o lead (Fase 10).
+  enrollment: {
+    select: {
+      campaign: { select: { id: true, name: true } },
+      campaignLeads: {
+        take: 1,
+        select: { variant: { select: { approach: { select: { id: true, name: true } } } } },
+      },
+    },
+  },
 } satisfies Prisma.TaskSelect;
 
 function leadView(lead: LeadCard) {
@@ -70,6 +80,8 @@ export interface QueueItem {
     enrollmentId: string | null;
     messageType: string | null;
     channel: string | null;
+    /** Campanha que liberou o lead e a abordagem sorteada (quando há). */
+    campaign: { id: string; name: string; approach: { id: string; name: string } | null } | null;
   };
   message?: { id: string; channel: string; body: string | null; createdAt: Date };
   opportunity?: { id: string; acceptDueAt: Date; acceptedAt: Date | null; role: 'sdr' | 'sales' };
@@ -242,6 +254,12 @@ export const getMyQueue = defineUseCase({
         enrollmentId: t.enrollmentId,
         messageType: t.messageType,
         channel: t.channel,
+        campaign: t.enrollment?.campaign
+          ? {
+              ...t.enrollment.campaign,
+              approach: t.enrollment.campaignLeads[0]?.variant?.approach ?? null,
+            }
+          : null,
       },
     });
     const leadItem = (

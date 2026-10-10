@@ -153,6 +153,8 @@ function eventDetail(event: TimelineEvent, users: Record<string, string>): strin
       return `para ${user(p.salesOwnerId)}`;
     case 'opportunity.won':
       return label(CONVERSION_TYPE_LABELS, p.conversionType);
+    case 'campaign.released':
+      return [p.campaign, p.variant ? `variante ${p.variant}` : null].filter(Boolean).join(' · ');
     default:
       return null;
   }

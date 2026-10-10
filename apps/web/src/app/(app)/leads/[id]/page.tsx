@@ -5,6 +5,7 @@ import {
   getLeadContactability,
   getLeadScore,
   getLeadInstagram,
+  getLeadCampaigns,
   getLeadRegistryData,
   getLeadWhatsapp,
   getPipeline,
@@ -76,6 +77,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // Dados abertos do CNPJ (Fase 9): só aparece com a base carregada.
   const registryData = await getLeadRegistryData(deps, actor, { leadId: id }, meta);
   const registry = registryData.status === 'not_loaded' ? null : registryData;
+  // Campanhas (Fase 10): de qual campanha o lead veio e a abordagem sorteada.
+  const campaigns = await getLeadCampaigns(deps, actor, { leadId: id }, meta);
 
   return (
     <LeadDetail
@@ -85,6 +88,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       whatsapp={whatsapp}
       instagram={instagram}
       registry={registry}
+      campaigns={campaigns.items}
       sales={{
         stages: pipeline.stages,
         lossReasons,
@@ -119,6 +123,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         canSetPermission: can('permission.update'),
         canRecordOptInEvidence: can('permission.update'),
         canAnonymize: can('lead.anonymize'),
+        canManageCampaigns: can('campaign.manage'),
       }}
     />
   );

@@ -40,7 +40,21 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     launchOptions: executablePath ? { executablePath } : {},
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    // Fases 1 a 9, em ordem alfabética (as primeiras contam os leads da base).
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /fase1\d[^/]*\.spec\.ts$/,
+    },
+    // Fase 10 em diante: "fase10" viria antes de "fase2" na ordem alfabética.
+    {
+      name: 'chromium-fase10+',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /fase1\d[^/]*\.spec\.ts$/,
+      dependencies: ['chromium'],
+    },
+  ],
   webServer: {
     // Prepara o banco de testes e sobe o build de produção (rode `pnpm build` antes)
     // junto com o worker, que processa importações e a busca de duplicados, e o

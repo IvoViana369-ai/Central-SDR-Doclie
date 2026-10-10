@@ -17,6 +17,10 @@ import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-u
 import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
 import { InstagramCard, type LeadInstagramView } from '@/components/instagram/instagram-card';
 import { RegistryCard } from '@/components/prospecting/registry-card';
+import {
+  LeadCampaignsCard,
+  type LeadCampaignView,
+} from '@/components/campaigns/lead-campaigns-card';
 import type { LeadRegistryView } from '@/components/prospecting/types';
 import { WhatsappCard, type LeadWhatsappView } from '@/components/whatsapp/whatsapp-card';
 import { api } from '@/lib/api-client';
@@ -111,6 +115,8 @@ export interface LeadDetailPermissions {
   /** Opt-in do WhatsApp por formulário, evento etc. (ADMIN/GESTOR). */
   canRecordOptInEvidence: boolean;
   canAnonymize: boolean;
+  /** Abrir a campanha a partir da ficha (gestão). */
+  canManageCampaigns?: boolean;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -130,6 +136,7 @@ export function LeadDetail({
   whatsapp,
   instagram,
   registry,
+  campaigns = [],
   sales,
   operation,
   permissions,
@@ -144,6 +151,8 @@ export function LeadDetail({
   instagram: LeadInstagramView | null;
   /** Dados abertos do CNPJ (Fase 9); `null` antes da primeira carga da base. */
   registry: LeadRegistryView | null;
+  /** Campanhas do lead (Fase 10). */
+  campaigns?: LeadCampaignView[];
   sales: LeadSalesView;
   operation: LeadSalesData;
   permissions: LeadDetailPermissions;
@@ -412,6 +421,10 @@ export function LeadDetail({
               ) : null}
             </CardContent>
           </Card>
+          <LeadCampaignsCard
+            items={campaigns}
+            canManage={permissions.canManageCampaigns ?? false}
+          />
           {registry ? <RegistryCard leadId={lead.id} data={registry} canEdit={editable} /> : null}
 
           <Card>

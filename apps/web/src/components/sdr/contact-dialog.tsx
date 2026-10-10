@@ -88,7 +88,8 @@ export function ContactDialog({
   const [draft, setDraft] = useState<GenerationView | null>(null);
   const [checkedText, setCheckedText] = useState('');
   const [approaches, setApproaches] = useState<ApproachOption[] | null>(null);
-  const [approachId, setApproachId] = useState('');
+  // Lead de campanha com teste A/B: a abordagem sorteada já vem escolhida.
+  const [approachId, setApproachId] = useState(task?.campaign?.approach?.id ?? '');
   const [instructions, setInstructions] = useState('');
   const [discarding, setDiscarding] = useState(false);
   const [discardReason, setDiscardReason] = useState(DISCARD_REASONS[0]!);
@@ -247,6 +248,9 @@ export function ContactDialog({
           <>
             {lead.displayName}
             {task ? ` · ${task.title}` : ''}
+            {task?.campaign?.approach
+              ? ` · campanha “${task.campaign.name}”, abordagem ${task.campaign.approach.name}`
+              : ''}
           </>
         }
         className="max-w-lg"
