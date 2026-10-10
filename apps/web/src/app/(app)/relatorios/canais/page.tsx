@@ -1,6 +1,6 @@
 import { getChannelReport, roleHasPermission } from '@docline/core';
 import { matchPreset } from '@docline/core/analytics-domain';
-import { AB_VERDICT_LABELS } from '@docline/core/campaigns-domain';
+import { AB_MIN_SAMPLE, type AbVerdict } from '@docline/core/campaigns-domain';
 import { Download } from 'lucide-react';
 import type { Metadata } from 'next';
 import { AccessDenied } from '@/components/access-denied';
@@ -19,6 +19,13 @@ import { loadAnalytics, readAnalyticsParams } from '@/server/analytics';
 import { getPageContext } from '@/server/page-context';
 
 export const metadata: Metadata = { title: 'Canais' };
+
+/** O mesmo veredito do A/B das campanhas, com as palavras dos canais. */
+const VERDICT_LABELS: Record<AbVerdict, string> = {
+  INSUFFICIENT_SAMPLE: `Amostra pequena: menos de ${AB_MIN_SAMPLE} primeiros contatos em um dos canais`,
+  NO_DIFFERENCE: 'Sem diferença clara até aqui',
+  LIKELY_DIFFERENCE: 'Diferença provável; a decisão é do gestor',
+};
 
 /** "+12,5 p.p." para a diferença entre duas taxas. */
 function points(difference: number | null) {
@@ -130,7 +137,7 @@ export default async function ChannelsPage({
                 <span className="tabular-nums">{points(result?.difference ?? null)}</span>
                 {result ? (
                   <Badge variant={result.verdict === 'LIKELY_DIFFERENCE' ? 'success' : 'muted'}>
-                    {AB_VERDICT_LABELS[result.verdict]}
+                    {VERDICT_LABELS[result.verdict]}
                   </Badge>
                 ) : null}
               </li>
