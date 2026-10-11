@@ -1,6 +1,6 @@
 # Roteiro de UAT, treinamento e go-live do piloto
 
-> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b); Prospecção (marco M6) na [§13](#13-base-aberta-do-cnpj-e-prospecção-marco-m6), Campanhas na [§14](#14-campanhas) e Analytics na [§15](#15-relatórios-insights-e-distribuição-automática) · **Última revisão:** 2026-10-10
+> **Status:** pronto para uso (F6-11); ativação do WhatsApp pela API (marco M5) na [§11](#11-whatsapp-pela-api-marco-m5) e do Instagram pela API (marco M5b) na [§12](#12-instagram-pela-api-marco-m5b); Prospecção (marco M6) na [§13](#13-base-aberta-do-cnpj-e-prospecção-marco-m6), Campanhas na [§14](#14-campanhas) e Analytics na [§15](#15-relatórios-insights-e-distribuição-automática) · **Última revisão:** 2026-10-11
 > Relacionados: [MVP §11](./MVP.md#11-critérios-de-lançamento-go-live-do-piloto) · [ROADMAP](./ROADMAP.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md) · [AI-SDR](./AI-SDR.md)
 
 O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As Fases 7 e 8 (WhatsApp e Instagram pela API) também estão prontas, mas **o piloto começa no modo assistido**: as APIs são ligadas depois, nos marcos M5 ([§11](#11-whatsapp-pela-api-marco-m5)) e M5b ([§12](#12-instagram-pela-api-marco-m5b)). Este roteiro leva o sistema do staging ao uso real pelo piloto: o que a Docline precisa decidir, como rodar a homologação (UAT), como treinar a equipe, como importar a base real e como voltar atrás se for preciso.
@@ -11,7 +11,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 
 1. [Papéis](#1-papéis)
 2. [Decisões da Docline antes do go-live](#2-decisões-da-docline-antes-do-go-live)
-3. [Ambiente: staging e produção](#3-ambiente-staging-e-produção)
+3. [Ambiente: staging e produção](#3-ambiente-staging-e-produção) · [3.1 Passo a passo do staging na Render](#31-passo-a-passo-do-staging-na-render)
 4. [Homologação (UAT)](#4-homologação-uat)
 5. [IA: ligar ou não no piloto](#5-ia-ligar-ou-não-no-piloto)
 6. [Treinamento e guia rápido](#6-treinamento-e-guia-rápido)
@@ -51,7 +51,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 
 ## 3. Ambiente: staging e produção
 
-O `render.yaml` cria o PostgreSQL, o web (com health check em `/api/health` e migrações no pré-deploy) e o worker.
+O `render.yaml` cria o PostgreSQL, o web (com health check em `/api/health` e migrações no pré-deploy) e o worker. Os segredos ficam num grupo de variáveis criado antes no painel ([§3.1](#31-passo-a-passo-do-staging-na-render)).
 
 **Variáveis obrigatórias** (nunca no Git; no painel da Render):
 
@@ -67,13 +67,38 @@ O `render.yaml` cria o PostgreSQL, o web (com health check em `/api/health` e mi
 
 **Checklist técnico:**
 
-- [ ] Staging no ar com `pnpm db:seed:dev` (só dados fictícios) e o primeiro ADMIN criado (`pnpm admin:create`).
+- [ ] Staging no ar ([§3.1](#31-passo-a-passo-do-staging-na-render)) com `pnpm db:seed:dev` (só dados fictícios) e o primeiro ADMIN criado (`pnpm admin:create`).
+- [ ] `TRUSTED_PROXIES` conferido com `/api/v1/settings/network-check` (`"ok": true`).
 - [ ] Produção no ar **sem** o seed de desenvolvimento; dados de referência pelo pré-deploy.
 - [ ] ADMIN e GESTOR com verificação em duas etapas ativada. O sistema exige: sem ela, a pessoa entra só em "Minha conta" até ativar (o primeiro ADMIN também, logo depois de definir a senha). Tenha o aplicativo autenticador no celular antes do primeiro acesso.
 - [ ] **Backup e restauração testados:** restaurar o backup mais recente da Render num banco de teste, subir a aplicação apontando para ele, entrar e conferir a contagem de leads e a Lista Não Contatar. Anotar a data e o tempo gasto.
 - [ ] Sentry recebendo um erro de teste; alerta por e-mail configurado.
 - [ ] Worker processando jobs (importação de teste no staging; a tela Importar mostra o progresso).
 - [ ] Tela Integrações conferida: WhatsApp e Instagram em modo assistido; IA "simulada" ou "ativa", conforme a decisão.
+
+### 3.1 Passo a passo do staging na Render
+
+A Render **ignora** variáveis `sync: false` dentro de um grupo de variáveis. Por isso o Blueprint traz só os valores fixos do staging (grupo `docline-sdr-staging`), e os segredos ficam num segundo grupo, `docline-sdr-staging-secrets`, criado à mão **antes** do Blueprint. O Blueprint nunca sobrescreve esse grupo.
+
+1. **Código na `main`:** merge da PR com o CI verde. O Blueprint publica a branch escolhida na criação e republica a cada push (`autoDeploy`).
+2. **Gerar os segredos** no seu computador, nunca em chat ou e-mail: `openssl rand -base64 32` ou, no console do navegador (F12 → Console), `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`. Um valor para `ENCRYPTION_KEY` e outro para `SUPPRESSION_HASH_PEPPER`. Guarde o pepper no cofre de senhas: ele não pode mudar depois.
+3. **Criar o grupo de segredos:** painel da Render → Environment Groups → New Environment Group, nome `docline-sdr-staging-secrets`, no nível do workspace (fora de projeto ou ambiente):
+
+   | Variável | Valor no staging |
+   |---|---|
+   | `APP_URL` | `https://docline-sdr-staging-web.onrender.com` (se a Render der outro endereço ao web, corrija depois e salve) |
+   | `ENCRYPTION_KEY` | primeiro valor do passo 2 |
+   | `SUPPRESSION_HASH_PEPPER` | segundo valor do passo 2 |
+   | `EMAIL_PROVIDER` + `SMTP_URL` ou `RESEND_API_KEY` + `EMAIL_FROM` | Opcional. Sem eles, o staging usa `console`: nenhum e-mail sai e o link do convite ou da redefinição aparece no log do serviço web (Logs → buscar "E-mail (provedor console") |
+   | `SENTRY_DSN` | Opcional |
+   | `TRUSTED_PROXIES` | Não criar agora (passo 7) |
+   | `OUTBOUND_WEBHOOK_SIGNING_SECRET` | Não criar (webhooks de saída desligados; ver [§16](#16-integrações-docline-crm-n8n-bi)) |
+
+4. **Criar o Blueprint:** New → Blueprint → conectar o repositório `Central-SDR-Doclie` → branch `main` → conferir os recursos (banco `basic-256mb`, web e worker `starter`, todos em Virginia; preços vigentes no painel) → aplicar.
+5. **Conferir o primeiro deploy:** o web roda as migrações e os dados de referência no pré-deploy. `https://<url>/api/health` deve mostrar `"database":"ok"` e, em até 3 minutos, `"worker":"ok"`. Se o deploy falhar com "Configuração de ambiente inválida", o log lista a variável que falta (sem mostrar valores).
+6. **Primeiro ADMIN e base fictícia** (serviço web → Shell): `pnpm admin:create --email <email> --name "<nome>"`. Abra o link impresso, defina a senha e ative a verificação em duas etapas com o aplicativo autenticador. Depois, se quiser os ~2.000 escritórios fictícios: `pnpm db:seed:dev`.
+7. **IP do cliente** ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)): logado como ADMIN, abra `https://<url>/api/v1/settings/network-check`. Com `"ok": false` e `suggestedTrustedProxies` preenchido, crie `TRUSTED_PROXIES` com esse valor no grupo `docline-sdr-staging-secrets`, salve, espere o web e o worker republicarem e abra de novo até `"ok": true`. Sem sugestão, envie a resposta ao suporte técnico.
+8. Seguir o checklist técnico acima: backup testado, Sentry, worker e tela Integrações.
 
 ## 4. Homologação (UAT)
 
@@ -298,7 +323,7 @@ A Fase 12 traz as chaves de API, os webhooks de saída assinados, as referência
 **Antes de ligar:**
 
 - [ ] Registro de operações e aviso de privacidade com o compartilhamento entre sistemas Docline e a finalidade de cada um ([LGPD §19](./LGPD.md#19-checklist-por-fase)).
-- [ ] `OUTBOUND_WEBHOOK_SIGNING_SECRET` gerado só para produção (`openssl rand -base64 32`), no web **e** no worker. Trocar depois troca o segredo de todos os destinos.
+- [ ] `OUTBOUND_WEBHOOK_SIGNING_SECRET` gerado só para produção (`openssl rand -base64 32`), no grupo de segredos que o web **e** o worker usam ([§3.1](#31-passo-a-passo-do-staging-na-render)). Trocar depois troca o segredo de todos os destinos.
 - [ ] Uma chave por sistema, só com os escopos que ele usa (ex.: CRM: `leads:read`, `references:write`, `suppression:write`; n8n: os do fluxo; BI: `bi:read`), com validade e o dono anotado. A chave vai direto para o cofre do outro sistema.
 - [ ] O receptor do CRM confere a assinatura (`Docline-Signature`), recusa timestamp com mais de 5 minutos e deduplica pelo `Docline-Event-Id`.
 - [ ] Sincronização ativa com o CRM (o sistema chamar a API do CRM): **pendente** da documentação da API do CRM Docline. Até lá, o CRM consome os webhooks e a API (direto ou pelo n8n).

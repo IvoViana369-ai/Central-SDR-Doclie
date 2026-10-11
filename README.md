@@ -172,7 +172,7 @@ pnpm dev
 | `pnpm db:migrate` / `pnpm db:deploy` | Criar/aplicar migrações (dev) / aplicar migrações (deploy) |
 | `pnpm db:check` | Falha se o schema mudou sem migração |
 | `pnpm db:seed` | Dados de referência (idempotente) |
-| `pnpm db:seed:dev` | ~2.000 empresas fictícias com duplicados propositais (só `APP_ENV=development`; não roda duas vezes) |
+| `pnpm db:seed:dev` | ~2.000 empresas fictícias com duplicados propositais (só `APP_ENV=development` ou `staging`, recusado em produção; não roda duas vezes) |
 | `pnpm admin:create` | Cria usuário por linha de comando (bootstrap) |
 | `pnpm ai:eval` | Avaliação offline da IA com o conjunto fictício (provedor falso por padrão; real só com `--yes`) — [AI-SDR §14](docs/AI-SDR.md#14-avaliação-de-qualidade) |
 | `pnpm whatsapp:simulate` | Simula webhooks da Meta contra o servidor local (`resposta --de … --texto …`, `status --status delivered`); só com `WHATSAPP_PROVIDER=fake` — [INTEGRATIONS §6.2](docs/INTEGRATIONS.md#6-whatsapp) |
@@ -184,7 +184,7 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 ### Deploy
 
 - **Imagem:** `Dockerfile` (uma imagem; o comando define o papel: `docker/start-web.sh` ou `docker/start-worker.sh`).
-- **Render (staging):** `render.yaml` cria PostgreSQL, web (com health check em `/api/health` e migrações no pre-deploy) e worker. Instruções no topo do arquivo.
+- **Render (staging):** `render.yaml` cria PostgreSQL, web (com health check em `/api/health` e migrações no pre-deploy) e worker; os segredos ficam num grupo criado antes no painel. Passo a passo em [GO-LIVE §3.1](docs/GO-LIVE.md#31-passo-a-passo-do-staging-na-render).
 - **CI:** `.github/workflows/ci.yml` roda lint, tipos, testes (unitários, integração, E2E), checagem de migrações, auditoria de dependências, varredura de segredos e build da imagem.
 
 ## Próximo passo recomendado

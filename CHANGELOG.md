@@ -4,6 +4,18 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+Preparação do staging na Render ([GO-LIVE §3.1](docs/GO-LIVE.md#31-passo-a-passo-do-staging-na-render)).
+
+### Adicionado
+
+- **Diagnóstico do IP do cliente:** `GET /api/v1/settings/network-check` (ADMIN, só leitura) mostra o `X-Forwarded-For` recebido, o IP que o sistema usa e o valor sugerido para `TRUSTED_PROXIES` quando os proxies estão em faixa privada ([SECURITY §12](docs/SECURITY.md#12-limites-de-taxa-e-abuso)).
+- **Passo a passo do staging** na Render em GO-LIVE §3.1.
+
+### Corrigido
+
+- **Blueprint da Render:** a Render ignora variáveis `sync: false` dentro de um grupo de variáveis, então `APP_URL`, `ENCRYPTION_KEY` e `SUPPRESSION_HASH_PEPPER` nunca seriam pedidas e o primeiro deploy falharia na validação do ambiente. Os segredos passam para o grupo `docline-sdr-staging-secrets`, criado no painel antes do Blueprint e ligado ao web e ao worker; o e-mail fica opcional no staging (sem provedor, `console`).
+- **Base fictícia no staging:** `pnpm db:seed:dev` aceitava só `APP_ENV=development`, embora o roteiro de UAT a use no staging; agora roda em `development` e `staging` e continua recusado em produção.
+
 ## [0.12.0] — Fase 12: Integrações Docline — 2026-10-11
 
 Os outros sistemas Docline (CRM, n8n, BI) passam a **conversar com a central sem acesso de pessoa**: chaves de API com escopos, webhooks de saída assinados, referências externas, a ficha do lead para o CRM e a **Lista Não Contatar compartilhada**. **Nenhuma integração envia mensagem a lead.** F12-01, F12-02, F12-04, F12-05 e F12-06 entregues; **F12-03 parcial**: a sincronização ativa com o CRM (o sistema chamar a API do CRM) aguarda a documentação da API dele; até lá, o CRM consome os webhooks e a API. Tudo nasce desligado: sem chave e sem destino, nada sai do sistema. Aceite coberto pela jornada E2E `fase12.spec.ts` e pelas suítes de integrações. Totais: 542 testes unitários, 274 de integração e 59 jornadas E2E.

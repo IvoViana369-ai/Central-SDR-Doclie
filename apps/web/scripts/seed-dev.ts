@@ -4,8 +4,10 @@
  *
  *   pnpm db:seed:dev [--count 2000] [--seed 42]
  *
- * Só roda com APP_ENV=development. Se a base fictícia já existe, não faz nada
- * (para recomeçar: `pnpm --filter @docline/db exec prisma migrate reset`).
+ * Só roda com APP_ENV=development ou staging (homologação com dados fictícios,
+ * docs/GO-LIVE.md §3); recusado em produção. Os leads ficam com `is_test_data`.
+ * Se a base fictícia já existe, não faz nada (para recomeçar em desenvolvimento:
+ * `pnpm --filter @docline/db exec prisma migrate reset`).
  */
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -44,9 +46,9 @@ if (!Number.isInteger(count) || count < 1 || count > 20_000 || !Number.isInteger
 }
 
 const env = getServerEnv();
-if (env.APP_ENV !== 'development') {
+if (env.APP_ENV !== 'development' && env.APP_ENV !== 'staging') {
   console.error(
-    `Recusado: o seed fictício só roda com APP_ENV=development (atual: ${env.APP_ENV}).`,
+    `Recusado: o seed fictício só roda com APP_ENV=development ou staging (atual: ${env.APP_ENV}).`,
   );
   process.exit(1);
 }

@@ -218,3 +218,25 @@ test('reunião na agenda: .ics e Google Agenda pela ficha', async ({ page }) => 
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/lead-reuniao.png`, fullPage: true });
   assertNoCsp();
 });
+
+test('diagnóstico do IP do cliente para o primeiro deploy (ADMIN)', async ({
+  page,
+  playwright,
+}) => {
+  // Sem sessão: 401.
+  const anonymous = await playwright.request.newContext({ baseURL });
+  expect((await anonymous.get('/api/v1/settings/network-check')).status()).toBe(401);
+  await anonymous.dispose();
+
+  await signIn(page, ADMIN.email, ADMIN.password);
+  // Cadeia como a de uma hospedagem que acrescenta o proxy interno (fictícia).
+  const res = await page.request.get('/api/v1/settings/network-check', {
+    headers: { 'x-forwarded-for': '203.0.113.7, 10.214.3.9' },
+  });
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toMatchObject({
+    forwardedFor: ['203.0.113.7', '10.214.3.9'],
+    ok: false,
+    suggestedTrustedProxies: '10.0.0.0/8',
+  });
+});
