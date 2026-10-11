@@ -4,6 +4,38 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 ## [Não lançado]
 
+## [0.12.0] — Fase 12: Integrações Docline — 2026-10-11
+
+Os outros sistemas Docline (CRM, n8n, BI) passam a **conversar com a central sem acesso de pessoa**: chaves de API com escopos, webhooks de saída assinados, referências externas, a ficha do lead para o CRM e a **Lista Não Contatar compartilhada**. **Nenhuma integração envia mensagem a lead.** F12-01, F12-02, F12-04, F12-05 e F12-06 entregues; **F12-03 parcial**: a sincronização ativa com o CRM (o sistema chamar a API do CRM) aguarda a documentação da API dele; até lá, o CRM consome os webhooks e a API. Tudo nasce desligado: sem chave e sem destino, nada sai do sistema. Aceite coberto pela jornada E2E `fase12.spec.ts` e pelas suítes de integrações. Totais: 542 testes unitários, 274 de integração e 59 jornadas E2E.
+
+### Adicionado
+
+- **Banco:** `api_keys` (prefixo e SHA-256, escopos, sistema, limite por minuto, validade, último uso e IP, revogação), `webhook_endpoints` (URL, eventos, situação, versão do segredo, falhas seguidas e desligamento), `outbound_events` (outbox), `webhook_deliveries` (tentativas, reserva e resultado) e `external_references` (um vínculo por registro e sistema; um id externo, um registro); origem `INTEGRATION` na Lista Não Contatar; regras repetidas como CHECK no banco.
+- **Chaves de API (F12-01):** Configurações → Integrações Docline (ADMIN): nome, escopos (`leads:read`, `references:read`, `references:write`, `suppression:check`, `suppression:write`, `bi:read`), sistema, limite e validade; a chave `dsdr_…` aparece **uma vez**; revogação com motivo. `Authorization: Bearer` aceito **só nas rotas que declaram o escopo**; a chave vira o ator `apiKey`, que passa só nas permissões dos seus escopos (nunca usuários, configurações, auditoria ou outras chaves); limite por minuto com `Retry-After`; uso de chave revogada ou vencida na auditoria; autor `INTEGRATION` (com o nome da chave) na auditoria, no histórico e na timeline. `GET /integrations/ping` para testar a conexão.
+- **Webhooks de saída (F12-02):** destinos com URL, eventos (`opportunity.created`, `opportunity.accepted`, `lead.converted`, `opportunity.lost`, `optout.registered`, `suppression.revoked`) e sistema; segredo `whsec_…` mostrado na criação e em "Novo segredo" (derivado de `OUTBOUND_WEBHOOK_SIGNING_SECRET`, não fica no banco). Evento gravado **na mesma transação** da mudança (outbox); job `webhooks.dispatch` (minuto a minuto e logo após cada evento) assina com `Docline-Signature: t=…,v1=…`, tenta 8 vezes em ~45 h, desliga o destino com 20 falhas em 24 h e avisa os ADMINs; pausar, reativar, "Enviar teste", "Reenviar" e Entregas recentes. Corpo só com ids, códigos, datas e valores mascarados; eventos e entregas apagados com 90 dias.
+- **Proteção contra SSRF:** a URL é conferida no cadastro e cada IP resolvido é conferido no envio (rede interna, loopback, link-local, metadados de nuvem, IPv6 e IPv4 embutido), sem seguir redirecionamento, sem cookies, com prazo total de 10 s e leitura de 2 KB.
+- **Referências externas e ficha para o CRM (F12-03, parcial):** vincular, atualizar e desfazer o id do lead ou da oportunidade em outro sistema Docline (a chave de um sistema só grava nele; id externo nunca muda de dono sozinho); busca pelo id externo; card "Outros sistemas Docline" na ficha (ADMIN e GESTOR veem; ADMIN grava); `GET /integrations/leads/{id}` com empresa, pessoas, contatos com o aviso de Não Contatar por canal, oportunidades e referências, **só de lead transferido ou vinculado**, sem anotações e com cada leitura auditada; os eventos levam as referências.
+- **Lista Não Contatar compartilhada (F12-04):** consulta de até 100 identificadores por canal (bloqueado pelo próprio valor ou pelo escritório inteiro), sem revelar a lista, o motivo ou a data; opt-out vindo de outro sistema com origem `INTEGRATION`, efeito imediato, opt-in do WhatsApp derrubado e "via <chave>" na timeline; toda inclusão e revogação, de qualquer origem, vira evento para os demais sistemas.
+- **Reunião na agenda (F12-05):** a tarefa "Reunião" na ficha ganha "Google Agenda" (link de modelo; a pessoa confirma na própria conta) e "Arquivo .ics" (RFC 5545). Sem OAuth; sem telefone ou e-mail no texto.
+- **Exportação para BI (F12-06):** `GET /integrations/bi/events` (em ordem pelo id, só depois de 60 s, sem valores mascarados) e `GET /integrations/bi/daily-metrics` (os dias recalculados desde o cursor, cada dia inteiro), com `bi:read`.
+- **API v1:** `/integrations/api-keys` (+ `revoke`), `/integrations/ping`, `/integrations/webhooks` (+ `status`, `rotate-secret`, `test`), `/integrations/webhook-deliveries` (+ `resend`), `/integrations/references`, `/integrations/leads/{id}`, `/integrations/suppressions` (+ `check`), `/integrations/bi/events`, `/integrations/bi/daily-metrics` e `/tasks/{id}/calendar`.
+- **Ambiente:** `OUTBOUND_WEBHOOK_SIGNING_SECRET` documentado no `.env.example` e no Blueprint da Render (vazio = webhooks desligados).
+
+### Alterado
+
+- **Autorização:** novo ator `apiKey` (ADR 034); `checkAccess` e `requirePermission` conferem os escopos; `apiHandler` aceita `{ apiKey: escopo }` e pula a checagem de origem só para requisições com chave. Permissões novas: `reference.read` (ADMIN e GESTOR), `reference.manage`, `suppression.check` e `bi.export` (ADMIN).
+- **Oportunidades e Lista Não Contatar:** publicam os eventos de saída na mesma transação (módulo `outbox`).
+- **Ficha do lead:** o formulário de nova tarefa ganhou o tipo (Follow-up, Ligação, Reunião).
+- **Auditoria:** rótulos das ações novas e autor "Integração (chave de API)".
+- **Job `webhooks.purge`:** também apaga os eventos de saída com mais de 90 dias.
+- **Documentação:** ARCHITECTURE (módulos, autenticação, endpoints, job e ADRs 034 a 036), INTEGRATIONS (§11 reescrito e §12), SECURITY (§4.4 chaves de API, §10 SSRF implementado, matriz e revisão da Fase 12), LGPD (§8 e checklist), DATABASE (§4.15), ROADMAP, GO-LIVE (§16, roteiro I1–I9) e README.
+
+### Observações
+
+- **Pendente:** adaptador `CRM_PROVIDER=docline` (sincronização ativa com o CRM) quando a Docline entregar a documentação da API do CRM (risco R18).
+- Entrega dos webhooks é "pelo menos uma vez" e sem ordem garantida: o receptor deduplica pelo `Docline-Event-Id`.
+- O aviso de descontinuação do driver `pg` sobre consultas paralelas numa transação (já registrado na 0.9.0) continua; não é desta fase.
+
 ## [0.11.0] — Fase 11: Analytics — 2026-10-10
 
 Indicadores para **decidir com dados** sem pesar no banco: rollups diários e fatos por lead recalculados de hora em hora; relatórios de conversão por recorte, desempenho por SDR, evolução mensal e WhatsApp × Instagram, **com intervalo de confiança e aviso de amostra insuficiente em toda taxa**; insights da carteira no dashboard (números do banco, texto da IA conferido) e distribuição automática do pool. F11-01 a F11-05 entregues. A distribuição automática nasce **desligada** e nunca tira um lead de alguém. Aceite coberto pela jornada E2E `fase11.spec.ts` e pelas suítes de analytics e distribuição. Totais: 477 testes unitários, 249 de integração e 56 jornadas E2E.
