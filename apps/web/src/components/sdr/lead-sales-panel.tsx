@@ -2,7 +2,15 @@
 
 import { STEP_TASK_TITLES, type ENROLLMENT_STATUS_LABELS } from '@docline/core/cadence-domain';
 import { CONVERSION_TYPE_LABELS, QUALIFICATION_LABELS } from '@docline/core/opportunities-domain';
-import { Check, MessageSquarePlus, PhoneCall, Reply, Send } from 'lucide-react';
+import {
+  CalendarPlus,
+  Check,
+  Download,
+  MessageSquarePlus,
+  PhoneCall,
+  Reply,
+  Send,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useAction } from '@/components/leads/use-action';
 import { Alert } from '@/components/ui/alert';
@@ -373,6 +381,7 @@ function TasksCard({
   onReschedule: (task: TaskView) => void;
 }) {
   const [title, setTitle] = useState('');
+  const [type, setType] = useState<'FOLLOW_UP' | 'CALL' | 'MEETING'>('FOLLOW_UP');
   const [due, setDue] = useState(() => toLocalInput(new Date(Date.now() + 86_400_000)));
 
   return (
@@ -397,6 +406,25 @@ function TasksCard({
                 </p>
                 {t.description ? (
                   <p className="text-xs text-muted-foreground">{t.description}</p>
+                ) : null}
+                {t.type === 'MEETING' ? (
+                  // Reunião na agenda (F12-05): modelo do Google Agenda ou .ics, sem OAuth.
+                  <p className="flex flex-wrap gap-3 text-xs">
+                    <a
+                      href={`/api/v1/tasks/${t.id}/calendar?format=google`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    >
+                      <CalendarPlus className="size-3.5" aria-hidden /> Google Agenda
+                    </a>
+                    <a
+                      href={`/api/v1/tasks/${t.id}/calendar?format=ics`}
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                    >
+                      <Download className="size-3.5" aria-hidden /> Arquivo .ics
+                    </a>
+                  </p>
                 ) : null}
                 {canEdit ? (
                   <div className="flex flex-wrap gap-1.5">
@@ -453,20 +481,29 @@ function TasksCard({
         )}
         {canEdit ? (
           <form
-            className="grid gap-2 border-t pt-3 sm:grid-cols-[1fr_12rem_auto]"
+            className="grid gap-2 border-t pt-3 sm:grid-cols-[8rem_1fr_12rem_auto]"
             onSubmit={async (e) => {
               e.preventDefault();
               const ok = await run(
                 () =>
                   api('/tasks', {
                     method: 'POST',
-                    body: { leadId, title, dueAt: fromLocalInput(due) },
+                    body: { leadId, type, title, dueAt: fromLocalInput(due) },
                   }),
-                'Follow-up agendado.',
+                type === 'MEETING' ? 'Reunião agendada.' : 'Follow-up agendado.',
               );
               if (ok) setTitle('');
             }}
           >
+            <Select
+              aria-label="Tipo da nova tarefa"
+              value={type}
+              onChange={(e) => setType(e.target.value as typeof type)}
+            >
+              <option value="FOLLOW_UP">Follow-up</option>
+              <option value="CALL">Ligação</option>
+              <option value="MEETING">Reunião</option>
+            </Select>
             <Input
               aria-label="Nova tarefa"
               placeholder="Ex.: ligar para o contador"

@@ -8,6 +8,7 @@ import {
   ListOrdered,
   MapPin,
   MessageCircle,
+  PlugZap,
   Sparkles,
   Shuffle,
   SquareKanban,
@@ -82,6 +83,12 @@ const SECTIONS: { href: string; title: string; description: string; Icon: Lucide
     title: 'Instagram',
     description: 'Conta na Meta, respostas do mês, consulta de perfis e automação.',
     Icon: AtSign,
+  },
+  {
+    href: '/configuracoes/integracoes',
+    title: 'Integrações Docline',
+    description: 'Chaves de API, webhooks de saída para o CRM e entregas.',
+    Icon: PlugZap,
   },
   {
     href: '/configuracoes/dados-cnpj',

@@ -37,6 +37,7 @@ function describe(row: AuditRow): string {
 function actorLabel(row: AuditRow): string {
   if (row.actorName) return row.actorName;
   if (row.action === 'auth.login_failed') return 'Não autenticado';
+  if (row.actorType === 'INTEGRATION') return 'Integração (chave de API)';
   return row.actorType === 'SYSTEM' ? 'Sistema' : '—';
 }
 

@@ -16,6 +16,10 @@ import { LeadStageCard, type StageHistoryItem } from '@/components/pipeline/lead
 import type { LossReasonView, StageView } from '@/components/pipeline/pipeline-ui';
 import { LeadSalesPanel, type LeadSalesData } from '@/components/sdr/lead-sales-panel';
 import { InstagramCard, type LeadInstagramView } from '@/components/instagram/instagram-card';
+import {
+  LeadReferencesCard,
+  type LeadReferenceView,
+} from '@/components/integrations/lead-references-card';
 import { RegistryCard } from '@/components/prospecting/registry-card';
 import {
   LeadCampaignsCard,
@@ -137,6 +141,7 @@ export function LeadDetail({
   instagram,
   registry,
   campaigns = [],
+  references = null,
   sales,
   operation,
   permissions,
@@ -153,6 +158,8 @@ export function LeadDetail({
   registry: LeadRegistryView | null;
   /** Campanhas do lead (Fase 10). */
   campaigns?: LeadCampaignView[];
+  /** Id no CRM e em outros sistemas Docline (Fase 12); `null` sem permissão. */
+  references?: { items: LeadReferenceView[]; canManage: boolean } | null;
   sales: LeadSalesView;
   operation: LeadSalesData;
   permissions: LeadDetailPermissions;
@@ -425,6 +432,13 @@ export function LeadDetail({
             items={campaigns}
             canManage={permissions.canManageCampaigns ?? false}
           />
+          {references ? (
+            <LeadReferencesCard
+              leadId={lead.id}
+              items={references.items}
+              canManage={references.canManage}
+            />
+          ) : null}
           {registry ? <RegistryCard leadId={lead.id} data={registry} canEdit={editable} /> : null}
 
           <Card>

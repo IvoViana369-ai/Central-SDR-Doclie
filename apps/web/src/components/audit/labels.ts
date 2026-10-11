@@ -155,6 +155,21 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'leads.auto_assign_update': 'Distribuição automática alterada',
   'leads.auto_assign_requested': 'Distribuição automática pedida',
   'user.availability_update': 'Disponibilidade para a distribuição alterada',
+  'api_key.create': 'Chave de API criada',
+  'api_key.revoke': 'Chave de API revogada',
+  'api_key.rejected': 'Chave de API revogada ou vencida ainda em uso',
+  'webhook_endpoint.create': 'Destino de webhook cadastrado',
+  'webhook_endpoint.update': 'Destino de webhook alterado',
+  'webhook_endpoint.pause': 'Destino de webhook pausado',
+  'webhook_endpoint.activate': 'Destino de webhook reativado',
+  'webhook_endpoint.rotate_secret': 'Segredo do webhook trocado',
+  'webhook_endpoint.test': 'Teste de webhook enviado',
+  'webhook_endpoint.auto_disable': 'Destino de webhook desligado por falhas',
+  'webhook_delivery.resend': 'Entrega de webhook reenviada',
+  'reference.link': 'Vinculado a outro sistema Docline',
+  'reference.update': 'Vínculo com outro sistema alterado',
+  'reference.unlink': 'Vínculo com outro sistema desfeito',
+  'lead.integration_read': 'Ficha lida por outro sistema (API)',
 };
 
 export function auditActionLabel(action: string): string {
@@ -162,6 +177,11 @@ export function auditActionLabel(action: string): string {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  scopes: 'Escopos',
+  events: 'Eventos',
+  url: 'URL',
+  secretVersion: 'Versão do segredo',
+  revokedAt: 'Revogada em',
   enabled: 'Ligada',
   fallbackToAll: 'Rodízio geral sem território',
   defaultCapacity: 'Limite padrão de leads ativos',

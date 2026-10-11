@@ -67,11 +67,7 @@ async function requireEntity(
   return opportunity.lead;
 }
 
-function describe(reference: {
-  entityType: ExternalEntityType;
-  system: string;
-  [key: string]: unknown;
-}) {
+function describe<T extends { system: string }>(reference: T) {
   return { ...reference, systemLabel: systemLabel(reference.system) };
 }
 

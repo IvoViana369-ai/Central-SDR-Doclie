@@ -1,4 +1,5 @@
 import {
+  findExternalReferences,
   getContactRules,
   getLead,
   getLeadCadence,
@@ -79,6 +80,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const registry = registryData.status === 'not_loaded' ? null : registryData;
   // Campanhas (Fase 10): de qual campanha o lead veio e a abordagem sorteada.
   const campaigns = await getLeadCampaigns(deps, actor, { leadId: id }, meta);
+  // Integrações (Fase 12): o id do escritório no CRM e em outros sistemas Docline.
+  const references = can('reference.read')
+    ? await findExternalReferences(deps, actor, { entityType: 'LEAD', entityId: id }, meta)
+    : null;
 
   return (
     <LeadDetail
@@ -89,6 +94,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       instagram={instagram}
       registry={registry}
       campaigns={campaigns.items}
+      references={
+        references ? { items: references.data, canManage: can('reference.manage') } : null
+      }
       sales={{
         stages: pipeline.stages,
         lossReasons,

@@ -21,6 +21,8 @@ export const OUTBOX_FILE = fileURLToPath(new URL('./e2e/.state/outbox.jsonl', im
 /** WhatsApp e Instagram simulados (Fases 7 e 8): os testes assinam os webhooks como a Meta. */
 export const META_APP_SECRET = 'e2e-meta-app-secret-nao-real';
 export const META_WEBHOOK_VERIFY_TOKEN = 'e2e-verify-token-nao-real';
+/** Webhooks de saída (Fase 12): segredo mestre só do E2E. */
+export const OUTBOUND_WEBHOOK_SIGNING_SECRET = 'e2e-webhook-mestre-nao-real-com-32-caracteres';
 
 /** Navegador pré-instalado (ambientes sem download de browsers). */
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -89,6 +91,8 @@ export default defineConfig({
       COMPANY_REGISTRY_PROVIDER: 'fake',
       META_APP_SECRET,
       META_WEBHOOK_VERIFY_TOKEN,
+      // Webhooks de saída (Fase 12): APP_ENV=test libera o receptor local (127.0.0.1).
+      OUTBOUND_WEBHOOK_SIGNING_SECRET,
     },
   },
 });
