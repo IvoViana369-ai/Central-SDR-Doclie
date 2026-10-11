@@ -32,6 +32,10 @@ const EXPECTED: Record<Permission, Role[]> = {
   'suppression.revoke': ['ADMIN'],
   'permission.update': ['ADMIN', 'MANAGER'],
   'dsr.manage': ['ADMIN'],
+  'reference.read': ['ADMIN', 'MANAGER'],
+  'reference.manage': ['ADMIN'],
+  'suppression.check': ['ADMIN'],
+  'bi.export': ['ADMIN'],
 };
 
 describe('matriz de permissões', () => {

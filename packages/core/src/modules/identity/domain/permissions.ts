@@ -39,6 +39,14 @@ export const PERMISSIONS = [
   'suppression.revoke',
   'permission.update',
   'dsr.manage',
+  // Integrações Docline (Fase 12)
+  /** Referências externas: o id do mesmo registro em outro sistema Docline. */
+  'reference.read',
+  'reference.manage',
+  /** Consultar se identificadores estão na Lista Não Contatar (outros sistemas, pela API). */
+  'suppression.check',
+  /** Exportação incremental para BI, sem dados pessoais. */
+  'bi.export',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -67,6 +75,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'duplicate.decide',
     'suppression.read',
     'permission.update',
+    'reference.read',
   ]),
   SDR: new Set<Permission>(LEAD_BASICS),
   SALES: new Set<Permission>(LEAD_BASICS),

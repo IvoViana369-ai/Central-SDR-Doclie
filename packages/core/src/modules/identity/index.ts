@@ -19,6 +19,13 @@ export {
   type Permission,
 } from './domain/permissions';
 export {
+  API_SCOPES,
+  API_SCOPE_KEYS,
+  isApiScope,
+  scopesGrant,
+  type ApiScope,
+} from './domain/api-scopes';
+export {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   assertPasswordPolicy,

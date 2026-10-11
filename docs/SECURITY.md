@@ -155,6 +155,10 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 | Ver auditoria | ✅ | ⚙️ (sua equipe) | ❌ | ❌ |
 | Anonimizar lead / atender titular | ✅ | ❌ | ❌ | ❌ |
 | Configurar integrações | ✅ | ❌ | ❌ | ❌ |
+| Chaves de API e webhooks de saída: criar, revogar, pausar, rotacionar, enviar teste e ver entregas (`integration.manage`) | ✅ | ❌ | ❌ | ❌ |
+| Ver as referências externas de um lead (o id no CRM e em outros sistemas Docline) (`reference.read`) | ✅ | ✅ | ❌ | ❌ |
+| Gravar e desfazer referências externas (`reference.manage`) | ✅ | ❌ | ❌ | ❌ |
+| Consultar a Lista Não Contatar por identificador (`suppression.check`) e exportação para BI (`bi.export`): feitas por chave de API com o escopo (§4.4) | ✅ | ❌ | ❌ | ❌ |
 
 ⚙️ = definido em configuração; padrão conservador.
 
@@ -164,6 +168,24 @@ A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts
 - Consultas de lista sempre aplicam o escopo do ator (previne IDOR).
 - Negações geram `audit_logs` com `action = ACCESS_DENIED`.
 - Testes de integração para cada linha da matriz.
+
+### 4.4 Chaves de API (Fase 12)
+
+Outros sistemas Docline (CRM, n8n, BI) usam `Authorization: Bearer dsdr_…`. A chave **não herda perfil**: cada escopo libera só as permissões listadas em `API_SCOPES` (`packages/core/src/modules/identity/domain/api-scopes.ts`), e a rota também precisa aceitar chave com aquele escopo. São duas travas: a da rota e a do caso de uso.
+
+| Escopo | Libera | Uso |
+|---|---|---|
+| `leads:read` | `lead.read` | Ficha do lead (com contatos) e oportunidades: o CRM completa o cadastro depois do webhook |
+| `references:read` | `reference.read` | Achar o lead ou a oportunidade pelo id em outro sistema |
+| `references:write` | `reference.read`, `reference.manage` | Vincular, atualizar e desfazer o id em outro sistema |
+| `suppression:check` | `suppression.check` | Saber se identificadores estão na Lista Não Contatar, sem ver a lista |
+| `suppression:write` | `suppression.check`, `optout.register` | Registrar um opt-out recebido em outro sistema |
+| `bi:read` | `bi.export` | Eventos e indicadores diários incrementais, sem dados pessoais |
+
+- Nenhum escopo dá acesso a usuários, configurações, auditoria, exportação de leads, anonimização ou às próprias chaves e webhooks (teste em `api-scopes.test.ts`).
+- A chave aparece **uma única vez**, na criação; o banco guarda o prefixo (para reconhecer) e o SHA-256. Revogação imediata, com motivo; validade opcional.
+- Limite por chave (padrão 120 requisições por minuto), último uso (data e IP) e auditoria com autor `INTEGRATION` e o nome da chave.
+- Requisições com chave não usam cookie, então não passam pela checagem de origem (CSRF); requisições com sessão continuam passando.
 
 ---
 

@@ -320,6 +320,10 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   'suppression.revoke': 'Revogar Não Contatar',
   'permission.update': 'Alterar base legal',
   'dsr.manage': 'Pedidos de titulares',
+  'reference.read': 'Ver referências externas',
+  'reference.manage': 'Gravar referências externas',
+  'suppression.check': 'Consultar a Lista Não Contatar (API)',
+  'bi.export': 'Exportação para BI',
 };
 
 const REASON_LABELS: Record<string, string> = {

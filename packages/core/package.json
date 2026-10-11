@@ -8,6 +8,7 @@
     "./password-policy": "./src/modules/identity/domain/password-policy.ts",
     "./roles": "./src/modules/identity/domain/roles.ts",
     "./permissions": "./src/modules/identity/domain/permissions.ts",
+    "./api-scopes": "./src/modules/identity/domain/api-scopes.ts",
     "./normalization": "./src/modules/normalization/domain/index.ts",
     "./leads-domain": "./src/modules/leads/domain/index.ts",
     "./compliance-domain": "./src/modules/compliance/domain/index.ts",
@@ -28,6 +29,7 @@
     "./instagram-domain": "./src/modules/instagram/domain/index.ts",
     "./prospecting-domain": "./src/modules/prospecting/domain/index.ts",
     "./campaigns-domain": "./src/modules/campaigns/domain/index.ts",
+    "./integrations-domain": "./src/modules/integrations/domain/index.ts",
     "./dev": "./src/dev/index.ts"
   },
   "scripts": {

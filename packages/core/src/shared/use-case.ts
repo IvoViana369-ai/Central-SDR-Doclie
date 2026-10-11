@@ -1,5 +1,6 @@
 import type { DbClient, DbTransaction, Prisma } from '@docline/db';
 import type { z } from 'zod';
+import { scopesGrant } from '../modules/identity/domain/api-scopes';
 import { roleHasPermission, type Permission } from '../modules/identity/domain/permissions';
 import type { AiEffort, AiProvider } from '../ports/ai';
 import type { EmailProvider } from '../ports/email';
@@ -87,6 +88,8 @@ export interface UseCaseContext {
  * - 'authenticated': qualquer usuário ativo;
  * - 'public': sem sessão (ex.: aceitar convite).
  * Atores de sistema (worker/CLI) são confiáveis e passam em qualquer regra.
+ * Chaves de API só passam nas permissões que os seus escopos liberam (nunca em
+ * 'authenticated').
  */
 export type Access = Permission | 'authenticated' | 'public';
 
@@ -100,6 +103,12 @@ export function checkAccess(actor: Actor, access: Access): void {
   if (access === 'public') return;
   if (actor.kind === 'anonymous') throw new UnauthenticatedError();
   if (actor.kind === 'system') return;
+  if (actor.kind === 'apiKey') {
+    if (access === 'authenticated' || !scopesGrant(actor.scopes, access)) {
+      throw new ForbiddenError('A chave de API não tem o escopo necessário.');
+    }
+    return;
+  }
   if (actor.status !== 'ACTIVE') throw new UnauthenticatedError('Usuário sem acesso ativo.');
   if (access === 'authenticated') return;
   if (!roleHasPermission(actor.role, access)) throw new ForbiddenError();
@@ -115,9 +124,12 @@ export function auditData(actor: Actor, meta: RequestMeta, entry: AuditEntry) {
     entry.actorOverride ??
     (actor.kind === 'user'
       ? { type: 'USER' as const, id: actor.id }
-      : { type: 'SYSTEM' as const, id: null });
+      : actor.kind === 'apiKey'
+        ? { type: 'INTEGRATION' as const, id: actor.id }
+        : { type: 'SYSTEM' as const, id: null });
   const metadata = {
     ...(actor.kind === 'system' && !entry.actorOverride ? { system: actor.name } : {}),
+    ...(actor.kind === 'apiKey' && !entry.actorOverride ? { apiKey: actor.name } : {}),
     ...entry.metadata,
   };
   return {
@@ -251,7 +263,13 @@ export async function requirePermission(
   ctx: UseCaseContext,
   permission: Permission,
 ): Promise<void> {
-  if (ctx.actor.kind !== 'user' || roleHasPermission(ctx.actor.role, permission)) return;
+  const allowed =
+    ctx.actor.kind === 'user'
+      ? roleHasPermission(ctx.actor.role, permission)
+      : ctx.actor.kind === 'apiKey'
+        ? scopesGrant(ctx.actor.scopes, permission)
+        : true;
+  if (allowed) return;
   await ctx.deps.db.auditLog.create({
     data: auditData(ctx.actor, ctx.meta, {
       action: 'access.denied',
