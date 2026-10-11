@@ -6,7 +6,7 @@ import {
   EXTERNAL_ID_MAX_LENGTH,
   SYSTEM_CODE_PATTERN,
 } from '../domain/references';
-import { WEBHOOK_EVENT_TYPES } from '../domain/webhooks';
+import { WEBHOOK_EVENT_TYPES, type WebhookEventType } from '../domain/webhooks';
 
 const id = z.uuid('Identificador inválido.');
 
@@ -160,4 +160,37 @@ export const registerExternalOptOutInput = z.object({
   reason: z.enum(['OPT_OUT', 'DATA_SUBJECT_REQUEST', 'COMPLAINT']).default('OPT_OUT'),
   /** Onde o pedido foi recebido (sem dados pessoais além do necessário). */
   notes: z.string().trim().max(300).nullish(),
+});
+
+// -----------------------------------------------------------------------------
+// Agenda (F12-05) e exportação para BI (F12-06)
+// -----------------------------------------------------------------------------
+
+export const taskCalendarInput = z.object({ taskId: id });
+
+const csvList = <T extends string>(values: readonly [T, ...T[]]) =>
+  z.preprocess(
+    (v) =>
+      typeof v === 'string'
+        ? v
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : v,
+    z.array(z.enum(values)).min(1),
+  );
+
+export const biEventsInput = z.object({
+  /** Id do último evento lido (os ids crescem com o tempo). */
+  after: id.optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(500),
+  types: csvList(WEBHOOK_EVENT_TYPES as [WebhookEventType, ...WebhookEventType[]]).optional(),
+});
+
+export const biDailyMetricsInput = z.object({
+  /** Cursor devolvido pelo pedido anterior. */
+  cursor: z.string().max(200).optional(),
+  /** Dias por página. */
+  limit: z.coerce.number().int().min(1).max(366).default(31),
+  dimension: z.enum(['GLOBAL', 'SDR', 'CHANNEL']).optional(),
 });

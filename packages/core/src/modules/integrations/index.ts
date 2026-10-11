@@ -48,3 +48,5 @@ export {
 } from './application/references';
 export { checkSuppressions, registerExternalOptOut } from './application/shared-list';
 export { getIntegrationLead } from './application/crm';
+export { getTaskCalendar } from './application/calendar';
+export { exportBiDailyMetrics, exportBiEvents } from './application/bi';
