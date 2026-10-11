@@ -33,6 +33,7 @@ export {
 } from './infra/suppressions';
 export {
   leadIdentifiers,
+  leadsByIdentifier,
   loadLeadSuppressions,
   refreshLeadContactState,
   refreshLeadsForIdentifiers,

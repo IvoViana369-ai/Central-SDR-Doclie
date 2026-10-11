@@ -40,6 +40,15 @@ export const listAuditLogs = defineUseCase({
       select: { id: true, name: true },
     });
     const names = new Map(actors.map((a) => [a.id, a.name]));
+    // Autor INTEGRATION: o id é o da chave de API (Fase 12).
+    const keyIds = actorIds.filter((id) => !names.has(id));
+    if (keyIds.length > 0) {
+      const keys = await ctx.tx.apiKey.findMany({
+        where: { id: { in: keyIds } },
+        select: { id: true, name: true },
+      });
+      keys.forEach((k) => names.set(k.id, `${k.name} (chave de API)`));
+    }
 
     return {
       data: items.map((row) => ({

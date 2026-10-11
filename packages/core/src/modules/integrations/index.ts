@@ -41,3 +41,10 @@ export {
   runWebhookDispatch,
   type DispatchResult,
 } from './application/dispatch';
+export {
+  findExternalReferences,
+  removeExternalReference,
+  upsertExternalReference,
+} from './application/references';
+export { checkSuppressions, registerExternalOptOut } from './application/shared-list';
+export { getIntegrationLead } from './application/crm';

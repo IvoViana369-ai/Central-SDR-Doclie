@@ -3,6 +3,7 @@ import { listTimelineInput } from '../contracts/schemas';
 import { LEAD_EVENT_LABELS, type LeadEventType } from '../domain/events';
 import { requireLeadInScope } from '../infra/scope';
 
+/** Nomes dos autores: pessoas e, para o que veio de outro sistema, a chave de API. */
 async function userNames(ctx: UseCaseContext, ids: (string | null)[]) {
   const unique = [...new Set(ids.filter((id): id is string => id !== null))];
   if (unique.length === 0) return new Map<string, string>();
@@ -10,7 +11,16 @@ async function userNames(ctx: UseCaseContext, ids: (string | null)[]) {
     where: { id: { in: unique } },
     select: { id: true, name: true },
   });
-  return new Map(users.map((u) => [u.id, u.name]));
+  const names = new Map(users.map((u) => [u.id, u.name]));
+  const rest = unique.filter((id) => !names.has(id));
+  if (rest.length > 0) {
+    const keys = await ctx.tx.apiKey.findMany({
+      where: { id: { in: rest } },
+      select: { id: true, name: true },
+    });
+    keys.forEach((k) => names.set(k.id, `${k.name} (integração)`));
+  }
+  return names;
 }
 
 /** Timeline do lead (MVP M09): eventos em ordem cronológica inversa, com ator e filtro por tipo. */

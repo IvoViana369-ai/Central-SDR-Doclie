@@ -1,5 +1,6 @@
 import type { Channel } from '@docline/db';
 import { JOBS } from '../../../jobs/catalog';
+import { actorTypeOf } from '../../../shared/actor';
 import { toJson, type AuditChanges, type UseCaseContext } from '../../../shared/use-case';
 import type { LeadEventType } from '../domain/events';
 
@@ -19,8 +20,9 @@ export async function recordLeadEvent(
       leadId,
       type,
       occurredAt: ctx.now,
-      actorType: ctx.actor.kind === 'user' ? 'USER' : 'SYSTEM',
-      actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
+      actorType: actorTypeOf(ctx.actor),
+      // Chave de API: o id da chave (a timeline mostra o nome guardado na auditoria).
+      actorId: ctx.actor.kind === 'user' || ctx.actor.kind === 'apiKey' ? ctx.actor.id : null,
       ...(options.payload ? { payload: toJson(options.payload) } : {}),
       subjectType: options.subject?.type ?? null,
       subjectId: options.subject?.id ?? null,
