@@ -188,7 +188,7 @@ Os estados pedidos no §14 dos requisitos são independentes e calculados pelo g
 | Sobrevive à exclusão | Após anonimização/exclusão do lead, o hash permanece para continuar honrando o pedido |
 | Revogação | Só ADMIN, com motivo e evidência (ex.: o titular pediu para voltar a receber), auditada |
 | Confirmação ao titular | Uma única mensagem curta confirmando o descadastro, quando o canal permitir |
-| Compartilhamento interno | Evento `optout.registered` disponível para outros sistemas Docline (Fase 12) |
+| Compartilhamento interno | Fase 12: cada inclusão ou revogação vira evento (`optout.registered`, `suppression.revoked`) com o valor **mascarado** e os leads atingidos; outros sistemas Docline consultam identificadores (bloqueado ou não, sem ver a lista) e registram opt-outs recebidos por eles (origem `INTEGRATION`), que valem aqui na hora |
 
 **Implementado na Fase 2:** opt-out em 1 clique (lead inteiro, um canal ou um contato), inclusão manual por valor, revogação só pelo ADMIN com motivo, efeito imediato em todos os leads com o mesmo identificador, CNPJ e o próprio lead também entram na lista, consulta com valores mascarados (ADMIN/GESTOR) e gate de contactabilidade por canal com motivos legíveis. Ficam para as próximas fases: detecção de palavras-chave e confirmação ao titular (Fase 5), parada de cadência (Fase 5), prévia de importação (Fase 3) e campanhas (Fase 10).
 
@@ -407,6 +407,14 @@ Base para o registro exigido pelo art. 37 (a completar pelo encarregado):
 - [x] Insights sem dado pessoal no pedido à IA (só contagens, cidades e nomes de abordagens); texto conferido; retenção de 180 dias.
 - [x] Fatos por lead sem dado pessoal (ids, datas, cidade, canal); lead mesclado sai na rodada seguinte do rollup.
 - [x] Distribuição automática: dados de disponibilidade de funcionários mínimos (participa, limite, ausente até, sem motivo) e auditados; nunca toma lead de alguém.
+
+**Fase 12 (integrações Docline)**
+- [x] Webhooks sem dado pessoal em claro: ids, códigos, datas e valores mascarados; o resto só pela API com chave e escopo.
+- [x] Ficha para o CRM com minimização: só de lead transferido ao Comercial ou vinculado a outro sistema, sem anotações nem evidências; cada leitura auditada com o nome da chave.
+- [x] Lista Não Contatar compartilhada sem expor a lista (consulta responde bloqueado ou não); opt-out recebido em outro sistema vale na hora e derruba o opt-in do WhatsApp.
+- [x] Exportação para BI sem dados pessoais (pessoas só por id; sem valores mascarados); eventos e entregas apagados em 90 dias.
+- [x] Reunião na agenda sem OAuth e sem contatos no texto (título, escritório e link da ficha).
+- [ ] Registro de operações (§17) com o compartilhamento entre sistemas Docline (CRM, Gestão AR, Gestão 360, BI) e a finalidade de cada um, antes de criar as chaves de produção.
 
 - [ ] Meta no registro de operações e no aviso de privacidade; termos de dados da plataforma avaliados (antes de ligar a API do WhatsApp ou do Instagram).
 - [ ] Termos Meta e Google revalidados; parecer sobre uso de dados do Google e dos dados abertos CNPJ.

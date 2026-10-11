@@ -78,6 +78,11 @@ envVarGroups:
       # docs/INTEGRATIONS.md §16.3 (parecer jurídico e formato conferido).
       - key: COMPANY_REGISTRY_PROVIDER
         value: disabled
+      # Webhooks de saída para o CRM e outros sistemas Docline (Fase 12):
+      # vazio = desligados. Para homologar, gere com `openssl rand -base64 32`
+      # (web e worker usam o mesmo grupo); ver docs/GO-LIVE.md §16.
+      - key: OUTBOUND_WEBHOOK_SIGNING_SECRET
+        sync: false
 
 services:
   - type: web

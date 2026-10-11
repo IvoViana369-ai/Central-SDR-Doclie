@@ -1,6 +1,6 @@
 # Roadmap, Backlog, Riscos e Cronograma — Docline SDR
 
-> **Status:** Fases 1 a 11 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção; Campanhas sem envio; distribuição automática desligada por padrão) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a Fase 12 · **Última revisão:** 2026-10-10
+> **Status:** Fases 1 a 12 concluídas no código (MVP; WhatsApp, Instagram e base aberta do CNPJ desligados por padrão em produção; Campanhas sem envio; distribuição automática desligada por padrão; a sincronização ativa com o CRM Docline aguarda a documentação da API dele) · próximo: UAT e go-live do piloto ([GO-LIVE](./GO-LIVE.md)), as ativações que dependem da Meta e do jurídico ([INTEGRATIONS §16](./INTEGRATIONS.md#16-checklist-de-ativação-de-uma-integração)) e a ligação com o CRM ([GO-LIVE §16](./GO-LIVE.md)) · **Última revisão:** 2026-10-11
 > Relacionados: [MVP](./MVP.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [README](../README.md)
 
 ## Sumário
@@ -32,7 +32,7 @@
 | 9 | Google / API de prospecção | Dados abertos CNPJ, tela de prospecção, Google Places (se aprovado) | ✅ concluída no código (2026-10-10), sem o Google Places (aguarda parecer); ativação depende do jurídico | Captação |
 | 10 | Campanhas | Seleção, elegibilidade, limites, métricas, A/B | ✅ concluída no código (2026-10-10); a campanha não envia, libera para a cadência | Escala |
 | 11 | Analytics | Rollups, conversões por dimensão, insights, distribuição automática | ✅ concluída no código (2026-10-10); distribuição automática desligada por padrão | Inteligência |
-| 12 | Integrações Docline | API com chaves, webhooks de saída, CRM, Lista Não Contatar compartilhada | ~3 semanas (depende das APIs) | Ecossistema |
+| 12 | Integrações Docline | API com chaves, webhooks de saída, CRM, Lista Não Contatar compartilhada | ✅ concluída no código (2026-10-11); sincronização ativa com o CRM aguarda a API dele | Ecossistema |
 
 \* Em semanas de trabalho de 1 desenvolvedor full-stack sênior. Ver premissas.
 
@@ -560,6 +560,30 @@ Detalhes em [CHANGELOG](../CHANGELOG.md).
 | F11-05 | Distribuição automática (round-robin, território, disponibilidade) | SHOULD |
 
 ### Fase 12 — Integrações Docline
+
+**Entregáveis:** chaves de API com escopos, limite, validade e revogação, aceitas só nas rotas que declaram o escopo; webhooks de saída assinados (HMAC) com outbox na mesma transação, novas tentativas, desligamento automático e proteção contra SSRF; referências externas (o id do lead e da oportunidade no CRM e em outros sistemas Docline) e a ficha do lead para o CRM; Lista Não Contatar compartilhada (consulta, registro de opt-out vindo de outro sistema e evento a cada inclusão ou revogação); reunião no Google Agenda ou em `.ics`; exportação incremental de eventos e indicadores diários para o BI.
+
+**Situação (2026-10-11):** ✅ concluída no código; F12-01, F12-02, F12-04, F12-05 e F12-06 entregues; **F12-03 parcial**: as referências externas, a ficha para o CRM e os webhooks que o CRM consome estão prontos, mas a **sincronização ativa** (o sistema chamar a API do CRM) depende da documentação da API do CRM Docline (risco R18). Até lá, o CRM consome os webhooks e a API com chave, direto ou pelo n8n. Nenhuma integração envia mensagem a lead.
+
+O aceite é coberto pela jornada E2E `apps/web/e2e/fase12.spec.ts` e pelas suítes `api-keys.int.test.ts`, `webhooks.int.test.ts`, `shared-list.int.test.ts`, `bi-calendar.int.test.ts`, `integrations-schema.int.test.ts`, `integrations-domain.test.ts`, `api-scopes.test.ts`, `calendar.test.ts` e `http-sender.test.ts`:
+
+| Item | O que os testes comprovam |
+|---|---|
+| F12-01 | Chave `dsdr_…` mostrada uma vez (o banco guarda prefixo e SHA-256); só ADMIN cria, lista e revoga; Bearer só nas rotas que declaram o escopo (rota da equipe recebe 401, escopo ausente 403 auditado); escopo libera só as permissões dele, nunca usuários, configurações, auditoria ou outras chaves; revogada ou vencida recebe 401 e o uso fica na auditoria; limite por minuto com `Retry-After`; último uso e IP; autor `INTEGRATION` na auditoria e na timeline. |
+| F12-02 | Evento gravado na mesma transação da mudança, com uma entrega por destino; corpo só com ids, códigos e valores mascarados; assinatura `t=…,v1=…` conferida com o segredo do destino (rotação invalida o anterior); 8 envios em ~45 h; desligamento com 20 falhas em 24 h e aviso aos ADMINs; pausado guarda a fila; teste e reenvio manuais; URL interna, metadados de nuvem e redirecionamento recusados; limpeza de 90 dias. |
+| F12-03 (parcial) | Vínculo por registro e sistema; a chave de um sistema só grava nele; id externo nunca muda de dono sozinho (conflito); busca pelo id externo; ficha para o CRM só de lead transferido ou vinculado, com o aviso de Não Contatar por contato, sem anotações, cada leitura auditada; eventos levam as referências. |
+| F12-04 | Consulta por valor, canal e escritório inteiro (lead ou CNPJ na lista), sem revelar a lista nem o motivo; opt-out vindo de outro sistema com origem `INTEGRATION`, efeito imediato nos leads com o mesmo identificador e opt-in do WhatsApp derrubado; `optout.registered` e `suppression.revoked` para os demais sistemas. |
+| F12-05 | Reunião em `.ics` (RFC 5545) e link de modelo do Google Agenda, sem OAuth; só tarefa de reunião e só no escopo; sem telefone ou e-mail no texto. |
+| F12-06 | Eventos em ordem pelo id, só depois de 60 s (o cursor não pula transação lenta), sem os valores mascarados; indicadores diários dos dias recalculados desde o cursor, cada dia inteiro; só com `bi:read`. |
+
+Decisões e pendências:
+
+- **Chave de API como ator próprio** (ADR 034): duas travas (rota e caso de uso); sem perfil herdado.
+- **Outbox e webhooks assinados** (ADR 035): segredo por destino derivado do segredo mestre, sem guardar segredo no banco.
+- **Referências, ficha para o CRM e Lista Não Contatar compartilhada** (ADR 036): minimização na ficha; a lista nunca sai inteira.
+- **Pendências:** sincronização ativa com o CRM (adaptador `CRM_PROVIDER=docline`) quando a Docline entregar a documentação da API; chaves e destinos reais só no go-live das integrações ([GO-LIVE §16](./GO-LIVE.md)).
+
+Detalhes em [CHANGELOG](../CHANGELOG.md).
 
 | ID | História / tarefa | Prior. |
 |---|---|---|

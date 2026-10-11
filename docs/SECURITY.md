@@ -1,6 +1,6 @@
 # Segurança — Docline SDR
 
-> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9 e Campanhas na Fase 10 e Analytics na Fase 11, em 2026-10-10 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
+> **Status:** baseline da Fase 0; controles da Fase 1 implementados em 2026-10-08; webhook do WhatsApp e credenciais da Meta na Fase 7 e webhook do Instagram na Fase 8, em 2026-10-09; download da base aberta do CNPJ e Prospecção na Fase 9 e Campanhas na Fase 10 e Analytics na Fase 11, em 2026-10-10; chaves de API, webhooks de saída e proteção contra SSRF na Fase 12, em 2026-10-11 (ver [§18](#18-checklist-por-fase)). Aplica-se desde o primeiro commit de código.
 > Relacionados: [LGPD](./LGPD.md) · [ARCHITECTURE](./ARCHITECTURE.md) · [INTEGRATIONS](./INTEGRATIONS.md) · [`.env.example`](../.env.example)
 
 ## Sumário
@@ -267,11 +267,15 @@ Outros sistemas Docline (CRM, n8n, BI) usam `Authorization: Bearer dsdr_…`. A 
 
 ## 10. SSRF (busca de URLs externas)
 
-Se o enriquecimento buscar páginas de sites de leads (futuro):
+**Implementado na Fase 12** para os webhooks de saída (a primeira vez que o sistema chama uma URL informada por uma pessoa):
 
-- Somente `http`/`https`; resolver DNS e **bloquear IPs privados, loopback, link-local e metadados de nuvem** (ex.: `169.254.169.254`), inclusive após redirecionamentos.
-- Timeout curto, tamanho máximo de resposta, sem cookies, *user-agent* identificando a Docline.
-- Respeitar `robots.txt` e os termos do site.
+- **No cadastro** (`validateWebhookUrl`, `packages/core/src/modules/integrations/domain/network.ts`): só `https` (em desenvolvimento e testes, também `http`), sem usuário/senha na URL, sem fragmento, até 2.048 caracteres; IP literal bloqueado e nomes internos (`localhost`, `*.local`, `*.internal`, `*.lan`, nome sem ponto) recusados.
+- **No envio** (`HttpWebhookSender`, `packages/integrations/src/webhooks/http-sender.ts`): o DNS é resolvido e **todo** endereço é conferido (`checkAddress`) antes de conectar; o socket conecta no IP aprovado, sem segunda consulta (fecha a porta para DNS rebinding). Bloqueados: 0/8, 10/8, 100.64/10, 127/8, 169.254/16 (inclui `169.254.169.254`), 172.16/12, 192.0.0/24, 192.0.2/24, 192.88.99/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, 224/4, 240/4, broadcast; em IPv6 `::`, `::1`, `fc00::/7` (inclui `fd00:ec2::254`), `fe80::/10`, `ff00::/8`, Teredo, 6to4, documentação e o IPv4 embutido (`::ffff:…`, `64:ff9b::…`), que segue a regra do IPv4.
+- **Redirecionamentos não são seguidos** (3xx conta como falha); sem cookies; prazo total de 10 s (inclui DNS); só os primeiros 2 KB da resposta são lidos; *user-agent* `DoclineSDR-Webhooks/1.0`.
+- Rede interna só com `APP_ENV` de desenvolvimento ou testes (receptor local do E2E); em staging e produção, sempre bloqueada.
+- Testes: domínio (faixas IPv4/IPv6, IPv4 embutido, nomes, URL) e adaptador contra servidor local (IP literal e `localhost` bloqueados em produção, redirecionamento para os metadados não seguido, prazo, resposta grande).
+
+Se o enriquecimento um dia buscar páginas de sites de leads, usar o mesmo adaptador e, além disso, respeitar `robots.txt` e os termos do site.
 
 ---
 
@@ -455,12 +459,21 @@ Risco residual: um navegador **novo** do dono da conta, no mesmo IP de quem est�
 - O job de rollup usa `REFRESH MATERIALIZED VIEW CONCURRENTLY` (não bloqueia leitura) e recalcula os dias numa transação (apaga e grava), então uma falha no meio não deixa o dia pela metade.
 - Testes: permissões (SDR recebe 403 nos relatórios, na geração de insights, na distribuição e na disponibilidade), conferência dos textos da IA (número errado, telefone, ausente), IA indisponível e sem orçamento, corrida e limites da distribuição, e E2E.
 
+**Revisão de segurança da Fase 12 (Integrações Docline)**
+- Chaves de API (ADR 034, §4.4): aceitas só nas rotas que declaram o escopo; duas travas (rota e caso de uso); nenhum escopo alcança usuários, configurações, auditoria, exportação de leads, anonimização, a Lista Não Contatar inteira ou as próprias chaves e webhooks; banco guarda prefixo e SHA-256; revogação imediata; uso de chave revogada ou vencida auditado (uma linha a cada 10 min por chave); limite por minuto com `Retry-After`; requisição com chave não usa cookie e pula a checagem de origem; requisição com sessão continua com ela.
+- Webhooks de saída (ADR 035): proteção contra SSRF (§10); segredo por destino derivado de `OUTBOUND_WEBHOOK_SIGNING_SECRET` (não fica no banco nem em log), mostrado só na criação e na rotação; assinatura com timestamp; a auditoria guarda a URL sem a query (que às vezes leva um token do receptor); corpo sem dado pessoal em claro.
+- Ficha para o CRM e Lista Não Contatar compartilhada (ADR 036): ficha só de lead transferido ou vinculado, sem anotações, com cada leitura auditada; a consulta da lista responde bloqueado ou não, sem motivo, data ou valores; o registro vindo de outro sistema tem origem `INTEGRATION`, nota curta e autor com o nome da chave.
+- Exportação para BI sem dados pessoais (sem valores mascarados; pessoas só por id) e só com `bi:read`.
+- Rotas novas: `/integrations/api-keys*`, `/integrations/webhooks*` e `/integrations/webhook-deliveries*` exigem `integration.manage` (ADMIN) e recusam chave; `/integrations/references`, `/leads/{id}`, `/suppressions*` e `/bi/*` aceitam sessão (com a permissão) ou chave (com o escopo); `/tasks/{id}/calendar` usa o escopo do lead.
+- Testes: escopos (nenhum alcança o que não deve), chave criada uma vez, revogada, vencida, limite, autor `INTEGRATION`; outbox na transação, assinatura e rotação, novas tentativas, desligamento, pausa, teste e reenvio; SSRF no domínio e no adaptador; referências (conflito, sistema da chave), ficha mínima, consulta e registro na lista; BI (atraso de 60 s, cursor, sem valores) e E2E (chave na tela + Bearer, webhook assinado para um receptor local, reunião na agenda).
+
 **Fases 7+ — Integrações**
 - [x] 2FA obrigatório para ADMIN/GESTOR: sem 2FA, só "Minha conta" (0.7.1, §3).
 - [x] Webhooks com assinatura, idempotência e limites (Fase 7 e Fase 8, §9).
 - [ ] Tokens com menor privilégio e rotação: definido para a Meta (§5, WhatsApp e Instagram); falta criar os usuários do sistema e agendar a rotação na ativação.
-- [ ] Proteção SSRF antes de qualquer busca de URL externa.
-- [ ] Chaves de API com escopos e revogação (Fase 12).
+- [x] Proteção SSRF antes de qualquer busca de URL externa (Fase 12, §10).
+- [x] Chaves de API com escopos e revogação (Fase 12, §4.4).
+- [ ] Na ativação das integrações: uma chave por sistema, só com os escopos que ele usa, validade definida e rotação anual; `OUTBOUND_WEBHOOK_SIGNING_SECRET` gerado só para produção ([GO-LIVE §16](./GO-LIVE.md)).
 
 **Todo PR**
 - [ ] Nenhum segredo, dado real ou planilha real no diff.

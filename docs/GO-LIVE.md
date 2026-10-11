@@ -24,6 +24,7 @@ O código do MVP (Fases 1 a 6) está pronto e testado com dados fictícios. As F
 13. [Base aberta do CNPJ e Prospecção (marco M6)](#13-base-aberta-do-cnpj-e-prospecção-marco-m6)
 14. [Campanhas](#14-campanhas)
 15. [Relatórios, insights e distribuição automática](#15-relatórios-insights-e-distribuição-automática)
+16. [Integrações Docline (CRM, n8n, BI)](#16-integrações-docline-crm-n8n-bi)
 
 ---
 
@@ -289,3 +290,29 @@ A Fase 11 traz os relatórios de conversão (por cidade, UF, segmento, origem, r
 | A8 | GESTOR | Desligar a distribuição | Nenhuma atribuição nova; leads já distribuídos continuam com quem estão |
 
 **Insights com a IA:** com `AI_PROVIDER=fake` (padrão), o texto é o padrão de cada fato. Com o provedor real, a IA só reescreve: o texto dela só aparece se os números baterem com os do sistema (senão, vale o padrão) e o custo entra no orçamento mensal da IA (uma chamada por público por dia).
+
+## 16. Integrações Docline (CRM, n8n, BI)
+
+A Fase 12 traz as chaves de API, os webhooks de saída assinados, as referências externas (o id do escritório no CRM), a ficha do lead para o CRM, a Lista Não Contatar compartilhada, a reunião na agenda e a exportação para BI ([INTEGRATIONS §11](./INTEGRATIONS.md#11-crm-e-sistemas-docline)). **Nenhuma integração envia mensagem a lead.** Tudo nasce desligado: sem chave criada e sem destino cadastrado, nada sai do sistema. A reunião na agenda (Google Agenda ou `.ics`) funciona desde o início, sem configuração.
+
+**Antes de ligar:**
+
+- [ ] Registro de operações e aviso de privacidade com o compartilhamento entre sistemas Docline e a finalidade de cada um ([LGPD §19](./LGPD.md#19-checklist-por-fase)).
+- [ ] `OUTBOUND_WEBHOOK_SIGNING_SECRET` gerado só para produção (`openssl rand -base64 32`), no web **e** no worker. Trocar depois troca o segredo de todos os destinos.
+- [ ] Uma chave por sistema, só com os escopos que ele usa (ex.: CRM: `leads:read`, `references:write`, `suppression:write`; n8n: os do fluxo; BI: `bi:read`), com validade e o dono anotado. A chave vai direto para o cofre do outro sistema.
+- [ ] O receptor do CRM confere a assinatura (`Docline-Signature`), recusa timestamp com mais de 5 minutos e deduplica pelo `Docline-Event-Id`.
+- [ ] Sincronização ativa com o CRM (o sistema chamar a API do CRM): **pendente** da documentação da API do CRM Docline. Até lá, o CRM consome os webhooks e a API (direto ou pelo n8n).
+
+**Homologação** (staging, dados fictícios):
+
+| # | Perfil | Roteiro | Esperado |
+|---|---|---|---|
+| I1 | ADMIN | Configurações → Integrações Docline → criar a chave "CRM (staging)" com "Ler leads e oportunidades" e "Gravar referências externas" | A chave aparece uma vez, com "Copiar"; na lista, só o prefixo, "Ativa" |
+| I2 | Sistema (curl/n8n) | `GET /api/v1/integrations/ping` com `Authorization: Bearer <chave>` | 200 com o nome e os escopos; `GET /api/v1/leads` com a chave dá 401 |
+| I3 | ADMIN | Cadastrar o destino do CRM de staging com "Oportunidade criada", "Lead convertido" e "Opt-out registrado"; "Enviar teste" | O segredo aparece uma vez; o receptor recebe `webhook.test` com assinatura válida; "Entregue" em Entregas recentes |
+| I4 | SDR | Transferir um lead ao Comercial | O receptor recebe `opportunity.created` com o código do lead (sem nome nem telefone) |
+| I5 | Sistema | `PUT /api/v1/integrations/references` com o id do CRM; `GET /api/v1/integrations/leads/{id}` | Na ficha, "Outros sistemas Docline: CRM Docline: …"; a ficha para o CRM traz contatos com o aviso de Não Contatar; a leitura aparece na Auditoria |
+| I6 | Sistema | `POST /api/v1/integrations/suppressions` com um telefone fictício de um lead | O lead fica "Não contatar" na hora; a timeline mostra "via CRM (staging)"; o receptor recebe `optout.registered` |
+| I7 | ADMIN | Derrubar o receptor, transferir outro lead e esperar | Entrega "Na fila" com a próxima tentativa; ao voltar o receptor, "Entregue" (ou "Reenviar" depois de ~45 h) |
+| I8 | ADMIN | Revogar a chave com motivo | A próxima chamada dá 401; o uso depois disso aparece na Auditoria |
+| I9 | SDR | Agendar uma tarefa "Reunião" na ficha e clicar em "Google Agenda" | O Google Agenda abre com o título, o escritório e o link da ficha, 30 minutos; "Arquivo .ics" baixa o mesmo evento |

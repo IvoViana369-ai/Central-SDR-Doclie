@@ -410,8 +410,8 @@ Não existe um tipo `WHATSAPP` separado: o WhatsApp é um `PHONE` com `whatsapp_
 | `saved_views` | `owner_id`, `name`, `entity`, `filter`, `columns`, `sort`, `shared` | 2 |
 | `webhook_events` | *Inbox*: `provider`, `external_event_id` (único por provedor), `signature_valid`, `payload`, `received_at`, `processed_at`, `status`, `attempts`, `error` | 7 |
 | `integration_connections` | `provider`, `status`, `config` (não secreta), `credentials_encrypted`, `last_check_at`, `last_error` | 7 |
-| `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` | 12 |
-| `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` | 12 |
+| `api_keys` | `name`, `key_hash`, `scopes[]`, `last_used_at`, `revoked_at` (implementação em §4.15) | 12 |
+| `external_references` | `entity_type`, `entity_id`, `system` (`DOCLINE_CRM`, `GESTAO_AR`, `GESTAO_360`…), `external_id`, `synced_at` (implementação em §4.15) | 12 |
 | `distribution_rules` | `name`, `strategy`, `params`, `priority`, `active`, `state` jsonb (ex.: ponteiro do round-robin) | não criada: a distribuição automática da Fase 11 usa uma configuração só em `app_settings` (`leads.auto_assign`, última rodada em `leads.auto_assign.last_run`); o "ponteiro" do rodízio é a última atribuição automática de cada SDR em `lead_assignments` |
 
 ### 4.11 Implementação até a Fase 9
@@ -516,6 +516,17 @@ Diferenças em relação às seções acima:
 - Idempotência dos webhooks: `webhook_events (provider, external_event_id)`, `messages (provider, provider_message_id)`, `message_status_events (message_id, status)`, `inbound_unmatched (provider, provider_message_id)` e `social_comments (provider, external_comment_id)`.
 - Uma consulta de perfil por contato (`instagram_profiles.contact_point_id`) e uma resposta privada por comentário (`social_comments.private_reply_message_id`).
 - Uma carga da base aberta por vez (`registry_ingestions`) e um resultado por CNPJ em cada busca da Prospecção (`prospecting_results (search_id, provider_ref)`).
+
+### 4.15 Integrações Docline (Fase 12)
+
+- **`api_keys`:** `name`, `prefix` (único; parte visível, ex.: `dsdr_k7Q2mX9a`), `key_hash` (único; SHA-256 da chave inteira, que nunca é guardada), `scopes` text[] (validados no código; ao menos um), `system` (opcional), `rate_limit_per_minute` (1–6000, padrão 120) com a janela `rate_window_start`/`rate_window_count`, `expires_at`, `last_used_at`/`last_used_ip`, `created_by_id`, `revoked_at`/`revoked_by_id`/`revoke_reason`. A autenticação confere, conta e grava o uso numa única atualização.
+- **`webhook_endpoints`:** `name`, `url` (http/https), `system`, `events` text[] (ao menos um), `status` (`ACTIVE`, `PAUSED`, `DISABLED`), `secret_version` (o segredo é derivado de `OUTBOUND_WEBHOOK_SIGNING_SECRET`, do id e da versão; não fica no banco), `consecutive_failures`/`failing_since`, `last_success_at`, `last_failure_at`, `disabled_at`/`disabled_reason`.
+- **`outbound_events`** (outbox): `type`, `occurred_at`, `payload` jsonb (ids, códigos, datas e valores mascarados), `lead_id` (opcional), `created_at`. Gravado na mesma transação da mudança; também é a fonte da exportação de eventos para BI. Apagado com 90 dias (`webhooks.purge`).
+- **`webhook_deliveries`:** uma por evento e destino (mais as manuais: teste e reenvio, `manual = true`): `status` (`PENDING`, `SUCCEEDED`, `FAILED`, `CANCELLED`), `attempts`, `next_attempt_at` (também a reserva durante o envio), `last_attempt_at`, `last_status_code`, `last_error`, `last_duration_ms`, `delivered_at`. Somem com o evento ou com o destino (cascata).
+- **`external_references`:** `entity_type` (`LEAD`, `OPPORTUNITY`), `entity_id`, `system` (código `^[A-Z][A-Z0-9_]{1,39}$`), `external_id` (1–200), `url`, `synced_at`, `created_by_id` ou `created_by_key_id`. Únicos `(entity_type, entity_id, system)` (um vínculo por registro e sistema) e `(system, entity_type, external_id)` (um id externo, um registro). Sem chave estrangeira para o registro (polimórfico): um lead mesclado mantém os vínculos.
+- **`suppression_entries`:** origem `INTEGRATION` (opt-out recebido de outro sistema Docline pela API).
+- **`audit_logs` e `lead_events`:** autor `INTEGRATION` com o id da chave em `actor_id` (sem chave estrangeira; o nome vem de `api_keys`).
+- **Garantias no banco** (`integrations-schema.int.test.ts`): prefixo e hash únicos, escopos e eventos não vazios, faixa do limite, URL http(s), formato do código do sistema e do id externo (CHECK), unicidade das referências e cascata das entregas.
 
 ---
 

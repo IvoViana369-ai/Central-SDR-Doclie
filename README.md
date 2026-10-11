@@ -2,7 +2,7 @@
 
 Central operacional de prospecção B2B da **Docline Tecnologia**, começando pelos escritórios de contabilidade, contadores e parceiros indicadores.
 
-> **Status: Fases 1 a 11 concluídas — MVP, WhatsApp e Instagram oficiais, Prospecção pela base aberta do CNPJ, Campanhas e Analytics prontos no código.**
+> **Status: Fases 1 a 12 concluídas — MVP, WhatsApp e Instagram oficiais, Prospecção pela base aberta do CNPJ, Campanhas, Analytics e Integrações Docline prontos no código.**
 > - **Fase 1 (fundação técnica):** acesso por convite, perfis e permissões, auditoria imutável, fila de jobs, CI e deploy em Docker.
 > - **Fase 2 (CRM de leads):** cadastro com aviso de duplicidade, lista com filtros e ações em massa, detalhe com timeline, Lista Não Contatar e opt-out, exportação auditada, 2FA, limite de login por conta e Sentry opcional.
 > - **Fase 3 (importação e deduplicação):** importação de CSV/XLSX com mapeamento, prévia e relatório; normalização completa (telefone, CNPJ alfanumérico, cidades do IBGE…); detecção de duplicados com fila de revisão e mesclagem campo a campo, sem exclusão.
@@ -14,10 +14,11 @@ Central operacional de prospecção B2B da **Docline Tecnologia**, começando pe
 > - **Fase 9 (Prospecção):** cópia mensal dos escritórios de contabilidade ativos da base aberta do CNPJ (só os arquivos oficiais da Receita, lidos em streaming, com retomada); tela Prospecção com busca por UF, cidades, atividade e quantidade, comparação com a base e a Lista Não Contatar e aprovação humana (nada vira lead sozinho); potencial por cidade; "Completar com dados abertos" na ficha. Google Places fica para depois do parecer jurídico.
 > - **Fase 10 (Campanhas):** campanha a partir do filtro da lista de leads (ou de uma visão salva), com retrato congelado, elegibilidade com motivos (Lista Não Contatar, base legal, contato no canal, etapa, cadência ou outra campanha em andamento, contato recente, responsável de fora), distribuição entre os SDRs e liberação diária para a cadência, com limite por SDR. **A campanha não envia mensagens:** o SDR recebe as tarefas na Minha Fila, com a abordagem sugerida. Funil por janela de atribuição e teste A/B de abordagens que nunca declara vencedora sozinho.
 > - **Fase 11 (Analytics):** indicadores recalculados de hora em hora (rollups diários e fatos por lead); relatórios de conversão por cidade, UF, segmento, origem, responsável, quem fez o 1º contato, campanha, abordagem e canal, desempenho por SDR, evolução mensal e WhatsApp × Instagram, com intervalo de confiança e aviso de amostra insuficiente em toda taxa; insights da carteira no dashboard (números do banco, texto da IA conferido); distribuição automática do pool por território ou rodízio, com ausência e limite de leads por SDR (desligada por padrão).
+> - **Fase 12 (Integrações Docline):** chaves de API com escopos, limite e revogação (`Authorization: Bearer`), aceitas só nas rotas de integração; webhooks de saída assinados (HMAC) para o CRM e outros sistemas, gravados na mesma transação da mudança, com novas tentativas, desligamento automático e proteção contra SSRF; referências externas (o id do escritório no CRM) e a ficha do lead para o CRM; Lista Não Contatar compartilhada (consulta sem expor a lista e opt-out vindo de outro sistema); reunião no Google Agenda ou em `.ics`; exportação incremental para BI. **Nenhuma integração envia mensagem a lead.** A sincronização ativa com o CRM aguarda a documentação da API dele.
 >
 > **Pendências para o piloto:** staging na Render (conta e credenciais da Docline), DSN do Sentry, validação jurídica, transferência internacional e decisão sobre ligar a IA. O caminho até o go-live está em [docs/GO-LIVE.md](docs/GO-LIVE.md).
 >
-> **Próximo:** UAT e go-live do piloto no modo assistido; ativações que dependem da Meta e do jurídico (WhatsApp, Instagram e base aberta do CNPJ: marcos M5, M5b e M6); depois, Fase 12 (Integrações Docline). Histórico em [CHANGELOG.md](CHANGELOG.md).
+> **Próximo:** UAT e go-live do piloto no modo assistido; ativações que dependem da Meta e do jurídico (WhatsApp, Instagram e base aberta do CNPJ: marcos M5, M5b e M6); ligar as integrações com o CRM quando a Docline tiver o receptor (e, com a documentação da API do CRM, a sincronização ativa). Histórico em [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -137,6 +138,7 @@ Detalhes em [ARCHITECTURE §11](docs/ARCHITECTURE.md#11-estrutura-de-pastas).
 # 1. Variáveis de ambiente
 cp .env.example .env
 # Gere os segredos e cole no .env: BETTER_AUTH_SECRET, ENCRYPTION_KEY, SUPPRESSION_HASH_PEPPER
+# (e OUTBOUND_WEBHOOK_SIGNING_SECRET, se for testar os webhooks de saída)
 openssl rand -base64 32
 
 # 2. PostgreSQL 17 + Mailpit (e-mails de teste em http://localhost:8025)
@@ -192,5 +194,5 @@ Os testes de integração e E2E **apagam** o banco apontado por `DATABASE_URL_TE
 3. **Base aberta do CNPJ (marco M6):** parecer jurídico (inclusive sobre empresário individual/MEI) e conferência do formato da publicação; para ligar, seguir o [checklist de ativação](docs/INTEGRATIONS.md#163-ativar-a-base-aberta-do-cnpj) e a [homologação P1–P7](docs/GO-LIVE.md#13-base-aberta-do-cnpj-e-prospecção-marco-m6).
 4. **Campanhas no piloto:** depois das primeiras semanas no modo assistido, homologar as campanhas ([roteiro C1–C8](docs/GO-LIVE.md#14-campanhas)) e começar com um limite diário que caiba no dia real de cada SDR.
 5. **Relatórios e distribuição no piloto:** usar os relatórios e os insights desde o início (com poucas semanas, a maioria das taxas aparece como "amostra insuficiente"); ligar a distribuição automática só com os territórios cadastrados e o limite de leads combinado ([roteiro A1–A8](docs/GO-LIVE.md#15-relatórios-insights-e-distribuição-automática)).
-6. **Aprovar a Fase 12 — Integrações Docline** ([backlog F12](docs/ROADMAP.md#fase-12--integrações-docline)): chaves de API com escopos, webhooks de saída assinados, sincronização com o CRM Docline e a Lista Não Contatar compartilhada (depende das APIs da Docline).
+6. **Integrações Docline no piloto:** quando o CRM (ou o n8n) tiver um receptor, criar uma chave por sistema e o destino de webhook, e homologar ([roteiro I1–I9](docs/GO-LIVE.md#16-integrações-docline-crm-n8n-bi)); a sincronização ativa com o CRM entra quando a Docline entregar a documentação da API dele.
 7. **Pendências da Docline que já afetam o projeto:** conta na Render e credenciais de e-mail para o staging, cláusulas-padrão de transferência internacional no DPA da Render, verificação na Meta, validação jurídica LGPD e estrutura (só as colunas) das planilhas atuais. Lista completa em [ARCHITECTURE §16](docs/ARCHITECTURE.md#16-questões-em-aberto) e [ROADMAP §7](docs/ROADMAP.md#7-dependências).

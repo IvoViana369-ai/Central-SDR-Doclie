@@ -321,23 +321,66 @@ Porta `AiProvider`, adaptador padrão Anthropic (SDK oficial), configuração po
 
 ## 11. CRM e sistemas Docline
 
-**Escopo futuro (Fase 12):** CRM da Docline, Gestão AR, Docline Gestão 360, sistemas internos, BI.
+**Fase 12 (concluída no código):** CRM da Docline, Gestão AR, Docline Gestão 360, n8n e BI usam a API v1 com chave e recebem webhooks assinados. **Nenhuma integração envia mensagem a lead.** A sincronização ativa (o sistema chamar a API do CRM) aguarda a documentação da API do CRM (risco R18); até lá, o CRM consome os webhooks e a API, direto ou pelo n8n (só nas bordas, sem regra de contato).
 
 | Mecanismo | Uso |
 |---|---|
-| **API de entrada** `/api/v1` com chaves de API e escopos | Sistemas Docline e n8n consultam/criam dados |
-| **Webhooks de saída** assinados (HMAC, `OUTBOUND_WEBHOOK_SIGNING_SECRET`) | `opportunity.created`, `lead.converted`, `optout.registered`… |
-| **`external_references`** | Mapeia ids internos ↔ ids de cada sistema Docline |
-| **n8n (opcional)** | Orquestra fluxos entre sistemas consumindo a API; **não contém regra de negócio de contato** |
-| **Exportação para BI** | Eventos e `daily_metrics` em formato incremental |
+| **API de entrada** `/api/v1` com chaves de API e escopos (§11.1) | Sistemas Docline e n8n consultam e gravam o que o escopo libera |
+| **Webhooks de saída** assinados (§11.2) | `opportunity.created`, `opportunity.accepted`, `lead.converted`, `opportunity.lost`, `optout.registered`, `suppression.revoked` |
+| **`external_references`** (§11.3) | Mapeia ids internos ↔ ids de cada sistema Docline; vão nos eventos |
+| **Lista Não Contatar compartilhada** (§11.4) | Consulta, registro de opt-out vindo de outro sistema e eventos de inclusão e revogação |
+| **Exportação para BI** (§11.5) | Eventos e `daily_metrics` em formato incremental, sem dados pessoais |
 
-A Lista Não Contatar deve ser **compartilhada** com outros sistemas Docline que contatem as mesmas pessoas (evento `optout.registered`).
+### 11.1 Chaves de API (F12-01)
 
----
+- Criadas em **Configurações → Integrações Docline** (ADMIN): nome, escopos, sistema (opcional, ex.: `DOCLINE_CRM`), limite por minuto (padrão 120) e validade (opcional). A chave (`dsdr_<prefixo>_<segredo>`) aparece **uma única vez**; o banco guarda o prefixo e o SHA-256.
+- Uso: `Authorization: Bearer dsdr_…`. Só as rotas abaixo aceitam chave; as demais respondem 401. Escopo ausente: 403 (auditado). Limite estourado: 429 com `Retry-After`.
+- Escopos e permissões: [SECURITY §4.4](./SECURITY.md#44-chaves-de-api-fase-12). Teste de conexão: `GET /api/v1/integrations/ping`.
+
+| Rota | Escopo |
+|---|---|
+| `GET /api/v1/integrations/leads/{id}` | `leads:read` |
+| `GET /api/v1/integrations/references` | `references:read` |
+| `PUT` e `DELETE /api/v1/integrations/references` | `references:write` |
+| `POST /api/v1/integrations/suppressions/check` | `suppression:check` |
+| `POST /api/v1/integrations/suppressions` | `suppression:write` |
+| `GET /api/v1/integrations/bi/events` e `/bi/daily-metrics` | `bi:read` |
+
+### 11.2 Webhooks de saída (F12-02)
+
+- **Cadastro** em Configurações → Integrações Docline: nome, URL (`https://`, host público; em desenvolvimento e testes, `http://localhost` é aceito), eventos e sistema. O **segredo** (`whsec_…`) aparece na criação e em "Novo segredo"; não fica no banco: é derivado de `OUTBOUND_WEBHOOK_SIGNING_SECRET`, do id e da versão do destino. Sem essa variável, os webhooks ficam desligados.
+- **Quando sai:** o evento é gravado na **mesma transação** da mudança (outbox, ADR 035); o worker (`webhooks.dispatch`) envia logo depois e de minuto em minuto. Destino pausado ou desligado guarda a fila e recebe ao voltar.
+- **Pedido:** `POST` com `Content-Type: application/json` e os cabeçalhos `Docline-Event`, `Docline-Event-Id`, `Docline-Delivery-Id`, `Docline-Delivery-Attempt` e `Docline-Signature: t=<unix>,v1=<hex>`.
+- **Corpo:** `{ "id", "type", "occurredAt", "apiVersion": "2026-10-14", "data" }`. Só ids, códigos, datas e valores mascarados; o resto (nome, contatos, pessoas) o sistema busca em `GET /integrations/leads/{id}` com chave.
+  - Oportunidade (`opportunity.*`, `lead.converted`): `data.opportunity` (id, situação, datas, tipo de conversão, motivo de perda, valor previsto, `sdrId`, `salesOwnerId`, referências) e `data.lead` (id, código `L-000123`, UF, município, referências).
+  - Lista Não Contatar (`optout.registered`, `suppression.revoked`): `data.suppressions` (id, tipo, escopo, motivo, origem, valor mascarado; até 50 por evento) e `data.leads` atingidos (id, código, referências).
+- **Conferência no receptor:** recalcular `HMAC-SHA256(segredo, "<t>.<corpo bruto>")` em hexadecimal, comparar com `v1` em tempo constante e recusar `t` com mais de 5 minutos de diferença. Deduplicar pelo `Docline-Event-Id` (entrega "pelo menos uma vez", sem ordem garantida).
+- **Respostas:** 2xx = entregue. Qualquer outra coisa (inclusive 3xx: redirecionamento não é seguido) ou erro de rede = nova tentativa em 1 min, 5 min, 30 min, 2 h, 6 h, 12 h e 24 h (8 envios em ~45 h); depois, "Falhou" (reenvio manual). Com 20 falhas seguidas e 24 h falhando, o destino é **desligado** e os ADMINs são avisados; reativar zera a contagem e envia o que ficou guardado.
+- **Proteção:** cada IP resolvido é conferido antes de conectar (rede interna, loopback, link-local e metadados de nuvem recusados, inclusive IPv6 e IPv4 embutido); sem cookies; 10 s por envio; só os primeiros 2 KB da resposta são lidos ([SECURITY §10](./SECURITY.md#10-ssrf-busca-de-urls-externas)).
+- **Registro:** "Entregas recentes" com evento, destino, situação, tentativas e resposta; "Enviar teste" (`webhook.test`, só para aquele destino) e "Reenviar". Eventos e entregas são apagados com 90 dias.
+
+### 11.3 Referências externas e ficha para o CRM (F12-03, parcial)
+
+- `PUT /integrations/references` com `{ entityType: "LEAD" | "OPPORTUNITY", entityId, externalId, system?, url? }` vincula ou atualiza; `DELETE` com `?entityType&entityId&system` desfaz (pedido explícito; nada é desfeito sozinho). A chave ligada a um sistema só grava nele. Um id externo aponta para um registro só: vincular o mesmo id a outro lead dá conflito.
+- `GET /integrations/references?entityType=LEAD&system=DOCLINE_CRM&externalId=…` acha o lead pelo id do CRM; com `entityId`, lista os vínculos do registro. Na ficha do lead, o card "Outros sistemas Docline" mostra os vínculos (ADMIN e GESTOR; o ADMIN também grava).
+- `GET /integrations/leads/{id}`: empresa, endereço, responsável, etapa, pessoas, contatos com o aviso de **Não Contatar por canal**, oportunidades (com o checklist de qualificação) e referências. Só para leads **transferidos ao Comercial ou vinculados** a outro sistema; anonimizado volta só com id, código e referências; cada leitura fica na auditoria.
+- **Pendente:** adaptador `CRM_PROVIDER=docline` (o sistema chamar a API do CRM para criar a conta na conversão e trazer o status), quando a Docline entregar a documentação.
+
+### 11.4 Lista Não Contatar compartilhada (F12-04)
+
+- **Consulta** (`POST /integrations/suppressions/check`): até 100 identificadores (`PHONE`, `EMAIL`, `INSTAGRAM`, `CNPJ`) e o canal pretendido; para cada um, `suppressed`, `via` (`IDENTIFIER`: o próprio valor; `ORGANIZATION`: o escritório inteiro está na lista pelo lead ou pelo CNPJ) e os escopos. Não revela o motivo, a data nem a lista. Valor inválido volta marcado, sem erro.
+- **Registro** (`POST /integrations/suppressions`): opt-out recebido no outro sistema, com escopo, motivo e nota curta. Entra com origem `INTEGRATION`, vale na hora para todos os leads com o mesmo identificador, derruba o opt-in do WhatsApp dos números atingidos e aparece na timeline com o nome da chave.
+- **Eventos:** toda inclusão (de qualquer origem: SDR, palavra-chave, ADMIN, importação, outro sistema) e toda revogação viram `optout.registered` / `suppression.revoked` para os destinos que assinam.
+
+### 11.5 Exportação para BI (F12-06)
+
+- `GET /integrations/bi/events?after=<último id>&limit=500&types=…`: os mesmos eventos dos webhooks, em ordem pelo id, só depois de 60 s gravados (o cursor nunca pula um evento de transação lenta), sem os valores mascarados. Guarde o `cursor` devolvido. Retenção de 90 dias.
+- `GET /integrations/bi/daily-metrics?cursor=…&limit=31&dimension=GLOBAL|SDR|CHANNEL`: os **dias recalculados** desde o cursor, cada um com todas as linhas (substitua o dia inteiro no BI). Só contagens por dia, equipe, pessoa (id) e canal.
 
 ## 12. E-mail, calendário e telefonia
 
 - **E-mail transacional** (Fase 1): convites, redefinição de senha, notificações. Domínio com SPF/DKIM/DMARC.
+- **Reunião na agenda** (Fase 12, F12-05): tarefa de reunião na ficha do lead ganha "Google Agenda" (link de modelo do Google Agenda: a pessoa confirma o evento na própria conta) e "Arquivo .ics" (RFC 5545, para qualquer calendário). Sem OAuth: o sistema não lê nem grava calendários. O texto leva o título, o escritório e o link da ficha, sem telefone ou e-mail; 30 minutos a partir do prazo da tarefa.
 - **E-mail como canal de prospecção** (futuro): exigiria link de descadastro, controle de reputação e base legal própria. Fora do MVP.
 - **Telefonia** (futuro): click-to-call e registro automático de ligações por um fornecedor com API.
 
