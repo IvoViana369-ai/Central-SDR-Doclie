@@ -995,6 +995,8 @@ enum SuppressionSource {
   IMPORT
   WEBHOOK
   DSR
+  /// Outro sistema Docline, pela API com chave (Fase 12).
+  INTEGRATION
 
   @@map("suppression_source")
 }
@@ -2909,4 +2911,166 @@ model Insight {
   @@index([scope, audienceUserId, generatedAt(sort: Desc)])
   @@index([validUntil])
   @@map("insights")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 12: Integrações Docline (docs/INTEGRATIONS.md §11, docs/DATABASE.md §4.15)
+// -----------------------------------------------------------------------------
+
+/// Chave de API de um sistema (CRM, n8n, BI). A chave só aparece na criação:
+/// guardamos o prefixo, para reconhecer, e o SHA-256 da chave inteira.
+model ApiKey {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  name               String
+  /// Início visível da chave (ex.: "dsdr_k7Q2mX9a"), para reconhecer nos registros.
+  prefix             String    @unique
+  keyHash            String    @unique @map("key_hash")
+  /// Escopos validados no domínio (ex.: leads:read, suppression:write).
+  scopes             String[]
+  /// Sistema Docline que usa a chave (ex.: DOCLINE_CRM), para as referências externas.
+  system             String?
+  rateLimitPerMinute Int       @default(120) @map("rate_limit_per_minute")
+  /// Janela de 1 minuto do limite de requisições (atualizada a cada uso).
+  rateWindowStart    DateTime? @map("rate_window_start") @db.Timestamptz(3)
+  rateWindowCount    Int       @default(0) @map("rate_window_count")
+  expiresAt          DateTime? @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt         DateTime? @map("last_used_at") @db.Timestamptz(3)
+  lastUsedIp         String?   @map("last_used_ip")
+  createdById        String?   @map("created_by_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedById        String?   @map("revoked_by_id") @db.Uuid
+  revokeReason       String?   @map("revoke_reason")
+
+  @@index([createdAt(sort: Desc)])
+  @@map("api_keys")
+}
+
+enum WebhookEndpointStatus {
+  ACTIVE
+  /// Pausado por uma pessoa: as entregas esperam.
+  PAUSED
+  /// Desligado sozinho depois de falhas seguidas; volta só por uma pessoa.
+  DISABLED
+
+  @@map("webhook_endpoint_status")
+}
+
+/// Destino de webhooks de saída. O segredo de assinatura não fica no banco: é
+/// derivado de OUTBOUND_WEBHOOK_SIGNING_SECRET, do id e da versão (rotação).
+model WebhookEndpoint {
+  id                  String                @id @default(uuid(7)) @db.Uuid
+  name                String
+  url                 String
+  /// Sistema Docline que recebe (ex.: DOCLINE_CRM), opcional.
+  system              String?
+  /// Tipos de evento assinados (catálogo no domínio).
+  events              String[]
+  status              WebhookEndpointStatus @default(ACTIVE)
+  secretVersion       Int                   @default(1) @map("secret_version")
+  /// Falhas seguidas (zera no primeiro sucesso) e desde quando.
+  consecutiveFailures Int                   @default(0) @map("consecutive_failures")
+  failingSince        DateTime?             @map("failing_since") @db.Timestamptz(3)
+  lastSuccessAt       DateTime?             @map("last_success_at") @db.Timestamptz(3)
+  lastFailureAt       DateTime?             @map("last_failure_at") @db.Timestamptz(3)
+  disabledAt          DateTime?             @map("disabled_at") @db.Timestamptz(3)
+  disabledReason      String?               @map("disabled_reason")
+  createdById         String?               @map("created_by_id") @db.Uuid
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  deliveries WebhookDelivery[]
+
+  @@index([status])
+  @@map("webhook_endpoints")
+}
+
+/// Evento de negócio para fora (outbox): gravado na mesma transação da mudança.
+/// O payload leva só ids, códigos e valores mascarados; quem precisa de mais
+/// busca pela API com chave. Base da exportação incremental para BI.
+model OutboundEvent {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  type       String
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  payload    Json
+  /// Lead do evento, quando há (busca na anonimização e no BI).
+  leadId     String?  @map("lead_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  deliveries WebhookDelivery[]
+
+  @@index([type, occurredAt])
+  @@index([leadId])
+  @@index([createdAt])
+  @@map("outbound_events")
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  /// Esgotou as tentativas (pode ser reenviada por uma pessoa).
+  FAILED
+  /// Destino excluído ou entrega substituída por um reenvio.
+  CANCELLED
+
+  @@map("webhook_delivery_status")
+}
+
+/// Uma entrega de um evento a um destino. O despacho reserva a entrega
+/// empurrando `next_attempt_at` (sem status intermediário): se o worker cair,
+/// ela volta sozinha depois da reserva.
+model WebhookDelivery {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  endpointId     String                @map("endpoint_id") @db.Uuid
+  eventId        String                @map("event_id") @db.Uuid
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime              @map("next_attempt_at") @db.Timestamptz(3)
+  lastAttemptAt  DateTime?             @map("last_attempt_at") @db.Timestamptz(3)
+  lastStatusCode Int?                  @map("last_status_code")
+  /// Erro de rede, de segurança (SSRF) ou o início da resposta (sem segredos).
+  lastError      String?               @map("last_error")
+  lastDurationMs Int?                  @map("last_duration_ms")
+  deliveredAt    DateTime?             @map("delivered_at") @db.Timestamptz(3)
+  /// Reenvio ou teste pedido por uma pessoa.
+  manual         Boolean               @default(false)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event    OutboundEvent   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt(sort: Desc)])
+  @@index([eventId])
+  @@map("webhook_deliveries")
+}
+
+enum ExternalEntityType {
+  LEAD
+  OPPORTUNITY
+
+  @@map("external_entity_type")
+}
+
+/// Id do mesmo registro em outro sistema Docline (CRM, Gestão AR, Gestão 360…).
+/// Um vínculo por registro e sistema; um id externo aponta para um só registro.
+model ExternalReference {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  entityType     ExternalEntityType @map("entity_type")
+  entityId       String             @map("entity_id") @db.Uuid
+  /// Código do sistema (ex.: DOCLINE_CRM), validado no domínio.
+  system         String
+  externalId     String             @map("external_id")
+  /// Link para o registro no outro sistema (https), opcional.
+  url            String?
+  syncedAt       DateTime           @map("synced_at") @db.Timestamptz(3)
+  /// Quem gravou: uma pessoa ou uma chave de API.
+  createdById    String?            @map("created_by_id") @db.Uuid
+  createdByKeyId String?            @map("created_by_key_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([entityType, entityId, system])
+  @@unique([system, entityType, externalId])
+  @@map("external_references")
 }
