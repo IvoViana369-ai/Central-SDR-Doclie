@@ -1,12 +1,16 @@
 import 'server-only';
 import {
+  assertApiKeyScope,
+  authenticateApiKey,
   isDomainError,
   PossibleDuplicateError,
+  RateLimitError,
   resolveActor,
   twoFactorGate,
   UnauthenticatedError,
   ValidationError,
   type Actor,
+  type ApiScope,
   type CoreDeps,
   type Logger,
   type RequestMeta,
@@ -35,6 +39,11 @@ interface ApiOptions {
   auth?: 'required' | 'public';
   /** Status HTTP de sucesso (padrão 200). */
   status?: number;
+  /**
+   * Aceita também `Authorization: Bearer dsdr_…` de uma chave de API com este
+   * escopo (Fase 12; docs/SECURITY.md §4.4). Sem isto, a rota recusa chaves.
+   */
+  apiKey?: ApiScope | 'any';
 }
 
 class OriginError extends Error {}
@@ -60,6 +69,7 @@ function problem(
   detail: string,
   requestId?: string,
   extra: object = {},
+  headers: Record<string, string> = {},
 ) {
   return Response.json(
     {
@@ -73,9 +83,20 @@ function problem(
     },
     {
       status,
-      headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' },
+      headers: {
+        'content-type': 'application/problem+json',
+        'cache-control': 'no-store',
+        ...headers,
+      },
     },
   );
+}
+
+/** Token do cabeçalho `Authorization: Bearer …`; null quando não há (vale a sessão). */
+function bearerToken(request: Request): string | null {
+  const header = request.headers.get('authorization');
+  if (!header || !/^bearer\s/i.test(header)) return null;
+  return header.replace(/^bearer\s+/i, '').trim();
 }
 
 /** Proteção CSRF: requisições que alteram estado precisam vir da própria aplicação. */
@@ -134,7 +155,11 @@ function toProblem(
       logger.error({ err: error, requestId: meta.requestId }, 'Erro de domínio');
       report(error);
     }
-    return problem(error.status, error.code, error.message, meta.requestId, extra);
+    const headers: Record<string, string> =
+      error instanceof RateLimitError && error.retryAfterSeconds
+        ? { 'retry-after': String(error.retryAfterSeconds) }
+        : {};
+    return problem(error.status, error.code, error.message, meta.requestId, extra, headers);
   }
   logger.error({ err: error, requestId: meta.requestId }, 'Erro inesperado na API');
   report(error);
@@ -155,10 +180,25 @@ export function apiHandler<P extends Record<string, string> = Record<string, nev
     const { deps, logger, env, errors } = getContainer();
     const meta = requestMetaFrom(request.headers, ipAddressOptions(env.TRUSTED_PROXIES));
     try {
-      if (MUTATING.has(request.method)) assertSameOrigin(request, env.APP_URL, env.APP_ENV);
-
       let actor: Actor = { kind: 'anonymous' };
-      if (options.auth !== 'public') {
+      const bearer = options.auth === 'public' ? null : bearerToken(request);
+      if (bearer !== null) {
+        // Chave de API: sem cookie, então sem checagem de origem (CSRF). Duas
+        // travas: o escopo da rota aqui e as permissões do escopo no caso de uso.
+        if (!options.apiKey) throw new UnauthenticatedError('Esta rota não aceita chave de API.');
+        const keyActor = await authenticateApiKey(deps, bearer, meta);
+        await assertApiKeyScope(
+          deps,
+          keyActor,
+          options.apiKey,
+          new URL(request.url).pathname,
+          meta,
+        );
+        actor = keyActor;
+      } else if (MUTATING.has(request.method)) {
+        assertSameOrigin(request, env.APP_URL, env.APP_ENV);
+      }
+      if (bearer === null && options.auth !== 'public') {
         const session = await getAuth().api.getSession({ headers: request.headers });
         if (!session) throw new UnauthenticatedError();
         const resolved = await resolveActor(deps.db, session.user.id);

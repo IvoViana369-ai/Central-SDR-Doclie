@@ -12,3 +12,14 @@ export {
   verifyWebhookSignature,
   type GeneratedApiKey,
 } from './domain/signing';
+export * from './contracts/schemas';
+export {
+  assertApiKeyScope,
+  authenticateApiKey,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  type ApiKeyActor,
+  type ApiKeyStatus,
+  type ApiKeyView,
+} from './application/api-keys';

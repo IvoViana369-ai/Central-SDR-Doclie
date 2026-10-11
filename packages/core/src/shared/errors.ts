@@ -72,6 +72,14 @@ export class BusinessRuleError extends DomainError {
 export class RateLimitError extends DomainError {
   readonly code = 'RATE_LIMITED';
   readonly status = 429;
+
+  constructor(
+    message: string,
+    /** Segundos até poder tentar de novo (cabeçalho Retry-After), quando se sabe. */
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+  }
 }
 
 /** Serviço externo indisponível ou com falha (ex.: provedor de IA). */
