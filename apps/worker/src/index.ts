@@ -17,6 +17,7 @@ import {
   createEmailProvider,
   createCompanyRegistrySource,
   createInstagramProvider,
+  createWebhookSettings,
   createWhatsappProvider,
   createErrorReporter,
   createLogger,
@@ -81,6 +82,7 @@ const deps: CoreDeps = {
   whatsapp: createWhatsappProvider(env),
   instagram: createInstagramProvider(env),
   companyRegistry: createCompanyRegistrySource(env),
+  webhooks: createWebhookSettings(env),
 };
 
 // --- Registro dos jobs (docs/ARCHITECTURE.md §10) ---------------------------

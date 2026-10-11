@@ -19,6 +19,7 @@ import {
   createAiProvider,
   createEmailProvider,
   createCompanyRegistrySource,
+  createWebhookSettings,
   createInstagramProvider,
   createWhatsappProvider,
   createLogger,
@@ -78,6 +79,7 @@ try {
       whatsapp: createWhatsappProvider(env),
       instagram: createInstagramProvider(env),
       companyRegistry: createCompanyRegistrySource(env),
+      webhooks: createWebhookSettings(env),
     },
     {
       count,

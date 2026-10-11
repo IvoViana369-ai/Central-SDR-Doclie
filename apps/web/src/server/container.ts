@@ -9,6 +9,7 @@ import {
   createEmailProvider,
   createCompanyRegistrySource,
   createInstagramProvider,
+  createWebhookSettings,
   createWhatsappProvider,
   createErrorReporter,
   createLogger,
@@ -62,6 +63,7 @@ export function getContainer(): WebContainer {
     whatsapp: createWhatsappProvider(env),
     instagram: createInstagramProvider(env),
     companyRegistry: createCompanyRegistrySource(env),
+    webhooks: createWebhookSettings(env),
   };
   const errors = createErrorReporter({
     dsn: env.SENTRY_DSN,

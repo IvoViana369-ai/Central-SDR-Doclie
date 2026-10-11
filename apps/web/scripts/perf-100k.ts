@@ -35,7 +35,7 @@ import {
   type CoreDeps,
 } from '@docline/core';
 import { createDbClient } from '@docline/db';
-import { createLogger } from '@docline/integrations';
+import { createLogger, HttpWebhookSender } from '@docline/integrations';
 
 const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
 if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
@@ -241,6 +241,11 @@ const deps: CoreDeps = {
   whatsapp: null,
   instagram: null,
   companyRegistry: null,
+  webhooks: {
+    sender: new HttpWebhookSender({ allowPrivateNetworks: false }),
+    signingSecret: null,
+    network: { allowPrivateNetworks: false },
+  },
 };
 
 try {

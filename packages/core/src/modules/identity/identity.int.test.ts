@@ -2,6 +2,7 @@ import { closeTestDb, getTestDb, resetTestData } from '@docline/db/testing';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Actor } from '../../shared/actor';
 import { FakeAiProvider } from '../ai-sdr';
+import { FakeWebhookSender } from '../integrations';
 import { fixedClock } from '../../shared/clock';
 import {
   BusinessRuleError,
@@ -63,6 +64,11 @@ const deps: CoreDeps = {
   whatsapp: null,
   instagram: null,
   companyRegistry: null,
+  webhooks: {
+    sender: new FakeWebhookSender(),
+    signingSecret: null,
+    network: { allowPrivateNetworks: false },
+  },
 };
 
 const STRONG_PASSWORD = 'cavalo-correto-bateria-grampo';

@@ -2,6 +2,7 @@ import { getTestDb } from '@docline/db/testing';
 import { FakeAiProvider } from '../modules/ai-sdr/infra/fake-provider';
 import { FakeInstagramProvider } from '../modules/instagram/infra/fake-provider';
 import { FakeCompanyRegistrySource } from '../modules/prospecting/infra/fake-source';
+import { FakeWebhookSender } from '../modules/integrations/infra/fake-sender';
 import { FakeWhatsappProvider } from '../modules/whatsapp/infra/fake-provider';
 import type { Role, UserStatus } from '../modules/identity/domain/roles';
 import type { TransactionalEmail } from '../ports/email';
@@ -30,6 +31,8 @@ export function createTestDeps(options: { now?: Date } = {}) {
   const instagram = new FakeInstagramProvider(() => clock.now());
   /** Base aberta do CNPJ simulada (escritórios fictícios, CNPJs com raiz "FK"). */
   const companyRegistry = new FakeCompanyRegistrySource();
+  /** Webhooks de saída simulados: os testes leem as requisições e programam respostas. */
+  const webhookSender = new FakeWebhookSender();
   const noop = () => undefined;
   const logger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
   const deps: CoreDeps = {
@@ -62,6 +65,11 @@ export function createTestDeps(options: { now?: Date } = {}) {
     whatsapp,
     instagram,
     companyRegistry,
+    webhooks: {
+      sender: webhookSender,
+      signingSecret: 'segredo-de-webhook-de-teste-com-32-caracteres',
+      network: { allowPrivateNetworks: false },
+    },
   };
 
   let counter = 0;
@@ -80,5 +88,16 @@ export function createTestDeps(options: { now?: Date } = {}) {
     return { user, actor };
   }
 
-  return { db, deps, sent, enqueued, ai, whatsapp, instagram, companyRegistry, createActor };
+  return {
+    db,
+    deps,
+    sent,
+    enqueued,
+    ai,
+    whatsapp,
+    instagram,
+    companyRegistry,
+    webhookSender,
+    createActor,
+  };
 }

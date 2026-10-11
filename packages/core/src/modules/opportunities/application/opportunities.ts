@@ -18,6 +18,7 @@ import {
   requireLeadInScope,
 } from '../../leads';
 import { notify } from '../../notifications';
+import { eventLeads, opportunityReferences, publishEvents } from '../../outbox';
 import { moveLeadToStageKey } from '../../pipeline';
 import { loadContactRules, loadLeadCalendar } from '../../settings';
 import { closeTask, createTaskRecord } from '../../tasks';
@@ -96,6 +97,14 @@ function assertCanDecide(ctx: UseCaseContext, opportunity: OpportunityRow) {
   }
 }
 
+/** Evento da timeline → evento para os outros sistemas Docline (webhooks, F12-02). */
+const OUTBOUND_TYPES: Record<string, string> = {
+  [LEAD_EVENTS.handoffCreated]: 'opportunity.created',
+  [LEAD_EVENTS.opportunityAccepted]: 'opportunity.accepted',
+  [LEAD_EVENTS.opportunityWon]: 'lead.converted',
+  [LEAD_EVENTS.opportunityLost]: 'opportunity.lost',
+};
+
 async function recordOpportunityEvent(
   ctx: UseCaseContext,
   leadId: string,
@@ -115,6 +124,60 @@ async function recordOpportunityEvent(
       payload: toJson(payload),
     },
   });
+  const outbound = OUTBOUND_TYPES[type];
+  if (outbound) await publishOpportunityEvent(ctx, outbound, opportunityId);
+}
+
+/**
+ * Corpo do evento: situação e datas da oportunidade, quem é o SDR e o
+ * comercial (ids), o lead (código, UF, município) e as referências externas.
+ * Sem nome, contatos ou anotações: o CRM busca o resto pela API com chave.
+ */
+async function publishOpportunityEvent(ctx: UseCaseContext, type: string, opportunityId: string) {
+  const o = await ctx.tx.opportunity.findUniqueOrThrow({
+    where: { id: opportunityId },
+    select: {
+      id: true,
+      leadId: true,
+      status: true,
+      handoffAt: true,
+      acceptDueAt: true,
+      acceptedAt: true,
+      wonAt: true,
+      lostAt: true,
+      conversionType: true,
+      expectedValue: true,
+      sdrId: true,
+      salesOwnerId: true,
+      lossReason: { select: { key: true } },
+      lead: { select: { stateUf: true, municipalityCode: true } },
+    },
+  });
+  const [lead] = await eventLeads(ctx.tx, [o.leadId]);
+  await publishEvents(ctx, [
+    {
+      type,
+      leadId: o.leadId,
+      data: {
+        opportunity: {
+          id: o.id,
+          status: o.status,
+          handoffAt: o.handoffAt,
+          acceptDueAt: o.acceptDueAt,
+          acceptedAt: o.acceptedAt,
+          wonAt: o.wonAt,
+          lostAt: o.lostAt,
+          conversionType: o.conversionType,
+          lossReason: o.lossReason?.key ?? null,
+          expectedValue: o.expectedValue ? Number(o.expectedValue) : null,
+          sdrId: o.sdrId,
+          salesOwnerId: o.salesOwnerId,
+          references: await opportunityReferences(ctx.tx, o.id),
+        },
+        lead: { ...lead, stateUf: o.lead.stateUf, municipalityCode: o.lead.municipalityCode },
+      },
+    },
+  ]);
 }
 
 /**

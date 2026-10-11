@@ -26,6 +26,7 @@ export { AnthropicAiProvider, type AnthropicAiConfig } from './ai/anthropic';
 export { MetaCloudWhatsappProvider, type MetaCloudConfig } from './whatsapp/meta-cloud';
 export { MetaGraphInstagramProvider, type MetaGraphInstagramConfig } from './instagram/meta-graph';
 export { signMetaPayload, verifyMetaSignature, verifyWebhookChallenge } from './whatsapp/signature';
+export { HttpWebhookSender, guardedLookup } from './webhooks/http-sender';
 export {
   aiLimitsFromEnv,
   assertProvidersImplemented,
@@ -33,6 +34,7 @@ export {
   createCompanyRegistrySource,
   createEmailProvider,
   createInstagramProvider,
+  createWebhookSettings,
   createWhatsappProvider,
   instagramWebhookConfig,
   integrationStatuses,

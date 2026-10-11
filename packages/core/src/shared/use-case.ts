@@ -8,6 +8,7 @@ import type { JobQueue } from '../ports/job-queue';
 import type { PasswordHasher } from '../ports/password-hasher';
 import type { CompanyRegistrySource } from '../ports/company-registry';
 import type { InstagramProvider } from '../ports/instagram';
+import type { WebhookSender } from '../ports/webhook';
 import type { WhatsappProvider } from '../ports/whatsapp';
 import type { Actor } from './actor';
 import type { Clock } from './clock';
@@ -39,6 +40,17 @@ export interface CoreDeps {
   instagram: InstagramProvider | null;
   /** Base aberta do CNPJ (Fase 9); `null` com `COMPANY_REGISTRY_PROVIDER=disabled`. */
   companyRegistry: CompanyRegistrySource | null;
+  /** Webhooks de saída (Fase 12): envio, segredo mestre e política de rede. */
+  webhooks: WebhookSettings;
+}
+
+/** Webhooks de saída (docs/INTEGRATIONS.md §11.2). */
+export interface WebhookSettings {
+  sender: WebhookSender;
+  /** OUTBOUND_WEBHOOK_SIGNING_SECRET; sem ele, não há destinos nem envios. */
+  signingSecret: string | null;
+  /** Rede interna (http://localhost…) só em desenvolvimento e testes (SSRF, docs/SECURITY.md §10). */
+  network: { allowPrivateNetworks: boolean };
 }
 
 /** Controles de custo da IA (AI_* no ambiente; docs/AI-SDR.md §15). */

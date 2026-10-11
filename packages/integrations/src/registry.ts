@@ -10,8 +10,10 @@ import {
   type EmailProvider,
   type InstagramProvider,
   type Logger,
+  type WebhookSettings,
   type WhatsappProvider,
 } from '@docline/core';
+import { HttpWebhookSender } from './webhooks/http-sender';
 import { AnthropicAiProvider } from './ai/anthropic';
 import { ReceitaOpenDataSource } from './company-registry/receita-open-data';
 import { MetaGraphInstagramProvider } from './instagram/meta-graph';
@@ -55,6 +57,22 @@ export function createAiProvider(env: ServerEnv): AiProvider {
         classificationModel: env.AI_MODEL_CLASSIFICATION || env.AI_MODEL,
       });
   }
+}
+
+/**
+ * Webhooks de saída (docs/INTEGRATIONS.md §11.2): envio HTTP com proteção de
+ * SSRF. Rede interna (receptor local) só em desenvolvimento e testes; sem
+ * OUTBOUND_WEBHOOK_SIGNING_SECRET, não há destinos nem envios.
+ */
+export function createWebhookSettings(env: ServerEnv): WebhookSettings {
+  const network = {
+    allowPrivateNetworks: env.APP_ENV === 'development' || env.APP_ENV === 'test',
+  };
+  return {
+    sender: new HttpWebhookSender(network),
+    signingSecret: env.OUTBOUND_WEBHOOK_SIGNING_SECRET ?? null,
+    network,
+  };
 }
 
 /**

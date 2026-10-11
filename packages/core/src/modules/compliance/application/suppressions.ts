@@ -5,6 +5,7 @@ import type {
   SuppressionSource,
   SuppressionType,
 } from '@docline/db';
+import { actorTypeOf } from '../../../shared/actor';
 import { ConflictError, NotFoundError, ValidationError } from '../../../shared/errors';
 import { toJson, defineUseCase, type UseCaseContext } from '../../../shared/use-case';
 import { maskIdentifier, normalizeIdentifier, type IdentifierKind } from '../../normalization';
@@ -14,7 +15,9 @@ import {
   revokeSuppressionInput,
   SUPPRESSION_TYPES,
 } from '../contracts/schemas';
-import { refreshLeadsForIdentifiers } from '../infra/contact-state';
+import { eventLeads, publishEvents } from '../../outbox';
+import { leadsByIdentifier, refreshLeadsForIdentifiers } from '../infra/contact-state';
+import { identifierKey } from '../infra/suppressions';
 
 export interface SuppressionToCreate {
   type: SuppressionType;
@@ -45,7 +48,7 @@ async function recordOnLeads(
       leadId,
       type,
       occurredAt: ctx.now,
-      actorType: ctx.actor.kind === 'user' ? ('USER' as const) : ('SYSTEM' as const),
+      actorType: actorTypeOf(ctx.actor),
       actorId: ctx.actor.kind === 'user' ? ctx.actor.id : null,
       payload: toJson(payload),
     })),
@@ -74,7 +77,15 @@ export async function suppressIdentifiers(ctx: UseCaseContext, entries: Suppress
     })),
     // Já existe supressão vigente para o mesmo identificador e escopo: mantém a existente.
     skipDuplicates: true,
-    select: { id: true, type: true, valueHash: true, valueMasked: true, scope: true, reason: true },
+    select: {
+      id: true,
+      type: true,
+      valueHash: true,
+      valueMasked: true,
+      scope: true,
+      reason: true,
+      source: true,
+    },
   });
   const leadIds = await refreshLeadsForIdentifiers(ctx.tx, entries, ctx.now);
   for (const entry of created) {
@@ -86,7 +97,62 @@ export async function suppressIdentifiers(ctx: UseCaseContext, entries: Suppress
       metadata: { scope: entry.scope, reason: entry.reason, leads: leadIds },
     });
   }
+  await publishSuppressionEvents(ctx, 'optout.registered', created);
   return { created, alreadySuppressed: entries.length - created.length, leadIds };
+}
+
+/** Registros por evento: o opt-out de um lead vira um evento; importações, vários. */
+const SUPPRESSIONS_PER_EVENT = 50;
+
+/**
+ * Lista Não Contatar compartilhada (F12-04): cada inclusão ou revogação vira
+ * evento para os outros sistemas Docline, com os valores mascarados e os
+ * leads atingidos (código e ids no CRM), nunca o valor em claro.
+ */
+async function publishSuppressionEvents(
+  ctx: UseCaseContext,
+  type: 'optout.registered' | 'suppression.revoked',
+  entries: {
+    id: string;
+    type: SuppressionType;
+    valueHash: string;
+    valueMasked: string;
+    scope: SuppressionScope;
+    reason: SuppressionReason;
+    source: SuppressionSource;
+  }[],
+) {
+  if (entries.length === 0) return;
+  const byIdentifier = await leadsByIdentifier(ctx.tx, entries);
+  const leads = new Map(
+    (await eventLeads(ctx.tx, [...new Set([...byIdentifier.values()].flat())])).map((l) => [
+      l.id,
+      l,
+    ]),
+  );
+  const events = [];
+  for (let i = 0; i < entries.length; i += SUPPRESSIONS_PER_EVENT) {
+    const chunk = entries.slice(i, i + SUPPRESSIONS_PER_EVENT);
+    const leadIds = [
+      ...new Set(chunk.flatMap((entry) => byIdentifier.get(identifierKey(entry)) ?? [])),
+    ].filter((id) => leads.has(id));
+    events.push({
+      type,
+      leadId: leadIds.length === 1 ? leadIds[0]! : null,
+      data: {
+        suppressions: chunk.map((entry) => ({
+          id: entry.id,
+          type: entry.type,
+          scope: entry.scope,
+          reason: entry.reason,
+          source: entry.source,
+          valueMasked: entry.valueMasked,
+        })),
+        leads: leadIds.map((id) => leads.get(id)!),
+      },
+    });
+  }
+  await publishEvents(ctx, events);
 }
 
 export const addSuppression = defineUseCase({
@@ -137,6 +203,7 @@ export const revokeSuppression = defineUseCase({
       },
     });
     const leadIds = await refreshLeadsForIdentifiers(ctx.tx, [entry], ctx.now);
+    await publishSuppressionEvents(ctx, 'suppression.revoked', [entry]);
     await recordOnLeads(ctx, leadIds, 'suppression.revoked', {
       type: entry.type,
       scope: entry.scope,

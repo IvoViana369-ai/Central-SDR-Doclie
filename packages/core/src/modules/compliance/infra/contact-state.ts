@@ -141,3 +141,43 @@ export async function refreshLeadsForIdentifiers(
   }
   return [...leadIds];
 }
+
+/**
+ * Leads atingidos por cada identificador (chave `TIPO:hash`), em lote: vai nos
+ * eventos `optout.registered` para os outros sistemas acharem o registro.
+ */
+export async function leadsByIdentifier(
+  tx: DbTransaction,
+  identifiers: SuppressionIdentifier[],
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, Set<string>>();
+  const add = (identifier: SuppressionIdentifier, leadId: string) => {
+    const key = identifierKey(identifier);
+    result.set(key, (result.get(key) ?? new Set()).add(leadId));
+  };
+  const byContact = identifiers.filter(
+    (i): i is SuppressionIdentifier & { type: ContactPointType } =>
+      i.type === 'PHONE' || i.type === 'EMAIL' || i.type === 'INSTAGRAM',
+  );
+  if (byContact.length > 0) {
+    const points = await tx.contactPoint.findMany({
+      where: { OR: byContact.map((i) => ({ type: i.type, valueHash: i.valueHash })) },
+      select: { leadId: true, type: true, valueHash: true },
+    });
+    points.forEach((p) => add(p, p.leadId));
+  }
+  const cnpjHashes = identifiers.filter((i) => i.type === 'CNPJ').map((i) => i.valueHash);
+  if (cnpjHashes.length > 0) {
+    const leads = await tx.lead.findMany({
+      where: { cnpjHash: { in: cnpjHashes } },
+      select: { id: true, cnpjHash: true },
+    });
+    leads.forEach((l) => add({ type: 'CNPJ', valueHash: l.cnpjHash! }, l.id));
+  }
+  const leadIds = identifiers.filter((i) => i.type === 'LEAD').map((i) => i.valueHash);
+  if (leadIds.length > 0) {
+    const leads = await tx.lead.findMany({ where: { id: { in: leadIds } }, select: { id: true } });
+    leads.forEach((l) => add({ type: 'LEAD', valueHash: l.id }, l.id));
+  }
+  return new Map([...result].map(([key, ids]) => [key, [...ids]]));
+}

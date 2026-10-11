@@ -286,13 +286,28 @@ export const JOBS = {
     retryDelaySeconds: 0,
     expireInSeconds: 900,
   },
-  /** Apaga payloads de webhook e mensagens de números sem lead com mais de 90 dias. */
+  /**
+   * Apaga, com mais de 90 dias, payloads de webhooks recebidos, mensagens de
+   * números sem lead e eventos de saída (com as entregas).
+   */
   webhooksPurge: {
     name: 'webhooks.purge',
     cron: '47 4 * * *',
     retryLimit: 1,
     retryDelaySeconds: 600,
     expireInSeconds: 600,
+  },
+  /**
+   * Webhooks de saída (de minuto em minuto e logo depois de cada evento):
+   * envia as entregas vencidas, assinadas, com novas tentativas e
+   * desligamento automático do destino que falha há 24 h.
+   */
+  webhooksDispatch: {
+    name: 'webhooks.dispatch',
+    cron: '* * * * *',
+    retryLimit: 0,
+    retryDelaySeconds: 0,
+    expireInSeconds: 120,
   },
 } as const satisfies Record<string, JobDefinition>;
 

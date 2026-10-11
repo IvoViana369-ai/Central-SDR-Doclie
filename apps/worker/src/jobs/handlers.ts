@@ -25,6 +25,8 @@ import {
   runScoreRecomputeAll,
   runScoreRecomputeLeads,
   runWebhooksPurge,
+  runWebhookDispatch,
+  purgeOutboundEvents,
   runWhatsappHealthCheck,
   runWhatsappSend,
   runWhatsappSuggestClassification,
@@ -78,7 +80,11 @@ export function jobHandlers(deps: CoreDeps, startedAt: Date): Record<string, Job
       runWhatsappSuggestClassification(deps, data),
     [JOBS.whatsappSyncTemplates.name]: async () => runWhatsappTemplateSync(deps),
     [JOBS.whatsappHealthCheck.name]: async () => runWhatsappHealthCheck(deps),
-    [JOBS.webhooksPurge.name]: async () => runWebhooksPurge(deps),
+    [JOBS.webhooksPurge.name]: async () => ({
+      ...(await runWebhooksPurge(deps)),
+      outbound: await purgeOutboundEvents(deps),
+    }),
+    [JOBS.webhooksDispatch.name]: async () => runWebhookDispatch(deps),
     [JOBS.instagramSend.name]: async (data) => runInstagramSend(deps, data),
     [JOBS.instagramWebhook.name]: async (data) => runInstagramWebhook(deps, data),
     [JOBS.instagramSuggestClassification.name]: async (data) =>

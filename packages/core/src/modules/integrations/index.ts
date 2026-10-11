@@ -23,3 +23,21 @@ export {
   type ApiKeyStatus,
   type ApiKeyView,
 } from './application/api-keys';
+export { FakeWebhookSender } from './infra/fake-sender';
+export {
+  createWebhookEndpoint,
+  listWebhookDeliveries,
+  listWebhookEndpoints,
+  resendWebhookDelivery,
+  rotateWebhookSecret,
+  sendTestWebhook,
+  setWebhookEndpointStatus,
+  updateWebhookEndpoint,
+  type WebhookEndpointView,
+} from './application/webhooks';
+export {
+  OUTBOUND_EVENT_RETENTION_DAYS,
+  purgeOutboundEvents,
+  runWebhookDispatch,
+  type DispatchResult,
+} from './application/dispatch';

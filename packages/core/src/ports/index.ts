@@ -38,3 +38,4 @@ export type {
   InstagramUserProfile,
 } from './instagram';
 export type { CompanyRegistrySource, RegistryFile, RegistryFileKind } from './company-registry';
+export type { WebhookRequest, WebhookResponse, WebhookSender } from './webhook';

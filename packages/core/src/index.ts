@@ -23,6 +23,7 @@ export {
   type RequestMeta,
   type UseCase,
   type UseCaseContext,
+  type WebhookSettings,
 } from './shared/use-case';
 export type * from './ports';
 export { SpreadsheetError } from './ports/spreadsheet';
@@ -30,6 +31,7 @@ export { AiProviderError } from './ports/ai';
 export { WhatsappProviderError } from './ports/whatsapp';
 export { InstagramProviderError } from './ports/instagram';
 export { CompanyRegistryError } from './ports/company-registry';
+export { WebhookTransportError } from './ports/webhook';
 export * from './modules/identity';
 export * from './modules/audit';
 export * from './modules/normalization';
@@ -53,4 +55,5 @@ export * from './modules/instagram';
 export * from './modules/prospecting';
 export * from './modules/campaigns';
 export * from './modules/integrations';
+export * from './modules/outbox';
 export * from './jobs/catalog';
