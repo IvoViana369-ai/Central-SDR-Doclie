@@ -1,0 +1,194 @@
+{
+  "source": "https://github.com/kelvins/municipios-brasileiros",
+  "states": [
+    {
+      "uf": "AC",
+      "name": "Acre",
+      "ibgeCode": 12,
+      "region": "Norte",
+      "timezone": "America/Rio_Branco"
+    },
+    {
+      "uf": "AL",
+      "name": "Alagoas",
+      "ibgeCode": 27,
+      "region": "Nordeste",
+      "timezone": "America/Maceio"
+    },
+    {
+      "uf": "AM",
+      "name": "Amazonas",
+      "ibgeCode": 13,
+      "region": "Norte",
+      "timezone": "America/Manaus"
+    },
+    {
+      "uf": "AP",
+      "name": "Amapá",
+      "ibgeCode": 16,
+      "region": "Norte",
+      "timezone": "America/Belem"
+    },
+    {
+      "uf": "BA",
+      "name": "Bahia",
+      "ibgeCode": 29,
+      "region": "Nordeste",
+      "timezone": "America/Bahia"
+    },
+    {
+      "uf": "CE",
+      "name": "Ceará",
+      "ibgeCode": 23,
+      "region": "Nordeste",
+      "timezone": "America/Fortaleza"
+    },
+    {
+      "uf": "DF",
+      "name": "Distrito Federal",
+      "ibgeCode": 53,
+      "region": "Centro-Oeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "ES",
+      "name": "Espírito Santo",
+      "ibgeCode": 32,
+      "region": "Sudeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "GO",
+      "name": "Goiás",
+      "ibgeCode": 52,
+      "region": "Centro-Oeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "MA",
+      "name": "Maranhão",
+      "ibgeCode": 21,
+      "region": "Nordeste",
+      "timezone": "America/Fortaleza"
+    },
+    {
+      "uf": "MG",
+      "name": "Minas Gerais",
+      "ibgeCode": 31,
+      "region": "Sudeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "MS",
+      "name": "Mato Grosso do Sul",
+      "ibgeCode": 50,
+      "region": "Centro-Oeste",
+      "timezone": "America/Campo_Grande"
+    },
+    {
+      "uf": "MT",
+      "name": "Mato Grosso",
+      "ibgeCode": 51,
+      "region": "Centro-Oeste",
+      "timezone": "America/Cuiaba"
+    },
+    {
+      "uf": "PA",
+      "name": "Pará",
+      "ibgeCode": 15,
+      "region": "Norte",
+      "timezone": "America/Belem"
+    },
+    {
+      "uf": "PB",
+      "name": "Paraíba",
+      "ibgeCode": 25,
+      "region": "Nordeste",
+      "timezone": "America/Fortaleza"
+    },
+    {
+      "uf": "PE",
+      "name": "Pernambuco",
+      "ibgeCode": 26,
+      "region": "Nordeste",
+      "timezone": "America/Recife"
+    },
+    {
+      "uf": "PI",
+      "name": "Piauí",
+      "ibgeCode": 22,
+      "region": "Nordeste",
+      "timezone": "America/Fortaleza"
+    },
+    {
+      "uf": "PR",
+      "name": "Paraná",
+      "ibgeCode": 41,
+      "region": "Sul",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "RJ",
+      "name": "Rio de Janeiro",
+      "ibgeCode": 33,
+      "region": "Sudeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "RN",
+      "name": "Rio Grande do Norte",
+      "ibgeCode": 24,
+      "region": "Nordeste",
+      "timezone": "America/Fortaleza"
+    },
+    {
+      "uf": "RO",
+      "name": "Rondônia",
+      "ibgeCode": 11,
+      "region": "Norte",
+      "timezone": "America/Porto_Velho"
+    },
+    {
+      "uf": "RR",
+      "name": "Roraima",
+      "ibgeCode": 14,
+      "region": "Norte",
+      "timezone": "America/Boa_Vista"
+    },
+    {
+      "uf": "RS",
+      "name": "Rio Grande do Sul",
+      "ibgeCode": 43,
+      "region": "Sul",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "SC",
+      "name": "Santa Catarina",
+      "ibgeCode": 42,
+      "region": "Sul",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "SE",
+      "name": "Sergipe",
+      "ibgeCode": 28,
+      "region": "Nordeste",
+      "timezone": "America/Maceio"
+    },
+    {
+      "uf": "SP",
+      "name": "São Paulo",
+      "ibgeCode": 35,
+      "region": "Sudeste",
+      "timezone": "America/Sao_Paulo"
+    },
+    {
+      "uf": "TO",
+      "name": "Tocantins",
+      "ibgeCode": 17,
+      "region": "Norte",
+      "timezone": "America/Araguaina"
+    }
+  ]
+}

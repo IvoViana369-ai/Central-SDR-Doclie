@@ -1,0 +1,24 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Segurança da cadeia de suprimentos (docs/SECURITY.md §15):
+# - scripts de instalação de dependências bloqueados por padrão (pnpm 10),
+#   liberados apenas para os pacotes abaixo;
+# - versões publicadas há menos de 24h não são adotadas automaticamente.
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - esbuild
+  - prisma
+  - sharp
+  - unrs-resolver
+
+minimumReleaseAge: 1440
+
+# Correções de segurança em dependências transitivas (pnpm audit), ambas vindas
+# do CLI do Prisma 7.10: deepmerge-ts (@prisma/config) e mysql2 (usado só pelo
+# comando `prisma dev`, que o projeto não utiliza). Remover quando o Prisma
+# publicar versões já corrigidas.
+overrides:
+  deepmerge-ts: '>=8.0.0'
+  mysql2: '>=3.23.1 <4'

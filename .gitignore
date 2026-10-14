@@ -12,6 +12,10 @@ dist/
 build/
 .turbo/
 *.tsbuildinfo
+# Cliente Prisma gerado (pnpm db:generate / postinstall)
+packages/db/src/generated/
+# Gerado pelo Next.js
+next-env.d.ts
 
 # --- Testes e relatórios -----------------------------------------------------
 coverage/
@@ -28,7 +32,10 @@ blob-report/
 !**/fixtures/**/*.csv
 !**/fixtures/**/*.xlsx
 /data/
+.data/
 /exports/
+# Saídas da avaliação offline da IA (pnpm ai:eval)
+.ai-eval/
 *.sql.gz
 *.dump
 
@@ -46,3 +53,4 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+apps/web/e2e/.state/

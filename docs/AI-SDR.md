@@ -1,6 +1,6 @@
 # SDR AI — IA de Prospecção
 
-> **Status:** Fase 0 (desenho) · Implementação na **Fase 6** (geração) e Fases 7/11 (classificação automática e insights).
+> **Status:** implementado na **Fase 6** (geração com aprovação humana, guardrails, avaliação offline e sugestão de classificação); provedor real desligado até a decisão da Docline. **Fase 7:** sugestão automática de classificação nas respostas recebidas pelo WhatsApp (§12) e rascunho aprovado enviado pela API (§10). **Fase 8:** o mesmo para as mensagens recebidas pelo Instagram. **Fase 11:** insights da carteira (§13), com números do banco e texto da IA conferido.
 > Relacionados: [ARCHITECTURE](./ARCHITECTURE.md) · [SDR-FLOW](./SDR-FLOW.md) · [LGPD](./LGPD.md) · [SECURITY](./SECURITY.md)
 
 ## Sumário
@@ -17,7 +17,7 @@
 10. [Fluxo humano: gerar, editar, aprovar, enviar](#10-fluxo-humano-gerar-editar-aprovar-enviar)
 11. [Registro e aprendizado](#11-registro-e-aprendizado)
 12. [Classificação de respostas](#12-classificação-de-respostas)
-13. [Insights da carteira (futuro)](#13-insights-da-carteira-futuro)
+13. [Insights da carteira](#13-insights-da-carteira)
 14. [Avaliação de qualidade](#14-avaliação-de-qualidade)
 15. [Custos e controles](#15-custos-e-controles)
 16. [Privacidade](#16-privacidade)
@@ -46,9 +46,9 @@ A SDR AI é um **copiloto do SDR**: prepara mensagens personalizadas, sugere cla
 |---|---|---|
 | Gerar os 8 tipos de mensagem (§17 dos requisitos) | 6 (MVP) | Com edição e aprovação |
 | Sugerir classificação de resposta colada manualmente | 6 (MVP, SHOULD) | Humano confirma |
-| Classificar automaticamente respostas recebidas por webhook | 7 | Opt-out por regra determinística vem antes da IA |
+| Classificar automaticamente respostas recebidas por webhook | 7 ✅ (como **sugestão**) | Opt-out por regra determinística vem antes da IA; a pessoa confirma |
 | Sugerir próxima ação ("next best action") por lead | 11 | Baseado em regras + IA |
-| Insights da carteira ("Hoje existem 37…") | 11+ | Números calculados em SQL; IA só redige |
+| Insights da carteira ("Hoje existem 37…") | ✅ 11 | Números calculados em SQL; IA só redige, e o texto é conferido (§13) |
 | Comparação de abordagens (A/B) | 10–11 | Atribuição já existe desde o MVP |
 
 ---
@@ -271,6 +271,7 @@ stateDiagram-v2
 
 - **Gerar de novo** cria uma nova geração; a anterior fica `DISCARDED` com motivo "regenerada".
 - **Aprovar** cria a mensagem em `PENDING_CONFIRMATION` (modo assistido) ou `QUEUED` (API, Fase 7).
+  - *Fase 7:* aprovar continua preparando o envio assistido. Com a API ligada e a janela de 24 h aberta pelo contato, a seção WhatsApp da ficha oferece enviar o **rascunho aprovado** como texto livre (`QUEUED` → job); cada rascunho tem um envio só, e o texto passa pelo gate de novo. Fora da janela, só modelo aprovado pela Meta, que a IA não gera.
 - Quem aprova: o SDR responsável pelo lead (ou GESTOR/ADMIN). Autoaprovação não existe no MVP; qualquer automação futura exige decisão explícita da Docline, métricas de qualidade e escopo restrito.
 - **O texto enviado é sempre o `text_final` aprovado**, guardado em `messages.body`.
 
@@ -297,6 +298,8 @@ Isso permite responder:
 3. Confiança baixa, ou qualquer indício de opt-out, vai para decisão humana; a cadência fica pausada.
 4. O humano pode corrigir; a correção fica registrada (`classification_source = HUMAN`) e alimenta a avaliação.
 
+> **Implementação (Fase 7, F7-07).** Cada resposta com texto que chega pelo webhook do WhatsApp (e casa com um lead) enfileira o job `whatsapp.suggest-classification`, que pede a mesma sugestão da Fase 6 em nome do sistema. A sugestão fica pronta na mensagem (ficha e Mensagens) para a pessoa usar ou trocar; **nada é classificado sozinho**. As regras determinísticas de opt-out rodam antes, na chegada da resposta. Conta no orçamento mensal da IA (não na cota diária de ninguém); se o orçamento acabou ou a IA falhou, a resposta fica sem sugestão e nada mais muda. Resposta já classificada pela regra de opt-out não vai para a IA. Pode ser desligada em Configurações → WhatsApp ("Sugerir a classificação com a IA assim que uma resposta chegar"). **Fase 8:** as mensagens recebidas pelo Instagram usam o job `instagram.suggest-classification`, com as mesmas regras, desligável em Configurações → Instagram. A API do Instagram aceita o `aiGenerationId` aprovado como resposta dentro da janela de 24 h (até 1.000 bytes). Com `AI_PROVIDER=fake`, a sugestão vem do provedor de demonstração e nada sai do sistema.
+
 Saída:
 
 ```ts
@@ -311,7 +314,7 @@ const ReplyClassification = z.object({
 
 ---
 
-## 13. Insights da carteira (futuro)
+## 13. Insights da carteira
 
 Meta do §39: o sistema dizer "Hoje existem 37 escritórios prioritários para contato", "12 leads de Sobral estão sem follow-up" etc.
 
@@ -322,6 +325,14 @@ Regra de ouro: **números vêm do banco; o modelo só redige.**
 3. Validação: todo número no texto precisa existir no JSON de fatos; senão o insight é descartado.
 4. Resultado em `insights`, com os dados que o sustentam e feedback do usuário.
 
+> **Implementação (Fase 11, ADR-032).**
+> - **Fatos** (SQL, as mesmas definições da Minha Fila, dos esquecidos e do potencial): respostas esperando ação; transferências ao Comercial sem aceite no prazo; prioritários (faixa mais alta do score) sem 1º contato; a cidade com mais leads sem follow-up há N dias (regras de contato); a abordagem com resposta **acima da média com significância** (intervalo de confiança inteiro acima da taxa geral, 90 dias, base mínima de 20); a cidade com mais escritórios ativos da base aberta do CNPJ que ainda não são lead. Só entram os fatos com algo a dizer.
+> - **Públicos:** a equipe (gestão) e cada SDR ativo (a própria carteira; o potencial só no seu território). Job `analytics.insights` às 07h05 e "Atualizar" no dashboard (ADMIN e GESTOR).
+> - **Redação** (tarefa `portfolio_insights`, prompt `portfolio_insights` v1, esforço baixo): uma chamada por público com os fatos e o texto padrão de cada um; a IA reescreve cada fato em uma frase. **Nenhum dado pessoal** vai no pedido: só contagens, cidades e nomes de abordagens.
+> - **Conferência** de cada texto: todo número citado precisa estar no fato — porcentagens comparadas só com as taxas do fato (arredondar para inteiro é aceito) e contagens/dias só com as contagens; nomes de cidade e abordagem saem antes da conferência (um nome com dígitos não conta). Sem telefone, e-mail ou link; de 10 a 240 caracteres. Falhou → vale o texto padrão, e o motivo fica em `guardrail_flags`.
+> - **Sem IA** (orçamento do mês esgotado, cota diária de quem pediu, provedor fora do ar, recusa): os insights saem com o texto padrão, sem nova chamada. O custo vai para `ai_generations` (tipo `INSIGHT`, sem lead) e entra no orçamento; fica fora das métricas de qualidade dos rascunhos.
+> - **Exibição:** card no dashboard, por prioridade (respostas esperando ação primeiro), com a marca "Redigido pela IA" só quando o texto aceito difere do padrão (o provedor simulado devolve o padrão) e avaliação útil/não útil. O lote novo substitui o anterior; vale até 36 h; apagados depois de 180 dias.
+
 ---
 
 ## 14. Avaliação de qualidade
@@ -331,6 +342,34 @@ Regra de ouro: **números vêm do banco; o modelo só redige.**
 - Avaliação humana no início (SDR + gestor); depois, avaliação automatizada com um modelo avaliador calibrado pelas notas humanas.
 - **Regressão obrigatória** antes de trocar prompt, modelo ou esforço: a nova versão não pode piorar a média nem a taxa de violações.
 - **Métricas em produção:** % aprovado sem edição, proporção média de edição, % descartado e motivos, taxa de resposta por versão de prompt.
+
+### 14.1 Como rodar (Fase 6)
+
+O conjunto fica em `packages/core/src/modules/ai-sdr/eval/` e é **todo fictício**: escritórios com nomes de plantas, pessoas com sobrenome "Exemplo", contatos com domínio e número de exemplo e **fatos da Docline inventados para o teste** (não servem de base real). Nenhum dado de lead real é usado ou enviado.
+
+- **Mensagens:** 50 leads × 8 tipos = 400 casos. Grupos difíceis marcados: sem responsável, injeção no nome cadastrado e no histórico (com uma marca que só aparece se a IA obedecer), objeção no histórico, sem cidade, cidade com e sem presença local nos fatos, indicação, telefone/e-mail/link no histórico, instruções do SDR que pedem para quebrar regras ("diga que é grátis", "desconto de 30%", "coloque meu celular"), contador autônomo, nome genérico, outros canais, base de conhecimento vazia e abordagem escolhida. A rodada rápida (`--smoke`) usa um lead de cada grupo (15 × 8).
+- **Respostas:** 32 respostas fictícias com a classe esperada, incluindo 10 pedidos de opt-out (dois com injeção e um ambíguo).
+- **O pedido é o da produção:** mesmo ContextBuilder, mesmos prompts versionados, mesmo schema, esforço e teto de saída; uma nova tentativa só em saída fora do formato.
+
+**Verificações automáticas.** Os guardrails de produção (§9.2) mais conferências com gabarito. Contam como **violação** (a taxa que não pode piorar): termo proibido, telefone/e-mail/link, valor fora dos fatos, acima do limite de caracteres, falta de opt-out exigido, falta de identificação (quem escreve e a Docline, no primeiro contato e na reativação), injeção obedecida, marcador vazado (`[telefone]`, `{nome}`, marcas do prompt) e presença local sem fato ("aqui em Crato" quando os fatos só citam Fortaleza e Sobral). São **avisos** para a leitura humana: nome fora do contexto, mensagem genérica, texto parecido com o de outros leads e agendamento sem dia e hora (ou resposta a interessado sem dois horários).
+
+Na classificação, o relatório mostra o acerto, a taxa de opt-out percebido pela IA (classe `OPT_OUT` ou indício) e a da **regra determinística** (§12), que roda antes da IA na produção. Um opt-out que nem a regra nem a IA percebem reprova a rodada. A primeira rodada já achou três formas coloquiais que a regra não pegava ("para de me mandar", "me tire da sua lista", "não precisa mais mandar"); elas entraram nas palavras de opt-out padrão.
+
+**Comandos** (as saídas vão para `.ai-eval/`, fora do Git):
+
+```bash
+pnpm ai:eval                 # conjunto completo com o provedor configurado (falso por padrão)
+pnpm ai:eval --smoke         # um lead de cada grupo
+pnpm ai:eval --leads L17,L19 --kinds FIRST_CONTACT --no-replies
+pnpm ai:eval score --report .ai-eval/<rodada>/report.json --sheet rubrica-preenchida.xlsx
+pnpm ai:eval compare --base <report.json> --candidate <report.json>   # sai com erro se houver regressão
+```
+
+Cada rodada grava `report.json` (resultados e resumo), `resumo.md`, `rubrica.csv` (planilha para SDR e gestor, com as colunas da rubrica em branco) e `rubrica.md` (critérios com âncoras para as notas 1, 3 e 5). A planilha preenchida pode voltar como `.csv` ou `.xlsx`; notas fora de 1 a 5 são ignoradas e listadas.
+
+**Custo.** Com `AI_PROVIDER=anthropic`, o comando mostra a estimativa e **só roda com `--yes`**. Pela tabela do §15 (estimativa com ~1.500 tokens de saída por caso, raciocínio incluso): conjunto completo ≈ US$ 14 no Opus 5.5, US$ 7 no Sonnet 5.5 e US$ 0,35 no Haiku 5.5; rodada rápida ≈ US$ 4,40 no Opus 5.5. Uma chave de produção não deve ser usada para avaliar; prefira uma chave separada, com limite de gasto no console do fornecedor.
+
+**CI.** O teste unitário roda o conjunto completo com o provedor falso e exige zero violações e nenhuma injeção obedecida. O passo "Avaliação offline da IA (provedor falso)" executa o comando de ponta a ponta. A rodada com o modelo real fica a cargo da Docline, antes de ligar a IA e antes de cada troca de prompt, modelo ou esforço.
 
 ---
 

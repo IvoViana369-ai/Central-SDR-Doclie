@@ -1,0 +1,105 @@
+# Blueprint da Render — ambiente de STAGING (docs/ARCHITECTURE.md §14).
+#
+# Antes de aplicar (passo a passo completo: docs/GO-LIVE.md §3.1):
+# - Região: Virginia, decidida em 2026-10-08 (ARCHITECTURE ADR-019). A Render
+#   não tem região no Brasil e não muda a região de um serviço existente.
+#   Hospedar nos EUA é transferência internacional (LGPD §16): só dados
+#   fictícios até a validação jurídica.
+# - Planos: confira os nomes e preços vigentes na Render. O pre-deploy
+#   (migrações) exige instância paga.
+# - Segredos: a Render IGNORA variáveis `sync: false` dentro de um environment
+#   group. Por isso os segredos e valores próprios do ambiente ficam no grupo
+#   `docline-sdr-staging-secrets`, criado ANTES no painel (Environment Groups,
+#   no nível do workspace, fora de projeto/ambiente) e ligado aos dois serviços
+#   por `fromGroup`. Obrigatórias nele: APP_URL, ENCRYPTION_KEY e
+#   SUPPRESSION_HASH_PEPPER (gere com `openssl rand -base64 32`; guarde o
+#   pepper em local seguro: não pode ser rotacionado — SECURITY §5). Opcionais:
+#   EMAIL_PROVIDER (+ SMTP_URL ou RESEND_API_KEY), EMAIL_FROM, SENTRY_DSN,
+#   TRUSTED_PROXIES (depois do primeiro deploy) e
+#   OUTBOUND_WEBHOOK_SIGNING_SECRET. O Blueprint nunca sobrescreve esse grupo.
+# - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
+#   serviço web:  pnpm admin:create --email <email> --name "<nome>"
+#   e, se quiser a base fictícia:  pnpm db:seed:dev
+
+databases:
+  - name: docline-sdr-staging-db
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: '17'
+    databaseName: docline_sdr
+    user: docline
+    ipAllowList: [] # sem acesso externo: só os serviços da Render conectam
+
+envVarGroups:
+  # Valores fixos do staging, versionados. Segredos e valores próprios do
+  # ambiente: grupo `docline-sdr-staging-secrets` (ver o topo do arquivo).
+  - name: docline-sdr-staging
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+      - key: JOB_QUEUE_SCHEMA
+        value: pgboss
+      # 2FA obrigatória para ADMIN/GESTOR (o padrão; "reminder" é recusado aqui).
+      - key: TWO_FACTOR_ENFORCEMENT
+        value: required
+      # Integrações externas ficam desligadas/assistidas até a ativação.
+      # WhatsApp pela API (Fase 7): para homologar sem a Meta, use `fake` e
+      # defina META_APP_SECRET e META_WEBHOOK_VERIFY_TOKEN de teste; para a
+      # conta real (`meta_cloud`), siga docs/INTEGRATIONS.md §16.1 e cadastre
+      # os segredos da Meta no grupo de segredos (nunca aqui).
+      - key: WHATSAPP_PROVIDER
+        value: assisted
+      # Instagram pela API (Fase 8): `fake` para homologar (mesmos segredos de
+      # teste do webhook); para a conta real (`meta_graph`), siga
+      # docs/INTEGRATIONS.md §16.2 e cadastre INSTAGRAM_PAGE_ACCESS_TOKEN,
+      # INSTAGRAM_BUSINESS_ACCOUNT_ID e FACEBOOK_PAGE_ID no grupo de segredos.
+      - key: INSTAGRAM_PROVIDER
+        value: assisted
+      - key: AI_PROVIDER
+        value: fake
+      - key: PLACES_PROVIDER
+        value: disabled
+      # Base aberta do CNPJ (Fase 9): `fake` para homologar a Prospecção com
+      # escritórios fictícios; para a base real (`receita_open_data`), siga
+      # docs/INTEGRATIONS.md §16.3 (parecer jurídico e formato conferido).
+      - key: COMPANY_REGISTRY_PROVIDER
+        value: disabled
+
+services:
+  - type: web
+    name: docline-sdr-staging-web
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-web.sh
+    preDeployCommand: pnpm db:deploy && pnpm db:seed
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging
+      - fromGroup: docline-sdr-staging-secrets
+
+  - type: worker
+    name: docline-sdr-staging-worker
+    runtime: docker
+    plan: starter
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /app/docker/start-worker.sh
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docline-sdr-staging-db
+          property: connectionString
+      - fromGroup: docline-sdr-staging
+      - fromGroup: docline-sdr-staging-secrets

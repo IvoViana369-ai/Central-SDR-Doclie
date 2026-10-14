@@ -283,12 +283,12 @@ Uma história só está pronta quando:
 
 ## 11. Critérios de lançamento (go-live do piloto)
 
-- [ ] Todas as histórias MUST concluídas e testadas em staging com seed fictício.
+- [ ] Todas as histórias MUST concluídas e testadas em staging com seed fictício. *(Concluídas e testadas no código, com CI e E2E; falta o staging na Render.)*
 - [ ] Teste de aceitação com 1–2 SDRs e o gestor (UAT).
 - [ ] Validação jurídica: LIA, textos de primeira abordagem, política de retenção, aviso de privacidade ([LGPD §20](./LGPD.md#20-itens-para-validação-jurídica)).
-- [ ] Decisão de hospedagem e transferência internacional resolvida.
+- [ ] Decisão de hospedagem e transferência internacional resolvida. *(Hospedagem decidida: Render/Virginia, ADR-019. Falta a transferência internacional: cláusulas-padrão no DPA.)*
 - [ ] Importação da base real feita em produção, com revisão de duplicados.
 - [ ] Backup e restauração testados.
-- [ ] Monitoramento de erros (Sentry) e alertas de jobs ativos.
-- [ ] Treinamento da equipe (30–60 min) e guia rápido.
-- [ ] Plano de rollback (voltar à planilha) documentado.
+- [ ] Monitoramento de erros (Sentry) e alertas de jobs ativos. *(Sentry integrado na Fase 2, opcional por `SENTRY_DSN`; falta a conta da Docline. Alertas de jobs a definir.)*
+- [ ] Treinamento da equipe (30–60 min) e guia rápido. *(Roteiro e guia rápido em [GO-LIVE §6](./GO-LIVE.md#6-treinamento-e-guia-rápido).)*
+- [x] Plano de rollback (voltar à planilha) documentado ([GO-LIVE §9](./GO-LIVE.md#9-plano-de-volta-à-planilha)).
