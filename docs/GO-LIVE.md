@@ -67,7 +67,7 @@ O `render.yaml` cria o PostgreSQL, o web (com health check em `/api/health` e mi
 
 **Checklist técnico:**
 
-- [ ] Staging no ar ([§3.1](#31-passo-a-passo-do-staging-na-render)) com `pnpm db:seed:dev` (só dados fictícios) e o primeiro ADMIN criado (`pnpm admin:create`).
+- [ ] Staging no ar ([§3.1](#31-passo-a-passo-do-staging-na-render)) com a base fictícia, se desejada (só dados fictícios), e o primeiro ADMIN criado (passo 6 da §3.1).
 - [ ] `TRUSTED_PROXIES` conferido com `/api/v1/settings/network-check` (`"ok": true`).
 - [ ] Produção no ar **sem** o seed de desenvolvimento; dados de referência pelo pré-deploy.
 - [ ] ADMIN e GESTOR com verificação em duas etapas ativada. O sistema exige: sem ela, a pessoa entra só em "Minha conta" até ativar (o primeiro ADMIN também, logo depois de definir a senha). Tenha o aplicativo autenticador no celular antes do primeiro acesso.
@@ -96,7 +96,9 @@ A Render **ignora** variáveis `sync: false` dentro de um grupo de variáveis. P
 
 4. **Criar o Blueprint:** New → Blueprint → conectar o repositório `Central-SDR-Doclie` → branch `main` → conferir os recursos (banco `basic-256mb`, web e worker `starter`, todos em Virginia; preços vigentes no painel) → aplicar.
 5. **Conferir o primeiro deploy:** o web roda as migrações e os dados de referência no pré-deploy. `https://<url>/api/health` deve mostrar `"database":"ok"` e, em até 3 minutos, `"worker":"ok"`. Se o deploy falhar com "Configuração de ambiente inválida", o log lista a variável que falta (sem mostrar valores).
-6. **Primeiro ADMIN e base fictícia** (serviço web → Shell): `pnpm admin:create --email <email> --name "<nome>"`. Abra o link impresso, defina a senha e ative a verificação em duas etapas com o aplicativo autenticador. Depois, se quiser os ~2.000 escritórios fictícios: `pnpm db:seed:dev`.
+6. **Primeiro ADMIN** (serviço web → Shell): `cd /app/apps/web && node --import tsx scripts/create-admin.ts --email <email> --name "<nome>"` (o nome entre aspas). Abra o link impresso (`…/convite/…`), defina a senha e ative a verificação em duas etapas com o aplicativo autenticador.
+   - **No Shell, não use `pnpm admin:create`:** os processos encadeados do pnpm e do tsx chegam a ~490 MB e, ao lado do site, passam dos 512 MB do plano Starter; o comando é encerrado sem mensagem. Chamando o `node` direto, ~180 MB.
+   - **Base fictícia (opcional, ~2.000 escritórios):** usa ~470 MB, então não cabe no Shell. Rode como **One-Off Job** do serviço web (instância própria; se a tela oferecer, escolha um tipo maior que o Starter), com o comando `sh -c "cd /app/apps/web && node --import tsx scripts/seed-dev.ts"`.
 7. **IP do cliente** ([SECURITY §12](./SECURITY.md#12-limites-de-taxa-e-abuso)): logado como ADMIN, abra `https://<url>/api/v1/settings/network-check`. Com `"ok": false` e `suggestedTrustedProxies` preenchido, crie `TRUSTED_PROXIES` com esse valor no grupo `docline-sdr-staging-secrets`, salve, espere o web e o worker republicarem e abra de novo até `"ok": true`. Sem sugestão, envie a resposta ao suporte técnico.
 8. Seguir o checklist técnico acima: backup testado, Sentry, worker e tela Integrações.
 

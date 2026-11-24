@@ -87,7 +87,7 @@
 | SDR e Comercial | Não são afetados (2FA opcional). |
 | Fora de staging/produção | `reminder` mantém só o lembrete; serve ao desenvolvimento e à suíte E2E, que entra como ADMIN dezenas de vezes. Um segundo servidor E2E roda com `required` e testa o bloqueio. |
 
-A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts`) é aplicada na borda web (`getPageContext` e `apiHandler`), onde está a sessão; os casos de uso não mudam. **Último recurso:** se o único ADMIN perder o celular e os códigos de recuperação, o suporte cria outro ADMIN pelo Shell do serviço (`pnpm admin:create`), que redefine a 2FA do primeiro.
+A regra (`twoFactorGate`, em `packages/core/src/modules/identity/domain/roles.ts`) é aplicada na borda web (`getPageContext` e `apiHandler`), onde está a sessão; os casos de uso não mudam. **Último recurso:** se o único ADMIN perder o celular e os códigos de recuperação, o suporte cria outro ADMIN pelo Shell do serviço (`scripts/create-admin.ts`, com o comando do [GO-LIVE §3.1](./GO-LIVE.md#31-passo-a-passo-do-staging-na-render)), que redefine a 2FA do primeiro.
 
 ---
 

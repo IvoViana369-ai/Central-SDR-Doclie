@@ -18,8 +18,9 @@
 #   TRUSTED_PROXIES (depois do primeiro deploy) e
 #   OUTBOUND_WEBHOOK_SIGNING_SECRET. O Blueprint nunca sobrescreve esse grupo.
 # - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
-#   serviço web:  pnpm admin:create --email <email> --name "<nome>"
-#   e, se quiser a base fictícia:  pnpm db:seed:dev
+#   serviço web, chamando o node direto (pelo pnpm passa dos 512 MB do Starter):
+#     cd /app/apps/web && node --import tsx scripts/create-admin.ts --email <email> --name "<nome>"
+#   A base fictícia (~470 MB) roda como One-Off Job: docs/GO-LIVE.md §3.1.
 
 databases:
   - name: docline-sdr-staging-db
