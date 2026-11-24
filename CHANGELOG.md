@@ -15,6 +15,7 @@ Preparação do staging na Render ([GO-LIVE §3.1](docs/GO-LIVE.md#31-passo-a-pa
 
 - **Blueprint da Render:** a Render ignora variáveis `sync: false` dentro de um grupo de variáveis, então `APP_URL`, `ENCRYPTION_KEY` e `SUPPRESSION_HASH_PEPPER` nunca seriam pedidas e o primeiro deploy falharia na validação do ambiente. Os segredos passam para o grupo `docline-sdr-staging-secrets`, criado no painel antes do Blueprint e ligado ao web e ao worker; o e-mail fica opcional no staging (sem provedor, `console`).
 - **Base fictícia no staging:** `pnpm db:seed:dev` aceitava só `APP_ENV=development`, embora o roteiro de UAT a use no staging; agora roda em `development` e `staging` e continua recusado em produção.
+- **Build na Render sem memória:** o Next.js abre um processo de build por núcleo menos um; na máquina de build da Render (48 núcleos) foram 47, a cerca de 280 MB cada, e o build passou do limite de 8 GB (site e worker falharam no primeiro deploy). `experimental.cpus` fixado em 4 no `next.config.ts`: o build medido fica em ~1,5 GB.
 
 ## [0.12.0] — Fase 12: Integrações Docline — 2026-10-11
 
