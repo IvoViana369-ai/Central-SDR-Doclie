@@ -67,7 +67,7 @@ Cada etapa é rastreável, o que permite responder com dados quantos leads temos
 | Arquitetura | **Monólito modular** em TypeScript (monorepo pnpm): `apps/web` (UI + API `/api/v1`) + `apps/worker` (jobs) + `packages/core` (domínio) + `packages/integrations` (adaptadores) + `packages/db` (Prisma) + `packages/config` (ambiente) | Node 22, pnpm 10, TypeScript 6.0 |
 | Banco | **PostgreSQL** + Prisma (adaptador `pg`); `pg_trgm` para similaridade; auditoria append-only | PostgreSQL 16/17, Prisma 7.10 |
 | Filas | **pg-boss** no próprio PostgreSQL, com enfileiramento na mesma transação do dado | pg-boss 12 |
-| Frontend | Next.js (App Router) + Tailwind + componentes próprios sobre Radix; responsivo, tema claro/escuro | Next.js 16.3, React 19.3, Tailwind 4 |
+| Frontend | Next.js (App Router) + Tailwind + componentes próprios sobre Radix; responsivo, tema claro/escuro | Next.js 16.4, React 19.3, Tailwind 4 |
 | Autenticação | Better Auth (e-mail/senha, sem cadastro público) + RBAC próprio (Administrador, Gestor, SDR, Comercial) | Better Auth 1.7 |
 | IA | Porta `AiProvider`; adaptador padrão Anthropic (Claude); aprovação humana obrigatória | Fase 6 |
 | Contato no MVP | **Modo assistido** (`wa.me`/Instagram aberto pelo SDR, envio humano, registro no sistema). WhatsApp Cloud API (Graph API direta, versão fixada) na Fase 7, só com opt-in ou janela aberta; Instagram API (Facebook Login) na Fase 8, só respondendo a quem escreveu ou comentou | Fases 5–8 |

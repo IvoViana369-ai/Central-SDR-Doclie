@@ -10,6 +10,12 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  experimental: {
+    // Processos do build ("Collecting page data", geração estática). O padrão
+    // do Next é um por núcleo menos um: na máquina de build da Render (48
+    // núcleos) foram 47 e o build passou de 8 GB de memória.
+    cpus: 4,
+  },
   // Pacotes internos publicados como TypeScript.
   transpilePackages: ['@docline/config', '@docline/core', '@docline/db', '@docline/integrations'],
   // Bibliotecas de servidor carregadas pelo Node, sem bundling.

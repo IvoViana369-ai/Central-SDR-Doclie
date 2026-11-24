@@ -120,7 +120,7 @@ A preferência inicial foi avaliada item a item. Onde a recomendação diverge, 
 
 ### 4.1 Versões adotadas na Fase 1
 
-Node.js 22 · pnpm 10.28 · TypeScript 6.0 · Next.js 16.3 (React 19.3) · Tailwind CSS 4 · Prisma 7.10 (gerador `prisma-client` + adaptador `pg`) · PostgreSQL 16/17 · Better Auth 1.7 · pg-boss 12 · Zod 4 · ESLint 10 · Vitest 5 · Playwright 1.63.
+Node.js 22 · pnpm 10.28 · TypeScript 6.0 · Next.js 16.4 (React 19.3) · Tailwind CSS 4 · Prisma 7.10 (gerador `prisma-client` + adaptador `pg`) · PostgreSQL 16/17 · Better Auth 1.7 · pg-boss 12 · Zod 4 · ESLint 10 · Vitest 5 · Playwright 1.63.
 
 Ajustes em relação à análise acima, decididos durante a implementação:
 

@@ -70,17 +70,19 @@ const formatDate = (date: Date) =>
 
 /**
  * Até 5 exportações por usuário em 24 h. O lock serializa pedidos simultâneos
- * do mesmo usuário. A janela usa a hora do banco, a mesma de `occurred_at`.
+ * do mesmo usuário. A janela usa o relógio do caso de uso, o mesmo que grava
+ * o `occurred_at` da auditoria (não o `now()` do banco).
  */
 async function enforceDailyLimit(ctx: UseCaseContext) {
   if (ctx.actor.kind !== 'user') return;
   await ctx.tx
     .$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`docline.export:${ctx.actor.id}`}))`;
+  const since = new Date(ctx.now.getTime() - 24 * 60 * 60 * 1000);
   const [row] = await ctx.tx.$queryRaw<{ count: number }[]>`
     SELECT count(*)::int AS count FROM audit_logs
     WHERE actor_id = ${ctx.actor.id}::uuid
       AND action = 'lead.export'
-      AND occurred_at >= now() - interval '24 hours'`;
+      AND occurred_at >= ${since}`;
   if ((row?.count ?? 0) >= EXPORTS_PER_DAY) {
     throw new RateLimitError(
       `Limite de ${EXPORTS_PER_DAY} exportações em 24 horas atingido. Tente novamente mais tarde.`,

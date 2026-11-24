@@ -304,7 +304,9 @@ describe('importação de planilha (M04)', () => {
       where: { id: done.batchId },
       data: { purgeAfter: new Date('2020-01-01') },
     });
-    await db.$executeRaw`UPDATE import_batches SET updated_at = now() - interval '8 days' WHERE id = ${abandoned.batchId}::uuid`;
+    // Parado há 8 dias pelo relógio dos casos de uso (fixo nos testes), não pelo do banco.
+    const eightDaysAgo = new Date(deps.clock.now().getTime() - 8 * 24 * 60 * 60 * 1000);
+    await db.$executeRaw`UPDATE import_batches SET updated_at = ${eightDaysAgo} WHERE id = ${abandoned.batchId}::uuid`;
 
     const result = await runImportPurge(deps);
     expect(result).toEqual({ purgedBatches: 1, abandoned: 1 });
