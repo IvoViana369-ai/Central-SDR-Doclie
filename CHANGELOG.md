@@ -6,6 +6,14 @@ Registro do que foi entregue em cada fase do [roadmap](docs/ROADMAP.md). Formato
 
 Preparação do staging na Render ([GO-LIVE §3.1](docs/GO-LIVE.md#31-passo-a-passo-do-staging-na-render)).
 
+### Segurança
+
+- **Dependências com alertas publicados depois da 0.12.0** (`pnpm audit --prod` voltou a falhar no CI):
+  - Next.js 16.3.8 → **16.4.6**: dois alertas críticos de execução remota de código sem autenticação (otimização de imagens e `use cache`), um alto de negação de serviço em Server Actions e moderados de vazamento de cache e cookies. O plugin `@next/eslint-plugin-next` acompanha a versão.
+  - Zod → **4.6.7** (alto: consumo de memória ao validar coleções enormes) e Nodemailer → **10.6.1** (moderados no parser de endereços).
+  - Transitivas do CLI do Prisma 7.10, por `overrides`: `effect` ≥ 3.22.1 (alto: ReDoS) e `fast-uri` ≥ 3.1.9 (baixos e moderados; usado só pelo `prisma dev`).
+  - Resultado: `pnpm audit --prod` sem nenhum alerta.
+
 ### Adicionado
 
 - **Diagnóstico do IP do cliente:** `GET /api/v1/settings/network-check` (ADMIN, só leitura) mostra o `X-Forwarded-For` recebido, o IP que o sistema usa e o valor sugerido para `TRUSTED_PROXIES` quando os proxies estão em faixa privada ([SECURITY §12](docs/SECURITY.md#12-limites-de-taxa-e-abuso)).
