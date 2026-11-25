@@ -91,7 +91,7 @@ test('Prospecção: busca na cidade, comparação com a base, aprovação e recu
   await expect(gama).toContainText('Mesmo nome na mesma cidade');
   const horizonte = rows.filter({ hasText: 'Contabilidade Horizonte' });
   await expect(horizonte).toContainText('Novo');
-  await expect(horizonte).toContainText('(88) 3611-0008');
+  await expect(horizonte).toContainText('(88) 2000-9008');
 
   await page.getByLabel('Selecionar Contabilidade Horizonte').check();
   await page.getByLabel('Selecionar Atlas Contadores Associados').check();

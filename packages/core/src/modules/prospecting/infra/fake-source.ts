@@ -10,9 +10,12 @@ import { encodeLatin1, receitaCsvLine } from '../domain/receita';
  * Base aberta do CNPJ simulada (`COMPANY_REGISTRY_PROVIDER=fake`): os mesmos
  * arquivos e o mesmo layout da Receita, com escritórios **fictícios**. Os CNPJs
  * têm raiz alfanumérica começando com "FK" (dígitos verificadores válidos, sem
- * risco de coincidir com uma empresa real), e-mails em `.example` e nomes
- * inventados. Inclui o que a carga precisa descartar: baixados, outra
- * atividade, empresário individual e cidade sem correspondência no IBGE.
+ * risco de coincidir com uma empresa real), e-mails em `.example`, nomes
+ * inventados e telefones em faixas que as operadoras não usam (fixos 2000-XXXX
+ * e celulares 9 0XXX-XXXX, como em `dev/fake-leads.ts`): a base é usada à mão
+ * no staging, e "Abrir no WhatsApp" ou "Ligar" não podem chegar a ninguém.
+ * Inclui o que a carga precisa descartar: baixados, outra atividade,
+ * empresário individual e cidade sem correspondência no IBGE.
  */
 
 interface FakeCity {
@@ -147,8 +150,8 @@ function buildDataset() {
         neighborhood: 'CENTRO',
         postalCode: `${city.ddd === '86' ? '64' : '62'}${pad(index, 6)}`,
         // Alguns sem telefone ou sem e-mail, como na base real.
-        phone: index % 6 === 0 ? null : `${city.ddd}3611${local}`,
-        phone2: index % 4 === 0 ? `${city.ddd}99990${local}` : null,
+        phone: index % 6 === 0 ? null : `${city.ddd}20009${pad(index, 3)}`,
+        phone2: index % 4 === 0 ? `${city.ddd}90999${local}` : null,
         email: index % 5 === 4 ? null : `contato@${slug(name)}-contabil.example`,
         openedAt: `20${pad(5 + (index % 15), 2)}0${(index % 9) + 1}15`,
       });
@@ -194,7 +197,7 @@ function buildDataset() {
       order: '0002',
       tradeName: 'CONTABILIDADE ALFA FILIAL FORTALEZA',
       city: fortaleza,
-      phone: '8532310001',
+      phone: '8520008001',
       email: 'fortaleza@alfa-contabil.example',
     },
     { name: '', nature: '2062', size: '01' },
@@ -212,14 +215,14 @@ function buildDataset() {
       tradeName: 'PAPELARIA E CONTABILIDADE FICTÍCIA',
       cnaeMain: '4761003',
       cnaesSecondary: ['6920601'],
-      phone: '8836119020',
+      phone: '8820008902',
     },
     { name: 'PAPELARIA FICTICIA LTDA', nature: '2062', size: '01' },
   );
   // Empresário individual (dados de uma pessoa): fora no padrão; o CPF fictício some do nome.
   exception(
     fakeRoot(903),
-    { tradeName: '', phone: '88999900903', email: 'maria.ficticia@contabil.example' },
+    { tradeName: '', phone: '88909990903', email: 'maria.ficticia@contabil.example' },
     { name: 'MARIA FICTICIA DE SOUSA 12345678909', nature: '2135', size: '01' },
   );
   // Cidade sem correspondência no IBGE.
@@ -228,7 +231,7 @@ function buildDataset() {
     {
       tradeName: 'CONTABILIDADE DO SERTÃO FICTÍCIO',
       city: CITIES.ficticia!,
-      phone: '8836119040',
+      phone: '8820008904',
     },
     { name: 'CONTABILIDADE DO SERTAO FICTICIO LTDA', nature: '2062', size: '01' },
   );

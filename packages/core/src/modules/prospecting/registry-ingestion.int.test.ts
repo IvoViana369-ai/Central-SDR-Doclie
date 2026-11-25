@@ -87,7 +87,7 @@ describe('base aberta do CNPJ: carga mensal (F9-01)', () => {
       municipalityCode: SOBRAL,
       cityName: 'Sobral',
       uf: 'CE',
-      phone1: '+558836110001',
+      phone1: '+558820009001',
       email: 'contato@alfa-contabil.example',
       datasetReference: '2026-09',
     });

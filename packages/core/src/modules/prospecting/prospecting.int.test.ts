@@ -73,7 +73,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
         deps,
         manager,
         make('Outro Escritório Qualquer', {
-          contactPoints: [{ type: 'PHONE', value: '(88) 3611-0002' }],
+          contactPoints: [{ type: 'PHONE', value: '(88) 2000-9002' }],
         }),
       )
     ).id;
@@ -81,7 +81,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
     const delta = await createLead(
       deps,
       manager,
-      make('Delta Antiga', { contactPoints: [{ type: 'PHONE', value: '(88) 3611-0004' }] }),
+      make('Delta Antiga', { contactPoints: [{ type: 'PHONE', value: '(88) 2000-9004' }] }),
     );
     await registerOptOut(deps, manager, { leadId: delta.id });
     enqueued.length = 0;
@@ -115,7 +115,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
         companyName: 'Escritório Contábil Alfa Ltda',
         city: 'Sobral',
         uf: 'CE',
-        phones: ['+558836110001'],
+        phones: ['+558820009001'],
         email: 'contato@alfa-contabil.example',
         companySize: 'Microempresa',
         isHeadOffice: true,
@@ -145,7 +145,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
     const stored = JSON.stringify(await db.prospectingResult.findMany());
     expect(stored).not.toContain('contato@');
     expect(stored).not.toContain('Contábil');
-    expect(stored).not.toContain('36110002');
+    expect(stored).not.toContain('20009002');
 
     // Padrão: só o que ainda não é lead (sai a Alfa, que tem o mesmo CNPJ).
     expect(
@@ -235,8 +235,8 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
       horizonte.contactPoints.map((c) => [c.type, c.valueNormalized, c.label, c.whatsappStatus]),
     ).toEqual(
       expect.arrayContaining([
-        ['PHONE', '+558836110008', 'Cadastro na Receita', 'UNKNOWN'],
-        ['PHONE', '+5588999900008', 'Cadastro na Receita', 'UNKNOWN'],
+        ['PHONE', '+558820009008', 'Cadastro na Receita', 'UNKNOWN'],
+        ['PHONE', '+5588909990008', 'Cadastro na Receita', 'UNKNOWN'],
         ['EMAIL', 'contato@horizonte-contabil.example', 'Cadastro na Receita', 'UNKNOWN'],
       ]),
     );
@@ -253,7 +253,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
       postalCode: '62000001',
     });
     expect(alfa.contactPoints.map((c) => c.valueNormalized).sort()).toEqual([
-      '+558836110001',
+      '+558820009001',
       'contato@alfa-contabil.example',
     ]);
     expect(alfa.origins.map((o) => o.source.key).sort()).toEqual(['CNPJ_OPEN_DATA', 'EVENT']);
@@ -444,7 +444,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
       deps,
       manager,
       make('Escritório Que Pediu Saída', {
-        contactPoints: [{ type: 'PHONE', value: '(88) 99990-0008' }],
+        contactPoints: [{ type: 'PHONE', value: '(88) 90999-0008' }],
       }),
     );
     await registerOptOut(deps, manager, { leadId: blocked.id });
@@ -481,7 +481,7 @@ describe('Prospecção na base aberta do CNPJ (F9-02, F9-04, F9-05)', () => {
       postalCode: '62000008',
     });
     expect(enriched.contactPoints.map((c) => c.valueNormalized).sort()).toEqual([
-      '+558836110008',
+      '+558820009008',
       'contato@horizonte-contabil.example',
     ]);
     expect(enriched.origins.map((o) => o.source.key).sort()).toEqual(['CNPJ_OPEN_DATA', 'EVENT']);
