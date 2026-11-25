@@ -79,7 +79,9 @@ services:
     region: virginia
     dockerfilePath: ./Dockerfile
     dockerCommand: /app/docker/start-web.sh
-    preDeployCommand: pnpm db:deploy && pnpm db:seed
+    # Script, não `a && b`: em serviços Docker a Render roda o comando sem shell
+    # (docker/pre-deploy.sh explica).
+    preDeployCommand: /app/docker/pre-deploy.sh
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:

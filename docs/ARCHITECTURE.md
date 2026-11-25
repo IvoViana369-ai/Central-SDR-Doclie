@@ -728,7 +728,7 @@ Práticas desde o início: nada de `OFFSET` em listas; nada de `SELECT *` em lis
 ### 14.2 Topologia (produção)
 
 - **Uma imagem Docker** (`Dockerfile`) para os dois serviços; o comando define o papel (ADR-016).
-- **Web Service** (`docker/start-web.sh`), com *health check* em `/api/health` e *pre-deploy* `pnpm db:deploy && pnpm db:seed` (migrações + dados de referência).
+- **Web Service** (`docker/start-web.sh`), com *health check* em `/api/health` e *pre-deploy* `docker/pre-deploy.sh` (migrações + dados de referência; script porque a Render roda o comando de serviços Docker sem shell, e `a && b` direto no Blueprint não rodava o seed).
 - **Background Worker** (`docker/start-worker.sh`), executado com `tsx` (ADR-017).
 - **PostgreSQL gerenciado**, plano pago com backup diário e recuperação a um ponto no tempo (verificar plano). Os bancos gratuitos da Render expiram e não servem para produção.
 - Segredos em *environment groups*: os valores fixos vêm do `render.yaml` (Blueprint de staging, versionado); os segredos ficam num grupo criado no painel e ligado por `fromGroup`, porque a Render ignora `sync: false` dentro de grupos ([GO-LIVE §3.1](./GO-LIVE.md#31-passo-a-passo-do-staging-na-render)).

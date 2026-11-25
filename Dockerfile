@@ -2,7 +2,7 @@
 #   web    → docker/start-web.sh    (padrão)
 #   worker → docker/start-worker.sh
 # Migrações e seed de referência rodam no pre-deploy do serviço web:
-#   pnpm db:deploy && pnpm db:seed
+#   docker/pre-deploy.sh (pnpm db:deploy e pnpm db:seed)
 
 # Imagem base: a oficial do Docker Hub por padrão. O CI usa a mesma imagem pelo
 # espelho oficial do ECR Public (public.ecr.aws/docker/library/node), sem o
