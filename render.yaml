@@ -21,7 +21,8 @@
 # - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
 #   serviço web, chamando o node direto (pelo pnpm passa dos 512 MB do Starter):
 #     cd /app/apps/web && node --import tsx scripts/create-admin.ts --email <email> --name "<nome>"
-#   A base fictícia (~470 MB) roda como One-Off Job: docs/GO-LIVE.md §3.1.
+#   A base fictícia (~420 MB) não cabe no Shell ao lado do site: suba a
+#   instância para Standard só durante o comando (docs/GO-LIVE.md §3.1).
 
 databases:
   - name: docline-sdr-staging-db
@@ -65,11 +66,12 @@ envVarGroups:
         value: fake
       - key: PLACES_PROVIDER
         value: disabled
-      # Base aberta do CNPJ (Fase 9): `fake` para homologar a Prospecção com
-      # escritórios fictícios; para a base real (`receita_open_data`), siga
-      # docs/INTEGRATIONS.md §16.3 (parecer jurídico e formato conferido).
+      # Base aberta do CNPJ (Fase 9): `fake` homologa a Prospecção com 30
+      # escritórios fictícios (telefones em faixas que as operadoras não usam).
+      # Para a base real (`receita_open_data`), siga docs/INTEGRATIONS.md §16.3
+      # (parecer jurídico e formato conferido).
       - key: COMPANY_REGISTRY_PROVIDER
-        value: disabled
+        value: fake
 
 services:
   - type: web
