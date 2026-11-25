@@ -15,11 +15,13 @@
 #   SUPPRESSION_HASH_PEPPER (gere com `openssl rand -base64 32`; guarde o
 #   pepper em local seguro: não pode ser rotacionado — SECURITY §5). Opcionais:
 #   EMAIL_PROVIDER (+ SMTP_URL ou RESEND_API_KEY), EMAIL_FROM, SENTRY_DSN,
-#   TRUSTED_PROXIES (depois do primeiro deploy) e
+#   TRUSTED_PROXIES (depois do primeiro deploy; na Render, as faixas da
+#   Cloudflare, no serviço web: GO-LIVE §3.1, passo 7) e
 #   OUTBOUND_WEBHOOK_SIGNING_SECRET. O Blueprint nunca sobrescreve esse grupo.
 # - Depois do primeiro deploy, crie o primeiro administrador pelo Shell do
-#   serviço web:  pnpm admin:create --email <email> --name "<nome>"
-#   e, se quiser a base fictícia:  pnpm db:seed:dev
+#   serviço web, chamando o node direto (pelo pnpm passa dos 512 MB do Starter):
+#     cd /app/apps/web && node --import tsx scripts/create-admin.ts --email <email> --name "<nome>"
+#   A base fictícia (~470 MB) roda como One-Off Job: docs/GO-LIVE.md §3.1.
 
 databases:
   - name: docline-sdr-staging-db
@@ -77,7 +79,9 @@ services:
     region: virginia
     dockerfilePath: ./Dockerfile
     dockerCommand: /app/docker/start-web.sh
-    preDeployCommand: pnpm db:deploy && pnpm db:seed
+    # Script, não `a && b`: em serviços Docker a Render roda o comando sem shell
+    # (docker/pre-deploy.sh explica).
+    preDeployCommand: /app/docker/pre-deploy.sh
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:

@@ -63,7 +63,7 @@ test('chave de API: criar na tela, usar com Bearer e revogar', async ({ page, pl
   await page.getByRole('checkbox', { name: /Ler leads e oportunidades/ }).check();
   await page.getByRole('checkbox', { name: /Gravar referências externas/ }).check();
   await page.getByRole('button', { name: 'Criar chave' }).click();
-  await expect(page.getByText('Chave criada.')).toBeVisible();
+  await expect(page.getByText('Chave criada.', { exact: true })).toBeVisible();
   const key = (await page.getByTestId('secret').textContent())!.trim();
   expect(key).toMatch(/^dsdr_/);
   const row = page.getByRole('row', { name: /CRM Fase 12/ });
@@ -143,7 +143,7 @@ test('webhook de saída: teste assinado e opt-out compartilhado', async ({ page 
     await page.getByLabel('URL do destino').fill(hookUrl);
     await page.getByRole('checkbox', { name: /Opt-out registrado/ }).check();
     await page.getByRole('button', { name: 'Cadastrar destino' }).click();
-    await expect(page.getByText('Destino cadastrado.')).toBeVisible();
+    await expect(page.getByText('Destino cadastrado.', { exact: true })).toBeVisible();
     const secret = (await page.getByTestId('secret').textContent())!.trim();
     expect(secret).toMatch(/^whsec_/);
 
